@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-translate-key="page_title_permissions">Gestión de Permisos - OMEGAS</title>
+    <link rel="stylesheet" href="../../assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+    <style>
+        .container{max-width:1200px;margin:0 auto;padding:20px;margin-top:20px}body{background:#eaf3fc;margin:0;font-family:sans-serif}.permission-levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-bottom:30px}.level-card{background:#f8f9fa;border:2px solid #dee2e6;border-radius:8px;padding:15px}.level-1{border-color:#dc3545}.level-5{border-color:#ffc107}.level-10{border-color:#28a745}.level-header{font-weight:700;font-size:1.1em;margin-bottom:10px;padding:8px;border-radius:5px;text-align:center;color:#fff}.level-1 .level-header{background-color:#dc3545}.level-5 .level-header{background-color:#ffc107;color:#212529}.level-10 .level-header{background-color:#28a745}.permissions-list{list-style:none;padding:0;margin:0}.permissions-list li{padding:5px 0;border-bottom:1px solid #eee}.allowed{color:#28a745}.denied{color:#dc3545}.users-table-container{background:#fff;border-radius:10px;box-shadow:0 4px 6px rgba(0,0,0,.1);overflow:hidden}.table-header{background:#007bff;color:#fff;padding:15px;font-size:1.2em;font-weight:700}.users-table{width:100%;border-collapse:collapse}.users-table td,.users-table th{padding:12px;text-align:left;border-bottom:1px solid #dee2e6}.users-table th{background-color:#f8f9fa;font-weight:700;color:#495057}.users-table tr:hover{background-color:#f5f5f5}.permission-select{padding:5px 10px;border:1px solid #ced4da;border-radius:4px;background-color:#fff;min-width:80px}.btn-update{background-color:#28a745;color:#fff;border:none;padding:6px 12px;border-radius:4px;cursor:pointer;font-size:.9em}.btn-update:hover{background-color:#218838}.loading{text-align:center;padding:40px;color:#6c757d}.alert{padding:12px 20px;margin:10px 0;border-radius:5px;font-weight:700}.alert-success{background-color:#d4edda;color:#155724;border:1px solid #c3e6cb}.alert-error{background-color:#f8d7da;color:#721c24;border:1px solid #f5c6cb}.refresh-btn{background-color:#007bff;color:#fff;border:none;padding:10px 20px;border-radius:5px;cursor:pointer;margin-bottom:20px}.refresh-btn:hover{background-color:#0056b3}.permission-badge{padding:4px 8px;border-radius:12px;font-size:.85em;font-weight:700;color:#fff}.permission-badge.level-1{background-color:#dc3545}.permission-badge.level-5{background-color:#ffc107;color:#212529}.permission-badge.level-10{background-color:#28a745}
+    </style>
+</head>
+<body>
+    <!-- El header global se insertará automáticamente -->
+
+    <div class="container">
+        <div style="background: white; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 20px; margin-bottom: 30px;">
+            <p style="margin: 0; color: #495057; font-size: 1.1em; text-align: center;" data-translate-key="header_permissions_subtitle">
+                Administra los niveles de acceso para cada usuario del sistema
+            </p>
+        </div>
+
+        <div class="permission-levels">
+            <div class="level-card level-1">
+                <div class="level-header" data-translate-key="level1_title">NIVEL 1 - Básico</div>
+                <ul class="permissions-list">
+                    <li class="allowed">✓ <span data-translate-key="perm_general_screens">Pantallas Generales (todas)</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_config_screens">Pantallas Configuración</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_master_screens">Pantallas Maestro</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_omegas_screens">Pantallas Omegas</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_orders_screens">Pantallas Pedidos</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_reports_screens">Pantallas Reportes</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_view_orders_screens">Pantallas Ver Pedidos</span></li>
+                </ul>
+            </div>
+            <div class="level-card level-5">
+                <div class="level-header" data-translate-key="level5_title">NIVEL 5 - Intermedio</div>
+                <ul class="permissions-list">
+                    <li class="allowed">✓ <span data-translate-key="perm_general_screens">Pantallas Generales (todas)</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_config_screens">Pantallas Configuración</span></li>
+                    <li class="denied">✗ <span data-translate-key="perm_master_screens">Pantallas Maestro</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_omegas_screens">Pantallas Omegas (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_orders_screens">Pantallas Pedidos (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_reports_screens">Pantallas Reportes (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_view_orders_screens">Pantallas Ver Pedidos (todas)</span></li>
+                </ul>
+            </div>
+            <div class="level-card level-10">
+                <div class="level-header" data-translate-key="level10_title">NIVEL 10 - Administrador</div>
+                <ul class="permissions-list">
+                    <li class="allowed">✓ <span data-translate-key="perm_general_screens">Pantallas Generales (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_config_screens">Pantallas Configuración (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_master_screens">Pantallas Maestro (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_omegas_screens">Pantallas Omegas (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_orders_screens">Pantallas Pedidos (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_reports_screens">Pantallas Reportes (todas)</span></li>
+                    <li class="allowed">✓ <span data-translate-key="perm_view_orders_screens">Pantallas Ver Pedidos (todas)</span></li>
+                </ul>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="cargarUsuarios()"><span data-translate-key="button_refresh_users">🔄 Actualizar Lista de Usuarios</span></button>
+        <div id="alertContainer"></div>
+
+        <div class="users-table-container">
+            <div class="table-header" data-translate-key="table_header_users_list">
+                👥 Lista de Usuarios y Permisos
+            </div>
+            <div id="tableContent">
+                <div class="loading">
+                    <h3 data-translate-key="loading_users_title">Cargando usuarios...</h3>
+                    <p data-translate-key="loading_users_text">Por favor espere mientras se cargan los datos.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========= SCRIPT DE LÓGICA + TRADUCCIÓN (TODO JUNTO) ========= -->
+    <script>
+        // --- Variables Globales y Scripts de Traducción ---
+        let currentTranslations = {};
+        function getTranslation(key) { return currentTranslations[key] || key; }
+
+        function applyTranslations(translations) {
+            currentTranslations = translations;
+            document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+            document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`/translations/translation_${lang}.json`);
+                if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+                const translations = await response.json();
+                applyTranslations(translations);
+                document.documentElement.lang = lang;
+                localStorage.setItem('language', lang);
+                // Sincroniza todos los selectores de idioma
+                const selectors = ['language-selector', 'header-language-selector'];
+                selectors.forEach(id => {
+                    const selector = document.getElementById(id);
+                    if (selector) selector.value = lang;
+                });
+            } catch (error) { console.error("Error al cargar traducciones:", error); }
+        }
+
+        function changeLanguage(lang) {
+            loadTranslations(lang).then(() => {
+                if (typeof cargarUsuarios === 'function') {
+                    cargarUsuarios(); // Recargar datos para que la tabla se renderice con el nuevo idioma
+                }
+            });
+        }
+
+        // --- Lógica de la Página ---
+        async function verificarPermisos() {
+            try {
+                // NUEVO SISTEMA: usar usuarioSGA (login modal)
+                const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+                if (!usuarioActual.id || !usuarioActual.nivel) {
+                    // El loginModal.js se encargará de mostrar el modal de login
+                    console.log('No hay sesión activa, esperando login...');
+                    return false;
+                }
+                const nivelUsuario = usuarioActual.nivel;
+                if (nivelUsuario < 10) {
+                    const alertMsg = getTranslation('alert_access_denied')
+                        .replace('{requiredLevel}', 10)
+                        .replace('{levelName}', getTranslation('level_admin_name'))
+                        .replace('{userLevel}', nivelUsuario);
+                    alert(alertMsg);
+                    window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                    return false;
+                }
+                return true;
+            } catch (error) {
+                console.error('Error verificando permisos:', error);
+                alert(getTranslation('alert_permission_check_error'));
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+            }
+        }
+
+        function mostrarAlerta(mensaje, tipo = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${tipo}`;
+            alertDiv.textContent = mensaje;
+            alertContainer.innerHTML = '';
+            alertContainer.appendChild(alertDiv);
+            setTimeout(() => { if (alertContainer.contains(alertDiv)) alertContainer.removeChild(alertDiv); }, 5000);
+        }
+
+        async function cargarUsuarios() {
+            try {
+                const response = await fetch(`/api/usuarios/listar`);
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                const usuarios = await response.json();
+                renderizarTablaUsuarios(usuarios);
+            } catch (error) {
+                console.error('Error al cargar usuarios:', error);
+                mostrarAlerta(getTranslation('alert_load_users_error'), 'error');
+                document.getElementById('tableContent').innerHTML = `
+                    <div class="loading">
+                        <h3 data-translate-key="error_loading_users_title">❌ Error al cargar usuarios</h3>
+                        <p>${error.message}</p>
+                        <button class="refresh-btn" onclick="cargarUsuarios()" data-translate-key="button_retry">Reintentar</button>
+                    </div>`;
+                applyTranslations(currentTranslations);
+            }
+        }
+
+        function renderizarTablaUsuarios(usuarios) {
+            const tableContent = document.getElementById('tableContent');
+            if (!usuarios || usuarios.length === 0) {
+                tableContent.innerHTML = `
+                    <div class="loading">
+                        <h3 data-translate-key="no_users_title">📋 No hay usuarios</h3>
+                        <p data-translate-key="no_users_text">No se encontraron usuarios en la base de datos.</p>
+                    </div>`;
+                applyTranslations(currentTranslations);
+                return;
+            }
+
+            const tableHTML = `
+                <table class="users-table">
+                    <thead>
+                        <tr>
+                            <th data-translate-key="table_header_user_id">ID Usuario</th>
+                            <th data-translate-key="table_header_operator_id">Nº Operario</th>
+                            <th data-translate-key="table_header_name">Nombre</th>
+                            <th data-translate-key="table_header_current_level">Nivel Actual</th>
+                            <th data-translate-key="table_header_new_level">Nuevo Nivel</th>
+                            <th data-translate-key="table_header_roles">Roles</th>
+                            <th data-translate-key="table_header_action">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${usuarios.map(usuario => `
+                            <tr>
+                                <td>${usuario.Id_Usuario}</td>
+                                <td>${usuario.Num_Operario || 'N/A'}</td>
+                                <td>${usuario.Nombre}</td>
+                                <td><span class="permission-badge level-${usuario.Nivel_Permisos}">${getTranslation('level_text').replace('{level}', usuario.Nivel_Permisos)}</span></td>
+                                <td>
+                                    <select class="permission-select" id="nivel_${usuario.Id_Usuario}">
+                                        <option value="1" ${usuario.Nivel_Permisos == 1 ? 'selected' : ''}>${getTranslation('level_1_basic')}</option>
+                                        <option value="5" ${usuario.Nivel_Permisos == 5 ? 'selected' : ''}>${getTranslation('level_5_intermediate')}</option>
+                                        <option value="10" ${usuario.Nivel_Permisos == 10 ? 'selected' : ''}>${getTranslation('level_10_admin')}</option>
+                                    </select>
+                                </td>
+                                <td>${usuario.Roles || getTranslation('role_none')}</td>
+                                <td><button class="btn-update" onclick="actualizarPermiso(${usuario.Id_Usuario}, '${usuario.Nombre}')"><span data-translate-key="button_update">💾 Actualizar</span></button></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>`;
+            tableContent.innerHTML = tableHTML;
+            applyTranslations(currentTranslations);
+        }
+
+        async function actualizarPermiso(idUsuario, nombreUsuario) {
+            const selectElement = document.getElementById(`nivel_${idUsuario}`);
+            const nuevoNivel = selectElement.value;
+            const levelName = selectElement.options[selectElement.selectedIndex].text;
+            
+            const confirmMsg = getTranslation('confirm_permission_change').replace('{userName}', nombreUsuario).replace('{levelName}', levelName);
+            if (!confirm(confirmMsg)) return;
+
+            try {
+                const response = await fetch(`/api/usuarios/actualizar-permisos`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id_usuario: idUsuario, nuevo_nivel: parseInt(nuevoNivel)})
+                });
+                if (!response.ok) throw new Error(`Error HTTP: ${response.status}`);
+                const resultado = await response.json();
+                
+                if (resultado.success) {
+                    const successMsg = getTranslation('alert_permissions_updated_success').replace('{userName}', nombreUsuario).replace('{levelName}', levelName);
+                    mostrarAlerta(successMsg, 'success');
+                    setTimeout(() => cargarUsuarios(), 1000);
+                } else {
+                    throw new Error(resultado.message || 'Error desconocido');
+                }
+            } catch (error) {
+                const errorMsg = getTranslation('alert_permissions_updated_error').replace('{errorMessage}', error.message);
+                mostrarAlerta(errorMsg, 'error');
+            }
+        }
+
+        async function setupPageLogic() {
+            const tienePermisos = await verificarPermisos();
+            if (tienePermisos) {
+                cargarUsuarios();
+            }
+        }
+
+        // --- Carga Inicial ---
+        document.addEventListener('DOMContentLoaded', () => {
+            const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+            loadTranslations(lang).then(() => {
+                // Esperar a que el usuario esté logueado para verificar permisos
+                window.addEventListener('userLoggedIn', () => {
+                    setupPageLogic();
+                });
+                // Si ya hay usuario, ejecutar directamente
+                const usuario = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+                if (usuario.id) {
+                    setupPageLogic();
+                }
+            });
+        });
+    </script>
+    <!-- Header global (incluye login widget y selector de idioma) -->
+    <script src="/assets/globalHeader.js" data-title="🔐 Gestión de Permisos" data-title-key="header_permissions_title"></script>
+</body>
+</html>

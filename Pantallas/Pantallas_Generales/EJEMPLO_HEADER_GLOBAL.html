@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ejemplo - Sistema de Header Global</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <!-- ======================= HEADER CON GLOBAL HEADER ======================= -->
+  <!-- El header se carga automáticamente, el título se toma del data-title -->
+  <script src="/assets/globalHeader.js" data-title="EJEMPLO DE PÁGINA"></script>
+  <!-- ================================================================ -->
+
+  <div style="max-width: 1200px; margin: 40px auto; padding: 20px;">
+    <h1>🎯 Sistema de Header Global y Login Modal</h1>
+    
+    <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>✅ Características del Sistema</h2>
+      <ul style="line-height: 1.8;">
+        <li><strong>Header Global Unificado:</strong> Todos los archivos HTML usan el mismo header consistente</li>
+        <li><strong>Login Modal Automático:</strong> Si no hay usuario logueado, aparece automáticamente</li>
+        <li><strong>Sesión Compartida:</strong> El login se sincroniza entre todas las pestañas abiertas</li>
+        <li><strong>Widget de Usuario:</strong> Muestra el usuario actual y permite cerrar sesión</li>
+        <li><strong>Auto-verificación:</strong> Valida cada 30 segundos si hay usuario activo</li>
+      </ul>
+    </div>
+
+    <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>📝 Cómo Usar en Tus Páginas HTML</h2>
+      
+      <h3>Opción 1: Auto-inicialización (Recomendada)</h3>
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>&lt;!DOCTYPE html&gt;
+&lt;html lang="es"&gt;
+&lt;head&gt;
+  &lt;meta charset="UTF-8"&gt;
+  &lt;title&gt;Mi Página&lt;/title&gt;
+  &lt;link rel="stylesheet" href="/assets/styles.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+  &lt;!-- El header se carga automáticamente --&gt;
+  &lt;script src="/assets/globalHeader.js" data-title="MI TÍTULO"&gt;&lt;/script&gt;
+  
+  &lt;!-- Tu contenido aquí --&gt;
+  &lt;div&gt;Contenido de la página...&lt;/div&gt;
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+      <h3>Opción 2: Inicialización Manual</h3>
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>&lt;script src="/assets/globalHeader.js" data-auto-init="false"&gt;&lt;/script&gt;
+&lt;script&gt;
+  // Inicializar manualmente cuando lo necesites
+  GlobalHeader.init({ title: 'MI TÍTULO PERSONALIZADO' });
+&lt;/script&gt;</code></pre>
+    </div>
+
+    <div style="background: #fff3e0; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>🔧 API JavaScript Disponible</h2>
+      
+      <h3>LoginModal API</h3>
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>// Verificar si hay usuario logueado
+LoginModal.checkUser(); // true o false
+
+// Obtener datos del usuario actual
+const user = LoginModal.getCurrentUser();
+console.log(user); // { id, num_operario, nombre, nivel, rol }
+
+// Mostrar modal de login manualmente
+LoginModal.show();
+
+// Cerrar sesión
+LoginModal.logout();
+
+// Requerir usuario antes de ejecutar código
+LoginModal.requireUser(() => {
+  console.log('Usuario autenticado, ejecutando código...');
+});
+</code></pre>
+
+      <h3>GlobalHeader API</h3>
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>// Cambiar el título del header dinámicamente
+GlobalHeader.updateTitle('NUEVO TÍTULO');
+
+// Inicializar manualmente
+GlobalHeader.init({ title: 'MI TÍTULO' });
+</code></pre>
+
+      <h3>SharedSession API</h3>
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>// Obtener sesión actual
+const session = SharedSession.getCurrentSession();
+
+// Verificar si la sesión expiró
+const expired = SharedSession.isExpired();
+
+// Extender la sesión actual
+SharedSession.extendSession();
+
+// Forzar sincronización entre pestañas
+SharedSession.forceSync();
+</code></pre>
+    </div>
+
+    <div style="background: #e8f5e9; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>🎨 Personalización</h2>
+      
+      <p>Puedes personalizar la configuración del header editando las constantes en <code>globalHeader.js</code>:</p>
+      
+      <pre style="background: #fff; padding: 15px; border-radius: 4px; overflow-x: auto;"><code>const HEADER_CONFIG = {
+  logoSrc: '/IMAGENES/Logo_EMESA.png',
+  logoAlt: 'EMESA',
+  homeUrl: '/Pantallas/Pantallas_Generales/Pantalla_INICIO_NEW.html',
+  loginWidgetId: 'loginWidgetContainer'
+};</code></pre>
+    </div>
+
+    <div style="background: #ffebee; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>⚠️ Importante</h2>
+      <ul style="line-height: 1.8;">
+        <li>El sistema requiere que la API tenga el endpoint <code>/api/login</code> activo</li>
+        <li>Los datos de usuario se guardan en <code>localStorage</code> con la clave <code>usuarioSGA</code></li>
+        <li>La sesión expira después de 8 horas de inactividad</li>
+        <li>El modal de login aparece automáticamente si no hay usuario logueado</li>
+        <li>El sistema sincroniza la sesión entre todas las pestañas/ventanas abiertas</li>
+      </ul>
+    </div>
+
+    <div style="background: #f3e5f5; padding: 20px; border-radius: 8px; margin-top: 20px;">
+      <h2>🧪 Pruebas</h2>
+      <button onclick="testLogin()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #1976d2; color: white; border: none; border-radius: 4px;">
+        Ver Estado de Login
+      </button>
+      <button onclick="testLogout()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #d32f2f; color: white; border: none; border-radius: 4px;">
+        Cerrar Sesión
+      </button>
+      <button onclick="testChangeTitle()" style="padding: 10px 20px; margin: 5px; cursor: pointer; background: #388e3c; color: white; border: none; border-radius: 4px;">
+        Cambiar Título
+      </button>
+      
+      <div id="testResults" style="margin-top: 15px; padding: 15px; background: #fff; border-radius: 4px; min-height: 50px;">
+        <em>Presiona un botón para ver los resultados...</em>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function testLogin() {
+      const user = LoginModal.getCurrentUser();
+      const results = document.getElementById('testResults');
+      
+      if (user) {
+        results.innerHTML = `
+          <strong>✅ Usuario Logueado:</strong><br>
+          <pre>${JSON.stringify(user, null, 2)}</pre>
+        `;
+      } else {
+        results.innerHTML = '<strong>❌ No hay usuario logueado</strong>';
+        setTimeout(() => LoginModal.show(), 1000);
+      }
+    }
+
+    function testLogout() {
+      if (confirm('¿Seguro que quieres cerrar sesión?')) {
+        LoginModal.logout();
+      }
+    }
+
+    function testChangeTitle() {
+      const titles = ['NUEVO TÍTULO', 'SISTEMA ACTUALIZADO', 'MODO PRUEBA', 'EJEMPLO DE PÁGINA'];
+      const randomTitle = titles[Math.floor(Math.random() * titles.length)];
+      GlobalHeader.updateTitle(randomTitle);
+      
+      const results = document.getElementById('testResults');
+      results.innerHTML = `<strong>✅ Título cambiado a:</strong> ${randomTitle}`;
+    }
+
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', (event) => {
+      console.log('🎉 Usuario logueado:', event.detail);
+    });
+  </script>
+</body>
+</html>

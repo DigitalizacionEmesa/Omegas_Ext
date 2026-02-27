@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title data-translate-key="page_title_picking_orders">Pedidos Picking</title>
+    <link rel="stylesheet" href="../../assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+    <style>
+        /* Tus estilos originales se mantienen intactos */
+        body { background: #f7f7f7; font-family: 'Segoe UI', Arial, sans-serif; }
+        h1 { text-align: center; margin-top: 30px; font-size: 2.2rem; color: #2a3a4a; font-weight: 800; letter-spacing: 1px; }
+        #cards-picking { margin: 40px auto; max-width: 1200px; }
+        .secuenciacion-card { background: #fff; border-radius: 16px; box-shadow: 0 2px 12px rgba(0,0,0,0.10); margin-bottom: 32px; padding: 32px 28px 24px 28px; display: flex; flex-direction: column; align-items: stretch; width: 100%; max-width: 900px; margin-left: auto; margin-right: auto; }
+        .pedido-info-row { display: flex; justify-content: space-between; margin-bottom: 18px; }
+        .pedido-info-container { background: #f2f6fa; border-radius: 10px; padding: 18px 24px; flex: 1; margin: 0 10px; display: flex; flex-direction: column; align-items: center; }
+        .pedido-info-container span { font-size: 2.1rem; font-weight: 800; color: #2a3a4a; margin-bottom: 8px; }
+        .pedido-info-container .valor { font-size: 1.7rem; font-weight: 600; color: #1a2a3a; }
+        @media (max-width: 900px) { .secuenciacion-card { max-width: 99vw; } .pedido-info-row { flex-direction: column; } .pedido-info-container { margin: 10px 0; } }
+    </style>
+</head>
+<body>
+  <!-- Header generado por globalHeader.js -->
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1200px; margin: 0 auto;"></div>
+
+  <!-- SCRIPT DE LÓGICA DE LA PÁGINA (MODIFICADO Y UNIFICADO) -->
+  <script>
+    // Función robusta para formatear fechas a YYYY-MM-DD
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let d = new Date(dateStr);
+      if (isNaN(d.getTime())) {
+        d = new Date(dateStr.replace(/,/g, ''));
+        if (isNaN(d.getTime())) return dateStr;
+      }
+      // Formato DD-MM-YYYY
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            // Obtener datos del usuario desde localStorage
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+            
+            if (!usuarioSGA.id || !usuarioSGA.nivel) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            
+            console.log(`🔍 Verificando permisos - Usuario: ${usuarioSGA.nombre}, Nivel: ${nivelUsuario}`);
+            
+            // Esta pantalla requiere nivel 1 (acceso básico)
+            if (nivelUsuario < 1) {
+                alert(`❌ Acceso denegado.\n\nNecesitas nivel 1 o superior para acceder a esta sección.\nTu nivel actual: ${nivelUsuario}`);
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+            console.log(`✅ Acceso permitido - Picking`);
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            alert('Error al verificar permisos. Redirigiendo al inicio...');
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+    let pedidosCache = [];
+
+    async function getPedidosPicking() {
+      const res = await fetch('/api/pedidos_picking');
+      if (!res.ok) return [];
+      return await res.json();
+    }
+
+function renderCards(pedidos) {
+  pedidosCache = pedidos;
+  const grid = document.getElementById('cardsGrid');
+  grid.innerHTML = '';
+  if (!pedidos.length) {
+    const vacio = document.createElement('div');
+    vacio.textContent = getTranslation('text_no_picking_orders');
+    vacio.style.textAlign = 'center';
+    vacio.style.color = '#3456a1';
+    vacio.style.marginTop = '40px';
+    grid.appendChild(vacio);
+    return;
+  }
+  
+  // Función para extraer el número de secuencia
+  function getSeqNum(seq) { 
+    if (!seq) return 0; 
+    const p = String(seq).split('-'); 
+    const n = p.length > 1 ? parseInt(p[1],10) : parseInt(p[0],10); 
+    return isNaN(n) ? 0 : n; 
+  }
+  
+  // Ordenar todos los pedidos por Sequence primero
+  pedidos.sort((a, b) => getSeqNum(a.Sequence) - getSeqNum(b.Sequence));
+  
+  // Agrupar por SalesOrder manteniendo el orden de aparición (por secuencia)
+  const grouped = {};
+  const orderKeys = [];
+  pedidos.forEach(p => {
+    const order = p.SalesOrder || '';
+    if (!grouped[order]) {
+      grouped[order] = [];
+      orderKeys.push(order); // Mantener orden de primera aparición (que ya está ordenado por secuencia)
+    }
+    grouped[order].push(p);
+  });
+  
+  orderKeys.forEach(order => {
+    const pedidosGrupo = grouped[order];
+    // Si algún pedido del grupo tiene UniValMapex > 0, marcar como empezado
+    const empezado = pedidosGrupo.some(p => parseFloat(p.UniValMapex) > 0);
+    const card = document.createElement('div');
+    card.className = 'secuenciacion-card';
+    // Colores: azul normal o verde para empezados
+    const bgColor = empezado ? '#e7fbe7' : '#f4f8ff';
+    const borderColor = empezado ? '#43a047' : '#1976d2';
+    const headerBg = empezado ? '#43a047' : '#1976d2';
+    card.style = `background: ${bgColor}; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 80px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid ${borderColor}; margin: 0; width: 100%; max-width: 1700px;`;
+    // Si está empezado, solo mostrar la cabecera
+    if (empezado) {
+      card.innerHTML = `
+        <div style="background:${headerBg};color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_order')} ${order}</span>
+        </div>
+      `;
+    } else {
+      card.innerHTML = `
+        <div style="background:${headerBg};color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_order')} ${order}</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0;padding:0 0 28px 0;">
+          ${pedidosGrupo.map(pedido => {
+            console.log('DeliveryDate:', pedido.DeliveryDate, 'Format:', formatDate(pedido.DeliveryDate));
+            const pickingVal = String(pedido.Picking).trim().toUpperCase();
+            const pickingOk = pickingVal === 'SI' || pickingVal === 'YES' || pickingVal === '1' || pickingVal === 'TRUE';
+            const uniVal = parseFloat(pedido.UniValMapex);
+            const pintarAmarillo = pickingOk && !isNaN(uniVal) && uniVal >= 1;
+            const rowBg = pintarAmarillo ? 'background: #fff9c4;' : '';
+            return `
+              <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:28px 64px 0 64px;justify-content:center;border-bottom:1px solid #e0e0e0;${rowBg}">
+                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;max-width:180px;">
+                  <span style="font-size:2rem;font-weight:600;color:${headerBg};">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+                </div>
+                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
+                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }
+    grid.appendChild(card);
+  });
+}
+
+    function setupPageLogic() {
+        async function cargarPicking() {
+            try {
+                const pedidos = await getPedidosPicking();
+                renderCards(pedidos);
+            } catch (err) {
+                const grid = document.getElementById('cardsGrid');
+                grid.innerHTML = `<div style="text-align:center;color:#c00;font-size:1.3rem;">${getTranslation('text_error_loading_data')}</div>`;
+            }
+        }
+        cargarPicking();
+        setInterval(cargarPicking, 5000);
+    }
+  </script>
+  
+  <style>
+    /* Tus estilos originales se mantienen intactos */
+    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding-left:10px;padding-right:10px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600}.pedido-info-top{font-size:1.5rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}@media (max-width:900px){.main-grid{padding:20px 0}.secuenciacion-card>div{padding-left:16px!important;padding-right:16px!important}.pedido-info-container{min-width:100px;padding:8px;font-size:.95rem}}@media (max-width:600px){.main-grid{padding:10px 0}.secuenciacion-card>div{padding-left:8px!important;padding-right:8px!important}.pedido-info-container{min-width:80px;padding:6px;font-size:.92rem}}
+  </style>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+      
+      let currentTranslations = {};
+      function getTranslation(key) { return currentTranslations[key] || key; }
+      function applyTranslations(translations) {
+          currentTranslations = translations;
+          document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+          document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+      }
+      async function loadTranslations(lang) {
+          try {
+              const response = await fetch(`/translations/translation_${lang}.json`);
+              if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+              const translations = await response.json();
+              applyTranslations(translations);
+              document.documentElement.lang = lang;
+              localStorage.setItem('language', lang);
+              // Sincronizar ambos selectores
+              const selector = document.getElementById('language-selector');
+              const headerSelector = document.getElementById('header-language-selector');
+              if (selector) selector.value = lang;
+              if (headerSelector) headerSelector.value = lang;
+          } catch (error) { console.error("Error al cargar traducciones:", error); }
+      }
+      function changeLanguage(lang) {
+          loadTranslations(lang).then(() => {
+              if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
+                  renderCards(pedidosCache);
+              }
+          });
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+          const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+          loadTranslations(lang).then(() => {
+              if (typeof setupPageLogic === 'function') {
+                  setupPageLogic();
+              }
+          });
+      });
+  </script>
+  <script src="/assets/globalHeader.js" data-title="PEDIDOS PICKING" data-title-key="header_picking_orders"></script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

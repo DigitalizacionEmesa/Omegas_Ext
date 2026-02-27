@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title data-translate-key="page_title_stock_omegas">Stock Omegas</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    /* Tus estilos originales se mantienen intactos */
+    body { background: #eaf3fc; margin: 0; }
+    .omegas-header {
+      background: #1976d2; color: #fff; display: flex; align-items: center;
+      box-shadow: 0 2px 8px 0 rgba(25,118,210,0.07); border-bottom: 2px solid #1976d2;
+      padding: 10px 32px 10px 10px;
+    }
+    .omegas-header-title {
+      font-size: 2rem; font-weight: 700; color: #fff; flex: 1; margin: 0; letter-spacing: 0.5px;
+    }
+    .omegas-home-icon {
+      background: none; border: none; cursor: pointer; font-size: 2rem; color: #fff; margin-right: 18px;
+    }
+    .omegas-emesa-logo { height: 48px; margin-left: auto; display: block; }
+    .omegas-main-container {
+      max-width: 700px; width: 96%; margin: 38px auto 0 auto; background: #fff;
+      border-radius: 12px; box-shadow: 0 2px 12px #1976d222; padding: 32px 32px 28px 32px;
+      display: flex; flex-direction: column; align-items: center;
+    }
+    .omegas-search-row {
+      width: 100%; display: flex; justify-content: flex-end; margin-bottom: 18px;
+    }
+    #searchInput {
+      padding: 8px 12px; border-radius: 6px; border: 1px solid #b0b0b0; font-size: 1rem; width: 260px;
+    }
+    .omegas-table {
+      width: 100%; border-collapse: collapse; margin-top: 0;
+    }
+    .omegas-table th, .omegas-table td {
+      border: 1px solid #d0d0d0;
+      padding: 10px 12px;
+      text-align: center;
+    }
+    .omegas-table th {
+      background: #1976d2; color: #fff; font-weight: 700; position: sticky; top: 0; z-index: 2;
+    }
+    .omegas-table tr:nth-child(even) { background: #f4f8fd; }
+    @media (max-width: 700px) {
+      .omegas-main-container { padding: 0 6px 18px 6px; }
+      .omegas-header-title { font-size: 1.1rem; }
+      .omegas-header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 10px; }
+      .omegas-emesa-logo { height: 36px; }
+      #searchInput { width: 100%; }
+    }
+  </style>
+  <style>
+    .reset-btn {
+      background: #1976d2;
+      border: 1px solid #1976d2;
+      color: #fff;
+      border-radius: 5px;
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin: 0 auto;
+      justify-content: center;
+    }
+    .reset-btn:hover {
+      background: #1251a3;
+      border-color: #1251a3;
+      color: #fff;
+    }
+  </style>
+</head>
+<body>
+  <header class="omegas-header" style="display: flex; align-items: center; justify-content: space-between; position: relative;">
+    <button class="omegas-home-icon" onclick="window.location.href='/Pantallas/Pantallas_Generales/Pantalla_INICIO.html'" title="Inicio" data-translate-key-title="home_tooltip">
+      <i class="bi bi-house-door"></i>
+    </button>
+    <div style="flex: 1; display: flex; justify-content: center; align-items: center;">
+      <h1 class="omegas-header-title" data-translate-key="header_stock_omegas" style="margin: 0; text-align: center;">Stock Omegas</h1>
+    </div>
+    <select id="language-selector" onchange="changeLanguage(this.value)" style="margin-right: 20px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; align-self: center;">
+      <option value="es">ES</option>
+      <option value="en">EN</option>
+      <option value="cz">CZ</option>
+    </select>
+    <img src="/IMAGENES/Logo_EMESA.png" alt="EMESA Logo" class="omegas-emesa-logo">
+  </header>
+  <div class="omegas-main-container">
+    <div class="omegas-search-row">
+      <input type="text" id="searchInput" placeholder="Buscar Omega por nombre..." data-translate-key-placeholder="search_placeholder">
+    </div>
+    <table class="omegas-table" id="stockTable">
+      <thead>
+        <tr>
+          <th data-translate-key="table_header_name">Nombre Omega</th>
+          <th data-translate-key="table_header_stock">Stock Actual</th>
+          <th data-translate-key="table_header_reset">Reset Stock</th>
+        </tr>
+      </thead>
+      <tbody id="stockTableBody">
+        <!-- Filas dinámicas -->
+      </tbody>
+    </table>
+  </div>
+  
+  <!-- SCRIPT ORIGINAL (con modificaciones para traducción) -->
+  <script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            // NUEVO SISTEMA: usar usuarioSGA
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+            
+            if (!usuarioActual.id || !usuarioActual.nivel) {
+                alert('❌ No hay sesión activa. Redirigiendo al login...');
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
+                return;
+            }
+            
+            const nivelUsuario = usuarioActual.nivel;
+            
+            console.log(`🔍 Verificando permisos - Usuario: ${usuarioActual.nombre}, Nivel: ${nivelUsuario}`);
+            
+            // Esta pantalla requiere nivel 5 (Omegas)
+            if (nivelUsuario < 5) {
+                alert(`❌ Acceso denegado.\n\nNecesitas nivel 5 o superior para acceder a esta sección.\nTu nivel actual: ${nivelUsuario}`);
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+            console.log(`✅ Acceso permitido - Stock Omegas`);
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            alert('Error al verificar permisos. Redirigiendo al inicio...');
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    function setupPage() {
+      if (!localStorage.getItem('usuarioSGA')) {
+        window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
+        return;
+      }
+      loadStockData();
+
+      document.getElementById('searchInput').addEventListener('keyup', function() {
+        const filter = this.value.toLowerCase();
+        const rows = document.querySelectorAll('#stockTableBody tr');
+        rows.forEach(row => {
+          const nombre = row.querySelector('td')?.textContent?.toLowerCase() || '';
+          row.style.display = nombre.includes(filter) ? '' : 'none';
+        });
+      });
+    }
+
+    function loadStockData() {
+      fetch('/api/stock')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('stockTableBody');
+          tbody.innerHTML = '';
+          data.forEach(item => {
+            const tr = document.createElement('tr');
+            const nombreOmega = item.Nombre_Omega || '';
+            tr.innerHTML = `
+              <td>${nombreOmega}</td>
+              <td>${item.CurrentStock ?? ''}</td>
+              <td><button class="reset-btn" title="Reset" onclick="goToResetOmega('${encodeURIComponent(nombreOmega)}')">Reset <i class='bi bi-arrow-clockwise'></i></button></td>
+            `;
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(() => {
+          alert(getTranslation('notification_load_stock_error'));
+        });
+    }
+
+    function goToResetOmega(nombreOmega) {
+      localStorage.setItem('omegaToReset', nombreOmega);
+      window.location.href = '/Pantallas/Pantallas_Omegas/Reset_omegas.html';
+    }
+  </script>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+    let currentTranslations = {};
+
+    function getTranslation(key) {
+      return currentTranslations[key] || key;
+    }
+
+    function applyTranslations(translations) {
+      currentTranslations = translations;
+      document.querySelectorAll('[data-translate-key]').forEach(element => {
+        const key = element.getAttribute('data-translate-key');
+        if (translations[key]) element.innerHTML = translations[key];
+      });
+      document.querySelectorAll('[data-translate-key-title]').forEach(element => {
+        const key = element.getAttribute('data-translate-key-title');
+        if (translations[key]) element.setAttribute('title', translations[key]);
+      });
+      // NUEVO: Añadido para traducir los placeholder
+      document.querySelectorAll('[data-translate-key-placeholder]').forEach(element => {
+        const key = element.getAttribute('data-translate-key-placeholder');
+        if (translations[key]) element.setAttribute('placeholder', translations[key]);
+      });
+    }
+
+    async function loadTranslations(lang) {
+      try {
+        const fileName = `translation_${lang}.json`;
+        const response = await fetch(`/translations/${fileName}`);
+        
+        if (!response.ok) {
+          console.warn(`Traducción para '${lang}' no encontrada. Cargando 'es' como alternativa.`);
+          if (lang !== 'es') await loadTranslations('es');
+          return;
+        }
+        const translations = await response.json();
+        applyTranslations(translations);
+        document.documentElement.lang = lang;
+        localStorage.setItem('language', lang);
+
+        const selector = document.getElementById('language-selector');
+        if (selector) selector.value = lang;
+
+      } catch (error) {
+        console.error("Error al cargar o aplicar las traducciones:", error);
+      }
+    }
+
+    function changeLanguage(lang) {
+      loadTranslations(lang);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const preferredLanguage = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+      // Primero carga las traducciones, y cuando termine, ejecuta la lógica de la página
+      loadTranslations(preferredLanguage).then(() => {
+        setupPage();
+      });
+    });
+  </script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>
