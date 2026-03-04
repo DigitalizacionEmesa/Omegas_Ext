@@ -364,27 +364,19 @@
 
     function registerMovement() {
       const omegaInput = document.getElementById('omegaInput').value.trim();
-      const omegaObj = omegasList.find(item => (item.Nombre_Omega || '').trim() === omegaInput);
-      const omegaId = omegaObj ? omegaObj.OmegaID : null;
+      // Validar que el omega existe en la lista cargada
+      const omegaObj = omegasList.find(item => (item.codigo || '').trim() === omegaInput);
 
-      if (!omegaId) {
+      if (!omegaObj) {
         // MODIFICADO: Usa la clave de traducción
         showNotification(getTranslation('notification_select_valid_omega'), 'error');
         return;
       }
       
       const quantity = document.getElementById('quantityInput').value;
-      const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
-      const usuarioId = usuarioSGA.id || usuarioSGA.usuarioId || usuarioSGA.usuarioID;
 
-      if (!usuarioId) {
-        // MODIFICADO: Usa la clave de traducción
-        showNotification(getTranslation('notification_user_not_found'), 'error');
-        return;
-      }
-
-      const endpoint = '/api/stock/adjust';
-      const payload = { omegaId: omegaId, realStockCount: quantity, usuarioId: usuarioId };
+      const endpoint = '/api/reset_stock';
+      const payload = { codigo: omegaObj.codigo, nuevo_stock: parseInt(quantity) };
 
       fetch(endpoint, {
         method: 'POST',
@@ -519,12 +511,12 @@
       parsedImportData = data.map(row => {
         const omegaName = (row.Name || '').trim();
         const cantidad = parseInt(row.Qty, 10);
-        const omegaObj = omegasList.find(item => (item.Nombre_Omega || '').trim() === omegaName);
+        const omegaObj = omegasList.find(item => (item.codigo || '').trim() === omegaName);
         
         return {
           omega: omegaName,
           cantidad: isNaN(cantidad) ? 0 : cantidad,
-          omegaId: omegaObj ? omegaObj.OmegaID : null,
+          codigo: omegaObj ? omegaObj.codigo : null,
           valid: !!omegaObj && !isNaN(cantidad) && cantidad >= 0
         };
       });
@@ -583,16 +575,6 @@
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = `<span class="spinner"></span> <span>${getTranslation('button_importing') || 'Importando...'}</span>`;
 
-      const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
-      const usuarioId = usuarioSGA.id || usuarioSGA.usuarioId || usuarioSGA.usuarioID;
-
-      if (!usuarioId) {
-        showNotification(getTranslation('notification_user_not_found'), 'error');
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML = `<span data-translate-key="button_import_data">${getTranslation('button_import_data')}</span>`;
-        return;
-      }
-
       // Procesar cada reset de forma secuencial
       let completed = 0;
       let errors = 0;
@@ -600,13 +582,12 @@
       async function processResets() {
         for (const item of validData) {
           try {
-            const response = await fetch('/api/stock/adjust', {
+            const response = await fetch('/api/reset_stock', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                omegaId: item.omegaId,
-                realStockCount: item.cantidad,
-                usuarioId: usuarioId
+                codigo: item.codigo,
+                nuevo_stock: item.cantidad
               })
             });
 
@@ -697,7 +678,7 @@
           window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
           return;
         }
-        fetch('/api/stock')
+        fetch('/api/stock_omegas')
           .then(res => res.json())
           .then (data => {
             omegasList = data;
@@ -705,8 +686,7 @@
             datalist.innerHTML = '';
             data.forEach(item => {
               const opt = document.createElement('option');
-              opt.value = item.Nombre_Omega || '';
-              opt.setAttribute('data-id', item.OmegaID ?? '');
+              opt.value = item.codigo || '';
               datalist.appendChild(opt);
             });
           });

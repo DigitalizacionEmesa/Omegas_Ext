@@ -33,13 +33,16 @@ SHUTDOWN_SECRET_KEY = None
 app = Flask(__name__, static_folder='.', static_url_path='')
 CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}}, methods=["GET", "POST", "PUT", "OPTIONS"], allow_headers=["Content-Type"])
 
-# Ruta absoluta a la carpeta compartida (pantallas HTML)
-RUTA_PANTALLAS = r"\\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\Pantallas"
-
-# Carpeta base del proyecto (ruta absoluta fija)
-BASE_DIR = r"\\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas"
+# Carpeta base del proyecto
+# - En modo ejecutable (PyInstaller): usa sys._MEIPASS donde se extraen los recursos
+# - En modo desarrollo (python api/appOMEGAS.py): sube un nivel desde api/ al raíz del proyecto
+if getattr(sys, 'frozen', False):
+    BASE_DIR = sys._MEIPASS
+else:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Rutas de recursos
+RUTA_PANTALLAS = os.path.join(BASE_DIR, 'Pantallas')
 RUTA_ASSETS = os.path.join(BASE_DIR, 'assets')
 RUTA_IMAGENES = os.path.join(BASE_DIR, 'IMAGENES')
 RUTA_TRADUCCIONES = os.path.join(BASE_DIR, 'translations')
@@ -282,9 +285,9 @@ def auto_sync_sequenced():
                 else:
                     print("[AUTO-SYNC] No hay cambios en UniValMapex para actualizar.")
                 
-                # Obtener stock actual
-                cursor_main.execute("SELECT Nombre_Omega, CurrentStock FROM OB.V_CurrentStock")
-                stock_disponible = {row.Nombre_Omega: row.CurrentStock for row in cursor_main.fetchall()}
+                # Obtener stock actual (nueva arquitectura: Stock_Omegas_New)
+                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
+                stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 # Obtener stock de Beams
                 cursor_main.execute("SELECT BeamCode, CurrentStock FROM OB.V_CurrentStock_Beams")
@@ -366,310 +369,9 @@ def start_auto_sync_thread():
     t = threading.Thread(target=auto_sync_sequenced, daemon=True, name="SequencedSync") # He añadido un nombre al hilo
     t.start()
 # =========================================================================================================
-# AUTO-SYNC DE STOCK DE OMEGAS CADA 5 SEGUNDOS (extrae movimientos de producción y consumo desde mapexbp)
+# STOCK DE OMEGAS: Ahora gestionado por SQL Server Agent Job (sp_Sync_Omegas_RawData cada 5 min)
+# La API solo consulta la vista OB.Stock_Omegas_New y permite reseteo via OB.sp_Reset_Omega_Stock
 # =========================================================================================================
-# HELPERS: Persistencia del timestamp de sincronización de Omegas en fichero TXT
-# =========================================================================================================
-_STOCK_TIMESTAMP_FILE = os.path.join(BASE_DIR, 'last_sync_omegas_stock.txt')
-_STOCK_VALIDATION_FILE = os.path.join(BASE_DIR, 'sync_initial_validation.txt')
-_STOCK_TIMESTAMP_FORMAT = '%Y-%m-%d %H:%M:%S'
-
-def _read_stock_sync_timestamp():
-    """Lee el último timestamp procesado desde el fichero TXT. Si no existe, devuelve 60 días atrás."""
-    try:
-        if os.path.exists(_STOCK_TIMESTAMP_FILE):
-            with open(_STOCK_TIMESTAMP_FILE, 'r') as f:
-                content = f.read().strip()
-                if content:
-                    ts = datetime.strptime(content, _STOCK_TIMESTAMP_FORMAT)
-                    print(f'[AUTO-SYNC STOCK] Timestamp leído del fichero: {content}')
-                    return ts
-    except Exception as e:
-        print(f'[AUTO-SYNC STOCK] ERROR leyendo timestamp del fichero: {e}')
-    # Primera ejecución o fichero corrupto: cargar 60 días de histórico
-    initial = datetime.now() - timedelta(days=60)
-    print(f'[AUTO-SYNC STOCK] Fichero no encontrado o corrupto. Carga inicial desde: {initial.strftime(_STOCK_TIMESTAMP_FORMAT)}')
-    return initial
-
-def _write_stock_sync_timestamp(ts):
-    """Escribe el timestamp en el fichero TXT."""
-    try:
-        with open(_STOCK_TIMESTAMP_FILE, 'w') as f:
-            f.write(ts.strftime(_STOCK_TIMESTAMP_FORMAT))
-    except Exception as e:
-        print(f'[AUTO-SYNC STOCK] ERROR escribiendo timestamp en fichero: {e}')
-
-def _write_stock_validation(last_sync_time_str, current_time_str,
-                            registros_mapex_in, unidades_mapex_in, registros_insertados_in, unidades_insertadas_in,
-                            registros_mapex_out, unidades_mapex_out, registros_insertados_out, unidades_insertadas_out):
-    """Escribe el resumen de validación de la carga inicial (entradas y salidas) en un fichero TXT."""
-    try:
-        diff_uds_in  = unidades_insertadas_in  - unidades_mapex_in
-        diff_uds_out = unidades_insertadas_out - unidades_mapex_out
-        resultado_in  = '✅ COINCIDE' if diff_uds_in  == 0 else '⚠️ DIFIERE'
-        resultado_out = '✅ COINCIDE' if diff_uds_out == 0 else '⚠️ DIFIERE'
-        lines = [
-            '=== VALIDACIÓN CARGA INICIAL DE STOCK ===',
-            f'Ejecutado:       {datetime.now().strftime(_STOCK_TIMESTAMP_FORMAT)}',
-            f'Rango consultado: {last_sync_time_str} -> {current_time_str}',
-            '',
-            '━━━ ENTRADAS (Producción - MovementID=1) ━━━',
-            '',
-            '  MAPEX (F_HIS_CT):',
-            f'    Registros (OFs):          {registros_mapex_in}',
-            f'    Unidades totales:          {unidades_mapex_in}',
-            '',
-            '  Insertado en OB.Stocks:',
-            f'    Registros insertados:      {registros_insertados_in}',
-            f'    Unidades totales:          {unidades_insertadas_in}',
-            '',
-            f'  Diferencia unidades:         {diff_uds_in:+d}',
-            f'  Resultado:                   {resultado_in}',
-            '',
-            '  NOTA: Diferencia en registros es normal (OFs con mismo Cod_producto',
-            '        se cuentan por separado pero producción puede estar agrupada).',
-            '',
-            '━━━ SALIDAS (Lecturas - MovementID=2) ━━━',
-            '',
-            '  MAPEX (his_lectura):',
-            f'    Registros (grupos):        {registros_mapex_out}',
-            f'    Unidades totales:          {unidades_mapex_out}',
-            '',
-            '  Insertado en OB.Stocks:',
-            f'    Registros insertados:      {registros_insertados_out}',
-            f'    Unidades totales:          {unidades_insertadas_out}',
-            '',
-            f'  Diferencia unidades:         {diff_uds_out:+d}',
-            f'  Resultado:                   {resultado_out}',
-        ]
-        with open(_STOCK_VALIDATION_FILE, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(lines))
-        print(f'[AUTO-SYNC STOCK] Validación escrita en: {_STOCK_VALIDATION_FILE}')
-        print(f'[AUTO-SYNC STOCK] Entradas: MAPEX={unidades_mapex_in} uds | Insertadas={unidades_insertadas_in} uds | {resultado_in}')
-        print(f'[AUTO-SYNC STOCK] Salidas:  MAPEX={unidades_mapex_out} uds | Insertadas={unidades_insertadas_out} uds | {resultado_out}')
-    except Exception as e:
-        print(f'[AUTO-SYNC STOCK] ERROR escribiendo validación: {e}')
-
-
-def auto_sync_omegas_stock():
-    """
-    Sincroniza el stock de Omegas.
-    - Primera ejecución (sin fichero TXT): carga 60 días de histórico (captura OFs largas).
-    - Siguientes ciclos: solo datos nuevos desde el último Fecha_Fin procesado.
-    - El timestamp se persiste en 'last_sync_omegas_stock.txt' para sobrevivir reinicios.
-    """
-    print('[AUTO-SYNC STOCK] Servicio de sincronización iniciado.')
-
-    while True:
-        try:
-            current_time = datetime.now()
-
-            # --- a. Detectar si es la carga inicial y leer el último timestamp ---
-            is_initial_load = not os.path.exists(_STOCK_TIMESTAMP_FILE)
-            last_sync_time = _read_stock_sync_timestamp()
-            last_sync_time_str = last_sync_time.strftime(_STOCK_TIMESTAMP_FORMAT)
-            current_time_str = current_time.strftime(_STOCK_TIMESTAMP_FORMAT)
-
-            print(f"\n[AUTO-SYNC STOCK] {datetime.now()}: Iniciando ciclo [{last_sync_time_str} -> {current_time_str}]")
-
-            # --- b. Obtener lista de Omegas activos y sus IDs (solo tipo C y W) ---
-            omega_map = {}
-            try:
-                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                    cursor_main = conn_main.cursor()
-                    cursor_main.execute("SELECT OmegaID, Assy FROM OB.Omegas WHERE [W/C] IN ('C','W')")
-                    omega_map = {row.Assy: row.OmegaID for row in cursor_main.fetchall()}
-            except Exception as e:
-                print(f"[AUTO-SYNC STOCK] ERROR CRÍTICO al obtener Omegas: {e}")
-                time.sleep(30)
-                continue
-
-            if not omega_map:
-                print("[AUTO-SYNC STOCK] No hay Omegas definidos para sincronizar.")
-                _write_stock_sync_timestamp(current_time)
-                time.sleep(30)
-                continue
-
-            # --- c. Extraer Entradas y Salidas de mapexbp ---
-            movimientos = []
-            lista_de_assys_activos = list(omega_map.keys())
-            placeholders = ','.join('?' for _ in lista_de_assys_activos)
-            max_fecha_fin = last_sync_time  # Se actualizará con el Fecha_Fin máximo encontrado
-            entradas_encontradas = 0
-            salidas_encontradas = 0
-
-            try:
-                with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                    cursor_cz = conn_cz.cursor()
-
-                    # --- Entradas (Producción) ---
-                    # CORRECCIÓN: 'DETAIL'+'PRODUCT' para obtener registros individuales con Fecha_Fin exacta.
-                    # Filtramos por Fecha_Fin para capturar OFs que empezaron antes pero cerraron en este rango.
-                    query_in = f"""
-                        SELECT 
-                            Cod_producto,
-                            Fecha_Fin,
-                            Unidades_OK
-                        FROM 
-                            dbo.F_HIS_CT(?, ?, ?, ?, ?, ?)
-                        WHERE
-                            WorkGroup1 = '50 Assembly'
-                            AND Cod_producto IN ({placeholders})
-                            AND Unidades_OK > 0
-                            AND Fecha_Fin >= ?
-                            AND Fecha_Fin < ?
-                    """
-                    params_in = (
-                        ['WORKCENTER', 'DETAIL', 'PRODUCT', last_sync_time_str, current_time_str, 2]
-                        + lista_de_assys_activos
-                        + [last_sync_time_str, current_time_str]
-                    )
-
-                    print(f"[AUTO-SYNC STOCK] DEBUG - Rango entradas: {last_sync_time_str} -> {current_time_str}")
-                    print(f"[AUTO-SYNC STOCK] DEBUG - Omegas a buscar: {len(lista_de_assys_activos)}")
-
-                    cursor_cz.execute(query_in, params_in)
-                    entradas_encontradas = 0
-                    for row in cursor_cz.fetchall():
-                        cantidad = int(row.Unidades_OK) if row.Unidades_OK else 0
-                        if cantidad > 0:
-                            movimientos.append({'cod_producto': row.Cod_producto, 'movement_id': 1, 'quantity': cantidad})
-                            entradas_encontradas += 1
-                            print(f"[AUTO-SYNC STOCK] DEBUG ENTRADA: {row.Cod_producto} -> {cantidad} uds (Fecha_Fin: {row.Fecha_Fin})")
-                            # Actualizar el timestamp máximo procesado
-                            if row.Fecha_Fin and row.Fecha_Fin > max_fecha_fin:
-                                max_fecha_fin = row.Fecha_Fin
-
-                    print(f"[AUTO-SYNC STOCK] Entradas encontradas: {entradas_encontradas}")
-
-                    # --- Salidas (Lectura) ---
-                    query_out = f"""
-                        SELECT producto, COUNT(*) AS Cantidad
-                        FROM dbo.his_lectura
-                        WHERE fecha >= ? AND fecha < ?
-                        AND producto IN ({placeholders})
-                        GROUP BY producto
-                    """
-                    params_out = [last_sync_time_str, current_time_str] + lista_de_assys_activos
-                    cursor_cz.execute(query_out, params_out)
-                    salidas_encontradas = 0
-                    for row in cursor_cz.fetchall():
-                        cantidad = int(row.Cantidad) if row.Cantidad else 0
-                        if cantidad > 0:
-                            movimientos.append({'cod_producto': row.producto, 'movement_id': 2, 'quantity': -cantidad})
-                            salidas_encontradas += 1
-
-                    print(f"[AUTO-SYNC STOCK] Salidas encontradas: {salidas_encontradas}")
-
-            except pyodbc.Error as db_err:
-                print(f"[AUTO-SYNC STOCK] ERROR de BD consultando mapexbp: {db_err}")
-                time.sleep(30)
-                continue
-
-            # --- d. Cargar movimientos en OB.Stocks ---
-            if not movimientos:
-                print("[AUTO-SYNC STOCK] No hay movimientos nuevos en este ciclo.")
-            else:
-                datos_para_insertar = []
-                for mov in movimientos:
-                    assy = mov['cod_producto']
-                    omega_id = omega_map.get(assy)
-                    if omega_id is None:
-                        print(f"[AUTO-SYNC STOCK] WARNING: Assy {assy} no encontrado en omega_map")
-                        continue
-                    movimiento_tipo = "ENTRADA" if mov['movement_id'] == 1 else "SALIDA"
-                    print(f"[AUTO-SYNC STOCK] Movimiento: {movimiento_tipo} - Assy: {assy} - OmegaID: {omega_id} - Cantidad: {mov['quantity']}")
-                    datos_para_insertar.append((
-                        omega_id, mov['movement_id'], mov['quantity'], 1, 'Sincronización automática'
-                    ))
-
-                if datos_para_insertar:
-                    try:
-                        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                            cursor_main = conn_main.cursor()
-                            sql_insert = "{CALL OB.sp_AddStockMovement(?, ?, ?, ?, ?)}"
-                            insertados = 0
-                            for datos in datos_para_insertar:
-                                try:
-                                    cursor_main.execute(sql_insert, datos)
-                                    conn_main.commit()
-                                    insertados += 1
-                                    print(f"[AUTO-SYNC STOCK] OK: OmegaID={datos[0]}, Tipo={datos[1]}, Qty={datos[2]}")
-                                except pyodbc.Error as insert_err:
-                                    print(f"[AUTO-SYNC STOCK] ERROR insertando OmegaID={datos[0]}: {insert_err}")
-
-                            print(f"[AUTO-SYNC STOCK] ÉXITO: {insertados}/{len(datos_para_insertar)} movimientos insertados.")
-                    except pyodbc.Error as db_err:
-                        print(f"[AUTO-SYNC STOCK] ERROR de BD insertando movimientos: {db_err}")
-                        time.sleep(30)
-                        continue
-
-            # --- e. Validación de la carga inicial ---
-            if is_initial_load and (entradas_encontradas > 0 or salidas_encontradas > 0):
-                try:
-                    print('[AUTO-SYNC STOCK] Carga inicial completada. Ejecutando validación...')
-                    unidades_insertadas_in  = sum(m['quantity']   for m in movimientos if m['movement_id'] == 1)
-                    unidades_insertadas_out = sum(-m['quantity']  for m in movimientos if m['movement_id'] == 2)
-                    with ConexionODBCCZ(database='mapexbp') as conn_val:
-                        cursor_val = conn_val.cursor()
-                        # Validación ENTRADAS
-                        query_val_in = f"""
-                            SELECT COUNT(*) AS TotalRegistros, SUM(Unidades_OK) AS TotalUnidades
-                            FROM dbo.F_HIS_CT(?, ?, ?, ?, ?, ?)
-                            WHERE WorkGroup1 = '50 Assembly'
-                              AND Cod_producto IN ({placeholders})
-                              AND Unidades_OK > 0
-                              AND Fecha_Fin >= ?
-                              AND Fecha_Fin < ?
-                        """
-                        params_val_in = (
-                            ['WORKCENTER', 'DETAIL', 'PRODUCT', last_sync_time_str, current_time_str, 2]
-                            + lista_de_assys_activos
-                            + [last_sync_time_str, current_time_str]
-                        )
-                        cursor_val.execute(query_val_in, params_val_in)
-                        row_in = cursor_val.fetchone()
-                        registros_mapex_in  = row_in.TotalRegistros or 0
-                        unidades_mapex_in   = int(row_in.TotalUnidades or 0)
-
-                        # Validación SALIDAS
-                        query_val_out = f"""
-                            SELECT COUNT(DISTINCT producto) AS TotalRegistros, COUNT(*) AS TotalUnidades
-                            FROM dbo.his_lectura
-                            WHERE fecha >= ? AND fecha < ?
-                              AND producto IN ({placeholders})
-                        """
-                        params_val_out = [last_sync_time_str, current_time_str] + lista_de_assys_activos
-                        cursor_val.execute(query_val_out, params_val_out)
-                        row_out = cursor_val.fetchone()
-                        registros_mapex_out  = row_out.TotalRegistros or 0
-                        unidades_mapex_out   = int(row_out.TotalUnidades or 0)
-
-                    _write_stock_validation(
-                        last_sync_time_str, current_time_str,
-                        registros_mapex_in,  unidades_mapex_in,  entradas_encontradas, unidades_insertadas_in,
-                        registros_mapex_out, unidades_mapex_out, salidas_encontradas,  unidades_insertadas_out
-                    )
-                except Exception as e:
-                    print(f'[AUTO-SYNC STOCK] ERROR en validación inicial: {e}')
-
-            # --- f. Guardar el timestamp en el fichero TXT ---
-            # Si hubo entradas: avanzar al Fecha_Fin más reciente encontrado.
-            # Si no hubo entradas: mantener el timestamp actual para no perder datos.
-            nuevo_timestamp = current_time - timedelta(seconds=20)  # Pequeño buffer para evitar perder registros cercanos al límite
-            
-            # Opcional: Si quieres ser ultra-seguro por si hubo un registro en el milisegundo exacto, 
-            # puedes restar 1 segundo, pero current_time suele ser correcto.
-            
-            _write_stock_sync_timestamp(nuevo_timestamp)
-            print(f"[AUTO-SYNC STOCK] Ciclo completado. Reloj avanzado a: {nuevo_timestamp.strftime(_STOCK_TIMESTAMP_FORMAT)}")
-
-        except Exception as e:
-            print(f"[AUTO-SYNC STOCK] ERROR GENERAL: {e}")
-            time.sleep(30)
-            continue
-
-        time.sleep(10)
 # ====================================================================================
 # INICIAR EL AUTO-SYNC DE STOCK DE BEAMS
 # ====================================================================================
@@ -1890,9 +1592,9 @@ def incremental_sync():
             with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
                 cursor_main = conn_main.cursor()
                 
-                # Obtener stock de Assy
-                cursor_main.execute("SELECT Nombre_Omega, CurrentStock FROM OB.V_CurrentStock")
-                stock_disponible = {row.Nombre_Omega: row.CurrentStock for row in cursor_main.fetchall()}
+                # Obtener stock de Assy (nueva arquitectura: Stock_Omegas_New)
+                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
+                stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 # Obtener stock de Beam
                 cursor_main.execute("SELECT BeamCode, CurrentStock FROM OB.V_CurrentStock_Beams")
@@ -2524,114 +2226,74 @@ def servir_traducciones(nombre_archivo):
     return send_from_directory(RUTA_TRADUCCIONES, nombre_archivo)
 
 # ====================================================================================
-# ENDPOINTS PARA LA EL STOCK Y SECUENCIACIÓN DE OMEGAS
+# ENDPOINT PARA STOCK DE OMEGAS (Nueva arquitectura - Vista OB.Stock_Omegas_New)
 # ====================================================================================
-
-@app.route('/api/stock', methods=['GET'])
-@cross_origin() # Asegura que el frontend pueda llamar a esta ruta
-def get_stock():
-    try:
-        # Usando la clase de conexión que ya tienes definida
-        # Cambia 'OB' por el nombre correcto de la base de datos, por ejemplo 'Digitalizacion' o el que corresponda
-        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos Digitalizacion"}), 500
-            cursor = conn.cursor()
-            query = "SELECT OmegaID, Nombre_Omega, CurrentStock FROM OB.V_CurrentStock ORDER BY Nombre_Omega;"
-            cursor.execute(query)
-            # Convertir las filas a una lista de diccionarios
-            rows = cursor.fetchall()
-            columns = [column[0] for column in cursor.description]
-            result = [dict(zip(columns, row)) for row in rows]
-            return jsonify(result), 200
-    except pyodbc.Error as ex:
-        sqlstate = ex.args[0]
-        logging.error(f"Error de base de datos al obtener stock: {sqlstate} - {ex}")
-        return jsonify({"error": "Error de base de datos", "details": str(ex)}), 500
-    except Exception as e:
-        logging.error(f"Error inesperado al obtener stock: {e}")
-        return jsonify({"error": "Error interno del servidor"}), 500
-    
-
-@app.route('/api/stock/adjust', methods=['POST'])
-@cross_origin() # Asegura que el frontend pueda llamar a esta ruta
-def adjust_stock():
-    data = request.get_json()
-    if not data or not all(k in data for k in ['omegaId', 'realStockCount', 'usuarioId']):
-        return jsonify({"error": "Faltan datos en la petición"}), 400
-
-    omega_id = data['omegaId']
-    real_stock_count = data['realStockCount']
-    usuario_id = data['usuarioId']
-    notes = "Reseteo de stock desde aplicación web"
-
-    try:
-        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos OB"}), 500
-            cursor = conn.cursor()
-            # Llamada al procedimiento almacenado con parámetros
-            sql = "{CALL OB.sp_AdjustInventory(?, ?, ?, ?)}"
-            params = (omega_id, real_stock_count, usuario_id, notes)
-            cursor.execute(sql, params)
-            return jsonify({"message": f"Stock del Omega {omega_id} actualizado a {real_stock_count}"}), 200
-    except pyodbc.Error as ex:
-        sqlstate = ex.args[0]
-        logging.error(f"Error de base de datos al ajustar stock: {sqlstate} - {ex}")
-        # Aquí podrías devolver un mensaje de error más específico si el SP lanza un error conocido
-        return jsonify({"error": "Error de base de datos al ejecutar el ajuste", "details": str(ex)}), 500
-    except Exception as e:
-        logging.error(f"Error inesperado al ajustar stock: {e}")
-        return jsonify({"error": "Error interno del servidor"}), 500
-
-@app.route('/api/movements', methods=['GET'])
+@app.route('/api/stock_omegas', methods=['GET'])
 @cross_origin()
-def get_movements():
+def get_stock_omegas():
+    """
+    Devuelve el stock actual de Omegas desde la vista OB.Stock_Omegas_New.
+    La sincronización se realiza mediante SQL Server Agent Job cada 5 min.
+    """
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos OB"}), 500
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
-            # Seleccionamos solo los movimientos que un operario puede realizar
-            query = "SELECT MovementID, MovementName FROM OB.Movement WHERE MovementID <> 8;"
+            query = """
+                SELECT Cod_producto, Entradas, Salidas, StockActual 
+                FROM OB.Stock_Omegas_New
+                ORDER BY Cod_producto
+            """
             cursor.execute(query)
-            rows = cursor.fetchall()
-            columns = [column[0] for column in cursor.description]
-            result = [dict(zip(columns, row)) for row in rows]
-            return jsonify(result), 200
+            
+            resultados = []
+            for row in cursor.fetchall():
+                resultados.append({
+                    'codigo': row.Cod_producto,
+                    'entradas': row.Entradas,
+                    'salidas': row.Salidas,
+                    'stock': row.StockActual
+                })
+        return jsonify(resultados), 200
     except Exception as e:
-        logging.error(f"Error al obtener los tipos de movimiento: {e}")
-        return jsonify({"error": "Error interno del servidor"}), 500
+        logging.error(f"Error en /api/stock_omegas: {e}")
+        return jsonify({"error": str(e)}), 500
 
-@app.route('/api/stock/movement', methods=['POST'])
+
+# ====================================================================================
+# ENDPOINT PARA RESETEO DE STOCK DE OMEGAS (Nueva arquitectura - SP OB.sp_Reset_Omega_Stock)
+# ====================================================================================
+@app.route('/api/reset_stock', methods=['POST'])
 @cross_origin()
-def add_stock_movement():
-    data = request.get_json()
-    if not data or not all(k in data for k in ['omegaId', 'movementId', 'quantity', 'usuarioId']):
-        return jsonify({"error": "Faltan datos en la petición"}), 400
+def reset_stock_omegas():
+    """
+    Resetea el stock de un Omega específico.
+    Limpia su histórico de producción/lecturas y opcionalmente inserta un ajuste manual.
+    Espera JSON: { "codigo": "ASSY_CODE", "nuevo_stock": 0 }
+    """
+    data = request.get_json() or {}
+    cod_producto = data.get('codigo')
+    nuevo_stock = data.get('nuevo_stock', 0)
 
-    omega_id = data['omegaId']
-    movement_id = data['movementId']
-    quantity = data['quantity']
-    usuario_id = data['usuarioId']
-    notes = "Movimiento desde aplicación web"
+    if not cod_producto:
+        return jsonify({"error": "Debe especificar un código de producto."}), 400
 
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos OB"}), 500
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
-            sql = "{CALL OB.sp_AddStockMovement(?, ?, ?, ?, ?)}"
-            params = (omega_id, movement_id, quantity, usuario_id, notes)
-            cursor.execute(sql, params)
-            return jsonify({"message": "Movimiento registrado correctamente"}), 200
-    except pyodbc.Error as ex:
-        logging.error(f"Error de base de datos al registrar movimiento: {ex}")
-        return jsonify({"error": f"Error de base de datos al registrar el movimiento: {ex}"}), 500
+            query = "{CALL OB.sp_Reset_Omega_Stock(?, ?)}"
+            cursor.execute(query, (cod_producto, int(nuevo_stock)))
+            
+        msg = f"Stock reseteado exitosamente para {cod_producto} (Stock Inicial: {nuevo_stock})."
+        print(f"[RESET STOCK] {msg}")
+        return jsonify({"message": msg}), 200
     except Exception as e:
-        logging.error(f"Error inesperado al registrar movimiento: {e}")
-        return jsonify({"error": f"Error interno del servidor: {e}"}), 500
-    
+        logging.error(f"Error en /api/reset_stock: {e}")
+        return jsonify({"error": str(e)}), 500
+
 
 # ====================================================================================
 # ENDPOINT PARA LISTAR TODOS LOS OMEGAS
@@ -3156,20 +2818,17 @@ if __name__ == '__main__':
     pedidos_thread.start()
     print("[MAIN] -> Hilo de pedidos iniciado.")
 
-    # --- INICIAR EL WORKER DE STOCK DE BEAMS ---
+    """ # --- INICIAR EL WORKER DE STOCK DE BEAMS ---
     print("[MAIN] Creando hilo para el stock de Beams (auto_sync_beams_stock)...")
     beams_stock_thread = threading.Thread(target=auto_sync_beams_stock, name="BeamStockSync")
     beams_stock_thread.daemon = True
     beams_stock_thread.start()
-    print("[MAIN] -> Hilo de stock de Beams iniciado.")
+    print("[MAIN] -> Hilo de stock de Beams iniciado.") """
     
-    # --- INICIAR EL WORKER DE STOCK DE OMEGAS ---
-    # print("[MAIN] Creando hilo para el stock de Omegas (auto_sync_omegas_stock)...")
-    #bAsume que la función se llama auto_sync_omegas_stock
-    omegas_stock_thread = threading.Thread(target=auto_sync_omegas_stock, name="OmegaStockSync")
-    omegas_stock_thread.daemon = True
-    omegas_stock_thread.start()
-    print("[MAIN] -> Hilo de stock de Omegas iniciado.")
+    # --- STOCK DE OMEGAS: Ya no se ejecuta en hilo Python ---
+    # La sincronización de stock de Omegas se gestiona ahora mediante SQL Server Agent Job
+    # (OB.sp_Sync_Omegas_RawData cada 5 min). La API solo consulta OB.Stock_Omegas_New.
+    print("[MAIN] -> Stock de Omegas gestionado por SQL Server Agent Job (sin hilo Python).")
 
     # --- INICIAR EL WORKER DE LIMPIEZA DE PEDIDOS SECUENCIADOS ---
     print("[MAIN] Creando hilo para limpieza de pedidos secuenciados (cleanup_sequenced_orders)...")
