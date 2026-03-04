@@ -1,5 +1,4 @@
-('C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
- 'Emesa Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
+('C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
  [('__future__',
    'C:\\Users\\a.munoz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\__future__.py',
    'PYMODULE'),

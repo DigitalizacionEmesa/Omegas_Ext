@@ -1,5 +1,4 @@
-('C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
- 'Emesa Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\appOMEGAS.pkg',
+('C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\appOMEGAS.pkg',
  {'BINARY': True,
   'DATA': True,
   'EXECUTABLE': True,
@@ -11,33 +10,22 @@
   'SYMLINK': False},
  [('pyi-contents-directory _internal', '', 'OPTION'),
   ('PYZ-00.pyz',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
    'PYZ'),
   ('struct',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa '
-   'Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\struct.pyc',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\struct.pyc',
    'PYMODULE'),
   ('pyimod01_archive',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa '
-   'Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod01_archive.pyc',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod01_archive.pyc',
    'PYMODULE'),
   ('pyimod02_importers',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa '
-   'Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod02_importers.pyc',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod02_importers.pyc',
    'PYMODULE'),
   ('pyimod03_ctypes',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa '
-   'Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod03_ctypes.pyc',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod03_ctypes.pyc',
    'PYMODULE'),
   ('pyimod04_pywin32',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa '
-   'Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod04_pywin32.pyc',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\localpycs\\pyimod04_pywin32.pyc',
    'PYMODULE'),
   ('pyiboot01_bootstrap',
    'C:\\Users\\a.munoz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
@@ -55,8 +43,7 @@
    'C:\\Users\\a.munoz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks\\pyi_rth_cryptography_openssl.py',
    'PYSOURCE'),
   ('appOMEGAS',
-   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Digitalización '
-   'Emesa Alejandro\\Desarrollo_Omegas\\api\\appOMEGAS.py',
+   'C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\api\\appOMEGAS.py',
    'PYSOURCE')],
  'python313.dll',
  True,

@@ -97,6 +97,8 @@
       <thead>
         <tr>
           <th data-translate-key="table_header_name">Nombre Omega</th>
+          <th data-translate-key="table_header_entradas" style="display:none;">Entradas</th>
+          <th data-translate-key="table_header_salidas" style="display:none;">Salidas</th>
           <th data-translate-key="table_header_stock">Stock Actual</th>
           <th data-translate-key="table_header_reset">Reset Stock</th>
         </tr>
@@ -162,18 +164,20 @@
     }
 
     function loadStockData() {
-      fetch('/api/stock')
+      fetch('/api/stock_omegas')
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('stockTableBody');
           tbody.innerHTML = '';
           data.forEach(item => {
             const tr = document.createElement('tr');
-            const nombreOmega = item.Nombre_Omega || '';
+            const codigo = item.codigo || '';
             tr.innerHTML = `
-              <td>${nombreOmega}</td>
-              <td>${item.CurrentStock ?? ''}</td>
-              <td><button class="reset-btn" title="Reset" onclick="goToResetOmega('${encodeURIComponent(nombreOmega)}')">Reset <i class='bi bi-arrow-clockwise'></i></button></td>
+              <td>${codigo}</td>
+              <td style="display:none;">${item.entradas ?? 0}</td>
+              <td style="display:none;">${item.salidas ?? 0}</td>
+              <td>${item.stock ?? 0}</td>
+              <td><button class="reset-btn" title="Reset" onclick="goToResetOmega('${encodeURIComponent(codigo)}')">Reset <i class='bi bi-arrow-clockwise'></i></button></td>
             `;
             tbody.appendChild(tr);
           });
@@ -183,8 +187,8 @@
         });
     }
 
-    function goToResetOmega(nombreOmega) {
-      localStorage.setItem('omegaToReset', nombreOmega);
+    function goToResetOmega(codigoOmega) {
+      localStorage.setItem('omegaToReset', codigoOmega);
       window.location.href = '/Pantallas/Pantallas_Omegas/Reset_omegas.html';
     }
   </script>
