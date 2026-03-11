@@ -566,8 +566,10 @@ def cleanup_sequenced_orders():
                 
                 # 1. Obtener todos los pedidos secuenciados
                 cursor_main.execute("""
-                    SELECT NumeroPedido, Assy
-                    FROM OB.PedidosSecuenciados
+                    SELECT 
+                        ps.NumeroPedido, 
+                        ps.Assy
+                    FROM OB.PedidosSecuenciados ps
                 """)
                 pedidos_secuenciados = cursor_main.fetchall()
                 
@@ -576,7 +578,7 @@ def cleanup_sequenced_orders():
                     time.sleep(30)
                     continue
                 
-                # 2. Verificar cada uno en MAPEX
+                # 2. Verificar cada uno directamente en MAPEX
                 pedidos_a_eliminar = []
                 
                 with ConexionODBCCZ(database='mapexbp') as conn_cz:
@@ -585,48 +587,31 @@ def cleanup_sequenced_orders():
                     for pedido in pedidos_secuenciados:
                         numero_pedido = pedido[0]
                         assy = pedido[1]
-                        
-                        # Consultar estado actual en MAPEX
-                        query = """
+
+                        cursor_cz.execute("""
                             SELECT 
-                                A.EstadoERP,
-                                A.Id_wam_estado_pedido_cliente,
-                                B.UniValMapex,
+                                ISNULL(B.UniValMapex, 0) AS UniValMapex,
                                 B.UnidadesPedidas
                             FROM his_wam_pedido_cliente A
                             JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
                             JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
                             WHERE A.NumeroPedido = ? AND C.Cod_producto = ?
-                        """
-                        cursor_cz.execute(query, (numero_pedido, assy))
+                        """, (numero_pedido, assy))
                         row = cursor_cz.fetchone()
                         
-                        # Si no existe en MAPEX o ha cambiadode estado, marcar para eliminar
                         if not row:
-                            print(f"[CLEANUP] Pedido {numero_pedido} no encontrado en MAPEX - Se eliminará")
+                            # No encontrado en MAPEX: NO eliminar, puede ser un fallo de JOIN o de conexión
+                            print(f"[CLEANUP] Pedido {numero_pedido}/{assy} no encontrado en MAPEX - Se omite (no se elimina)")
+                            continue
+
+                        uni_val_mapex = row[0]
+                        unidades_pedidas_mapex = row[1] if row[1] is not None else 0
+
+                        # ÚNICO CRITERIO DE ELIMINACIÓN: unidades ensambladas reales en MAPEX >= pedidas
+                        if unidades_pedidas_mapex > 0 and uni_val_mapex >= unidades_pedidas_mapex:
+                            print(f"[CLEANUP] ⚠ Pedido {numero_pedido}/{assy} completado en MAPEX "
+                                  f"({uni_val_mapex}/{unidades_pedidas_mapex} uds) - Se eliminará")
                             pedidos_a_eliminar.append((numero_pedido, assy))
-                        else:
-                            estado_erp = row[0]
-                            estado_wam = row[1]
-                            uni_val = row[2] if row[2] is not None else 0
-                            unidades_pedidas = row[3] if row[3] is not None else 0
-                            
-                            # Criterios para ELIMINAR de secuenciados:
-                            # 1. EstadoERP != 0 (ya no es pendiente)
-                            # 2. Id_wam_estado_pedido_cliente != 1 (cambió de estado)
-                            # 3. UniValMapex >= UnidadesPedidas (ya completado en MAPEX)
-                            
-                            if estado_erp != 0 or estado_wam != 1 or uni_val >= unidades_pedidas:
-                                razon = []
-                                if estado_erp != 0:
-                                    razon.append(f"EstadoERP={estado_erp}")
-                                if estado_wam != 1:
-                                    razon.append(f"EstadoWAM={estado_wam}")
-                                if uni_val >= unidades_pedidas:
-                                    razon.append(f"Completado({uni_val}/{unidades_pedidas})")
-                                
-                                print(f"[CLEANUP] Pedido {numero_pedido} ya no cumple criterios ({', '.join(razon)}) - Se eliminará")
-                                pedidos_a_eliminar.append((numero_pedido, assy))
                 
                 # 3. Eliminar los pedidos que ya no cumplen criterios
                 if pedidos_a_eliminar:
@@ -636,9 +621,9 @@ def cleanup_sequenced_orders():
                                 "DELETE FROM OB.PedidosSecuenciados WHERE NumeroPedido = ? AND Assy = ?",
                                 (numero_pedido, assy)
                             )
-                            print(f"[CLEANUP] ✓ Eliminado pedido secuenciado: {numero_pedido} / {assy}")
+                            print(f"[CLEANUP] ✓ Eliminado: {numero_pedido} / {assy}")
                         except Exception as e:
-                            print(f"[CLEANUP] ERROR al eliminar {numero_pedido}: {e}")
+                            print(f"[CLEANUP] ERROR al eliminar {numero_pedido}/{assy}: {e}")
                     
                     print(f"[CLEANUP] Total eliminados: {len(pedidos_a_eliminar)} pedidos")
                 else:
