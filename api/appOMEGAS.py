@@ -14,9 +14,18 @@ from functools import wraps
 from flask_cors import CORS, cross_origin
 from collections import defaultdict
 import threading
+import socket
+import json
+import requests
 # Instalar con: pip install schedule
 import schedule
 
+
+# Configuración de conexión al servicio ICF de SAP
+SAP_STOCK_URL = 'http://emesapprdapp:8000/sap/bc/z_ordenes_stock'
+SAP_CLIENT    = '100'
+SAP_USER      = 'EMESA.MM'
+SAP_PASSWORD  = 'EMESA1234'
 
 # Configuración directa de usuario y contraseña de la base de datos
 DB_USER = 'Usrconsulta'
@@ -191,14 +200,6 @@ def run_scheduler():
     Worker que ejecuta el scheduler en segundo plano
     """
     print("[SCHEDULER] Iniciando scheduler para sincronización diaria a las 00:00:00")
-    
-    #EJECUCIÓN INMEDIATA PARA PRUEBAS AL INICIAR LA API
-    print("[SCHEDULER] Ejecutando sincronización inicial inmediatamente para pruebas...")
-    try:
-        scheduled_daily_sync()
-        print("[SCHEDULER] ✅ Sincronización inicial completada exitosamente")
-    except Exception as e:
-        print(f"[SCHEDULER] ❌ ERROR en sincronización inicial: {e}")
 
     # Programar la tarea para ejecutarse diariamente a las 00:00
     schedule.every().day.at("00:00").do(scheduled_daily_sync)
@@ -742,7 +743,48 @@ def cleanup_old_unsequenced_orders():
                                 cabeceras_a_eliminar.append((id_cabecera_externa, numero_pedido))
                         else:
                             print(f"[CLEANUP-OLD] Pedido {numero_pedido} tiene estado WAM=4 pero ESTÁ SECUENCIADO - Se conserva")
-                
+
+                # NUEVO: Verificar en MAPEX el estado ACTUAL de TODOS los pedidos locales,
+                # independientemente de su FechaEntrega. Detecta pedidos completados/entregados
+                # (EstadoERP != 0 o Id_wam_estado_pedido_cliente IN (2,3,4)) que aún permanecen
+                # en nuestra base de datos porque no cumplían el criterio de >7 días.
+                cursor_main.execute("""
+                    SELECT pc.ID_PedidoCabecera_Externa, pc.NumeroPedido
+                    FROM OB.PedidosCabecera pc
+                """)
+                todos_pedidos_locales = cursor_main.fetchall()
+
+                if todos_pedidos_locales:
+                    ids_para_verificar = [row[0] for row in todos_pedidos_locales]
+
+                    with ConexionODBCCZ(database='mapexbp') as conn_cz2:
+                        cursor_cz2 = conn_cz2.cursor()
+                        placeholders_ids = ','.join(['?' for _ in ids_para_verificar])
+                        cursor_cz2.execute(f"""
+                            SELECT id_his_wam_pedido_cliente, EstadoERP, Id_wam_estado_pedido_cliente
+                            FROM his_wam_pedido_cliente
+                            WHERE id_his_wam_pedido_cliente IN ({placeholders_ids})
+                        """, ids_para_verificar)
+                        estados_en_mapex = {row[0]: (row[1], row[2]) for row in cursor_cz2.fetchall()}
+
+                    for id_cabecera_externa, numero_pedido in todos_pedidos_locales:
+                        # Evitar procesar los ya marcados para eliminar
+                        if (id_cabecera_externa, numero_pedido) in cabeceras_a_eliminar:
+                            continue
+                        estado = estados_en_mapex.get(id_cabecera_externa)
+                        if not estado:
+                            continue
+                        estado_erp, estado_wam = estado
+                        # Estados WAM considerados "finalizados": 2=servido, 3=entregado, 4=cancelado
+                        if estado_erp != 0 or estado_wam in (2, 3, 4):
+                            if numero_pedido not in pedidos_secuenciados:
+                                print(f"[CLEANUP-OLD] Pedido {numero_pedido} completado en MAPEX "
+                                      f"(EstadoERP={estado_erp}, WAM={estado_wam}) - Se eliminará")
+                                cabeceras_a_eliminar.append((id_cabecera_externa, numero_pedido))
+                            else:
+                                print(f"[CLEANUP-OLD] Pedido {numero_pedido} completado en MAPEX "
+                                      f"(EstadoERP={estado_erp}, WAM={estado_wam}) pero ESTÁ SECUENCIADO - Se conserva")
+
                 # Ejecutar las eliminaciones
                 if cabeceras_a_eliminar:
                     for id_cabecera_externa, numero_pedido in cabeceras_a_eliminar:
@@ -1586,12 +1628,15 @@ def incremental_sync():
                 stock_beams = {row.BeamCode: row.CurrentStock for row in cursor_main.fetchall()}
                 
                 cursor_main.execute("""
-                    SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam 
+                    SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam, ps.PriorityOrder
                     FROM OB.PedidosSecuenciados ps
                     INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
                     INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
                     WHERE ISNULL(pl.UniValMapex, 0) < pl.UnidadesPedidas
-                    ORDER BY ps.SequenceValue ASC
+                    ORDER BY
+                        CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                        ps.PriorityOrder ASC,
+                        ps.SequenceValue ASC
                 """)
                 pedidos_a_actualizar = cursor_main.fetchall()
                 updates_necesarios = []
@@ -2278,6 +2323,134 @@ def reset_stock_omegas():
     except Exception as e:
         logging.error(f"Error en /api/reset_stock: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+# ====================================================================================
+# ENDPOINT PARA CONSULTAR STOCK DE OMEGAS EN SAP
+# ====================================================================================
+@app.route('/api/stock_sap_omegas', methods=['GET'])
+@cross_origin()
+def get_stock_sap_omegas():
+    """
+    Consulta el stock de todas las Omegas en SAP (tabla MARD, centro 2000, sin almacén 2055).
+    Guarda el resultado en stock_sap_omegas.json y lo devuelve como JSON.
+    """
+    try:
+        # 1. Obtener todos los códigos de Omega de nuestra base de datos
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+            cursor = conn.cursor()
+            cursor.execute("SELECT Assy FROM OB.Omegas")
+            omegas = [row[0] for row in cursor.fetchall()]
+
+        if not omegas:
+            return jsonify([]), 200
+
+        print(f"[SAP STOCK] Consultando {len(omegas)} omegas en SAP...")
+
+        # 2. Enviar lista de materiales a SAP como JSON en el body
+        response = requests.post(
+            SAP_STOCK_URL,
+            json=omegas,
+            auth=(SAP_USER, SAP_PASSWORD),
+            headers={'sap-client': SAP_CLIENT},
+            timeout=30
+        )
+        response.raise_for_status()
+        sap_data = response.json()
+
+        # 3. Guardar en stock_sap_omegas.json en la raíz del proyecto
+        json_path = os.path.join(BASE_DIR, 'stock_sap_omegas.json')
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump({
+                'timestamp': datetime.now().strftime('%d/%m/%Y %H:%M:%S'),
+                'total': len(sap_data),
+                'data': sap_data
+            }, f, ensure_ascii=False, indent=2)
+
+        print(f"[SAP STOCK] Consulta completada: {len(sap_data)} registros. Guardado en {json_path}")
+        return jsonify(sap_data), 200
+
+    except requests.exceptions.ConnectionError:
+        logging.error("[SAP STOCK] No se pudo conectar al servidor SAP")
+        return jsonify({"error": "No se pudo conectar al servidor SAP"}), 503
+    except requests.exceptions.Timeout:
+        logging.error("[SAP STOCK] Timeout al consultar SAP")
+        return jsonify({"error": "Timeout al consultar SAP (>30s)"}), 504
+    except requests.exceptions.HTTPError as e:
+        logging.error(f"[SAP STOCK] Error HTTP de SAP: {e}")
+        return jsonify({"error": f"SAP respondió con error: {str(e)}"}), 502
+    except Exception as e:
+        logging.error(f"[SAP STOCK] Error inesperado: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+# ====================================================================================
+# ENDPOINT PARA SERVIR EL CACHÉ LOCAL DE STOCK SAP (sin llamar a SAP)
+# ====================================================================================
+@app.route('/api/stock_sap_cached', methods=['GET'])
+@cross_origin()
+def get_stock_sap_cached():
+    """
+    Devuelve el último resultado de SAP guardado en stock_sap_omegas.json.
+    No llama a SAP - sirve el caché local.
+    """
+    json_path = os.path.join(BASE_DIR, 'stock_sap_omegas.json')
+    if not os.path.exists(json_path):
+        return jsonify({"data": [], "timestamp": None}), 200
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            cached = json.load(f)
+        return jsonify(cached), 200
+    except Exception as e:
+        logging.error(f"[SAP CACHE] Error leyendo caché: {e}")
+        return jsonify({"data": [], "timestamp": None}), 200
+
+
+# ====================================================================================
+# ENDPOINTS PARA GESTIONAR CORREOS DE AVISOS SAP STOCK
+# ====================================================================================
+SAP_EMAILS_FILE = os.path.join(BASE_DIR, 'sap_alert_emails.txt')
+
+@app.route('/api/sap/emails', methods=['GET'])
+@cross_origin()
+def get_sap_emails():
+    """Devuelve la lista de correos guardados en sap_alert_emails.txt"""
+    emails = []
+    if os.path.exists(SAP_EMAILS_FILE):
+        with open(SAP_EMAILS_FILE, 'r', encoding='utf-8') as f:
+            emails = [line.strip() for line in f if line.strip()]
+    return jsonify({'emails': emails})
+
+@app.route('/api/sap/emails', methods=['POST'])
+@cross_origin()
+def manage_sap_emails():
+    """Añade o elimina un correo de sap_alert_emails.txt"""
+    data = request.get_json() or {}
+    action = data.get('action')
+    email  = (data.get('email') or '').strip()
+
+    if not email or '@' not in email:
+        return jsonify({'error': 'Email inválido'}), 400
+
+    emails = []
+    if os.path.exists(SAP_EMAILS_FILE):
+        with open(SAP_EMAILS_FILE, 'r', encoding='utf-8') as f:
+            emails = [line.strip() for line in f if line.strip()]
+
+    if action == 'add':
+        if email not in emails:
+            emails.append(email)
+    elif action == 'remove':
+        emails = [e for e in emails if e != email]
+    else:
+        return jsonify({'error': 'Acción no válida'}), 400
+
+    with open(SAP_EMAILS_FILE, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(emails))
+
+    return jsonify({'emails': emails})
 
 
 # ====================================================================================
