@@ -342,6 +342,15 @@
 
       <div class="sap-modal-status" id="sapSettingsStatus"></div>
 
+      <div class="sap-modal-row">
+        <label data-translate-key="sap_email_lang">Idioma del correo</label>
+        <select id="sapEmailLang" style="padding:5px 10px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">
+          <option value="es">🇪🇸 Español</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="cz">🇨🇿 Čeština</option>
+        </select>
+      </div>
+
       <!-- SECCIÓN EMAILS -->
       <div class="sap-email-section">
         <h4 data-translate-key="sap_email_title">Avisos por correo</h4>
@@ -401,10 +410,11 @@
         window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
         return;
       }
-      // Carga omegas y al terminar, pre-rellena la columna SAP desde caché local
-      loadStockData().then(() => loadSapStockCached());
-      // Iniciar scheduler automático SAP si está activado
-      initSapScheduler();
+      // Carga config SAP del servidor (global) y luego inicia el scheduler
+      loadSapSchedulerConfig().then(() => {
+        loadStockData().then(() => loadSapStockCached());
+        initSapScheduler();
+      });
 
       document.getElementById('searchInput').addEventListener('keyup', function() {
         const filter = this.value.toLowerCase();
@@ -429,7 +439,7 @@
               <td>${codigo}</td>
               <td style="display:none;">${item.entradas ?? 0}</td>
               <td style="display:none;">${item.salidas ?? 0}</td>
-              <td>${item.stock ?? 0}</td>
+              <td data-app-stock="${item.stock ?? 0}">${item.stock ?? 0}</td>
               <td class="sap-stock-cell" data-codigo="${codigo}">-</td>
               <td><button class="reset-btn" title="Reset" onclick="goToResetOmega('${encodeURIComponent(codigo)}')">Reset <i class='bi bi-arrow-clockwise'></i></button></td>
             `;
@@ -444,7 +454,7 @@
     async function loadSapStock() {
       const btn = document.getElementById('sapBtn');
       btn.disabled = true;
-      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + t('sap_querying');
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + getTranslation('sap_querying');
 
       // Mostrar estado de carga en todas las celdas SAP
       document.querySelectorAll('.sap-stock-cell').forEach(td => {
@@ -463,6 +473,9 @@
         // Rellenar columna Stock SAP (reutiliza la misma lógica que el caché)
         fillSapCells(sapData);
 
+        // Enviar correo de diferencias si hay correos configurados
+        sendSapDiffEmail(sapData);
+
         // Actualizar timestamp mostrado
         const tsNow = new Date();
         const pad = n => String(n).padStart(2, '0');
@@ -471,10 +484,10 @@
         const tsWrapper = document.getElementById('sapTimestampWrapper');
         if (tsSpan) { tsSpan.textContent = tsStr; tsWrapper.style.display = ''; }
 
-        btn.innerHTML = '<i class="bi bi-check-circle"></i> ' + t('sap_updated');
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> ' + getTranslation('sap_updated');
         setTimeout(() => {
           btn.disabled = false;
-          btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + t('sap_query_button');
+          btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + getTranslation('sap_query_button');
         }, 3000);
 
       } catch (err) {
@@ -485,7 +498,7 @@
         });
         alert('Error al consultar SAP: ' + err.message);
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + t('sap_query_button');
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + getTranslation('sap_query_button');
       }
     }
 
@@ -535,19 +548,93 @@
     }
 
     // ============================================================
+    // === ENVÍO DE CORREO DIFERENCIAS SAP vs APP ================
+    // ============================================================
+    /**
+     * Compara los datos SAP recibidos con el stock de la app visible en la tabla
+     * y envía un correo con las diferencias al backend.
+     */
+    async function sendSapDiffEmail(sapData) {
+      if (!sapData || sapData.length === 0) return;
+
+      const cfg    = getSapConfig();
+      const idioma = cfg.emailLang || 'es';
+
+      // Construir mapa SAP: { codigo -> stockSap }
+      const sapMap = {};
+      sapData.forEach(item => {
+        const mat = (item.Material || item.material || '').toString().trim();
+        sapMap[mat] = item.Stock ?? item.stock ?? 0;
+      });
+
+      // Recorrer filas de la tabla y detectar diferencias
+      const diferencias = [];
+      document.querySelectorAll('#stockTableBody tr').forEach(row => {
+        const sapCell = row.querySelector('.sap-stock-cell[data-codigo]');
+        if (!sapCell) return;
+        const codigo = (sapCell.getAttribute('data-codigo') || '').toString().trim();
+        if (!codigo || !(codigo in sapMap)) return;
+
+        const appStockCell = row.querySelector('td[data-app-stock]');
+        if (!appStockCell) return;
+
+        const stockApp = parseInt(appStockCell.getAttribute('data-app-stock'), 10) || 0;
+        const stockSap = sapMap[codigo];
+        if (stockApp !== stockSap) {
+          diferencias.push({ omega: codigo, stock_app: stockApp, stock_sap: stockSap });
+        }
+      });
+
+      if (!diferencias.length) {
+        console.log('[SAP EMAIL] Sin diferencias detectadas. Correo no enviado.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/sap/send-diff-email', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ diferencias, idioma })
+        });
+        if (res.ok) {
+          console.log(`[SAP EMAIL] Correo enviado (${diferencias.length} diferencias)`);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.warn('[SAP EMAIL] El servidor rechazó el envío:', err.error || res.status);
+        }
+      } catch (e) {
+        console.warn('[SAP EMAIL] Error de red al enviar correo:', e.message);
+      }
+    }
+
+    // ============================================================
     // === SCHEDULER AUTOMÁTICO SAP ================================
     // ============================================================
-    const SAP_SCHED_KEY = 'sapSchedulerConfig';
+    let _sapCfgCache = { enabled: false, time: '00:00', emailLang: 'es', lastRun: null };
     let sapSchedulerTimer = null;
 
-    function getSapConfig() {
+    /** Descarga la config del servidor y la guarda en el caché local. */
+    async function loadSapSchedulerConfig() {
       try {
-        return JSON.parse(localStorage.getItem(SAP_SCHED_KEY)) || {};
-      } catch { return {}; }
+        const res = await fetch('/api/sap/scheduler-config');
+        if (res.ok) _sapCfgCache = await res.json();
+      } catch (e) {
+        console.warn('[SAP SCHED] No se pudo cargar config del servidor:', e.message);
+      }
+    }
+
+    function getSapConfig() {
+      return _sapCfgCache;
     }
 
     function saveSapConfig(cfg) {
-      localStorage.setItem(SAP_SCHED_KEY, JSON.stringify(cfg));
+      _sapCfgCache = cfg;
+      // Persistir en servidor (fire-and-forget)
+      fetch('/api/sap/scheduler-config', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(cfg)
+      }).catch(e => console.warn('[SAP SCHED] Error guardando config:', e.message));
     }
 
     /** Devuelve los ms hasta la próxima ejecución (siempre diaria a la hora configurada) */
@@ -601,6 +688,7 @@
       document.getElementById('sapAutoEnabled').checked = !!cfg.enabled;
       document.getElementById('sapScheduleTime').value = cfg.time || '00:00';
       updateSettingsStatus(cfg);
+      document.getElementById('sapEmailLang').value = cfg.emailLang || 'es';
       loadSapEmails();
       document.getElementById('sapSettingsOverlay').classList.add('active');
     }
@@ -615,9 +703,10 @@
 
     function saveSapSettings() {
       const cfg = {
-        enabled:  document.getElementById('sapAutoEnabled').checked,
-        time:     document.getElementById('sapScheduleTime').value,
-        lastRun:  getSapConfig().lastRun || null,
+        enabled:   document.getElementById('sapAutoEnabled').checked,
+        time:      document.getElementById('sapScheduleTime').value,
+        lastRun:   getSapConfig().lastRun || null,
+        emailLang: document.getElementById('sapEmailLang').value,
       };
       saveSapConfig(cfg);
       scheduleNextSapRun(cfg);

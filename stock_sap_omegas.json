@@ -1,5 +1,5 @@
 {
-  "timestamp": "16/03/2026 10:33:06",
+  "timestamp": "17/03/2026 12:49:36",
   "total": 278,
   "data": [
     {
@@ -329,7 +329,8 @@
     },
     {
       "material": "S0PF56226312",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 2.0
     },
     {
       "material": "S0PF56226311",
@@ -364,7 +365,8 @@
     },
     {
       "material": "S0PF56226283",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 10.0
     },
     {
       "material": "S0PF56226282",
@@ -536,7 +538,7 @@
     {
       "material": "S0PF56225873",
       "centro": "2000",
-      "stock": 15.0
+      "stock": 14.0
     },
     {
       "material": "S0PF56225860",
@@ -593,7 +595,7 @@
     {
       "material": "S0PF56225840",
       "centro": "2000",
-      "stock": 47.0
+      "stock": 30.0
     },
     {
       "material": "S0PF56225839",
@@ -776,7 +778,7 @@
     {
       "material": "S0PFA6225947",
       "centro": "2000",
-      "stock": 14.0
+      "stock": 58.0
     },
     {
       "material": "S0PF56226491",
@@ -819,7 +821,7 @@
     {
       "material": "S0PF56225933",
       "centro": "2000",
-      "stock": 4.0
+      "stock": 33.0
     },
     {
       "material": "S0PF56225929",
@@ -832,11 +834,12 @@
     {
       "material": "S0PF56225898",
       "centro": "2000",
-      "stock": 1.0
+      "stock": 37.0
     },
     {
       "material": "S0PF56225891",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 16.0
     },
     {
       "material": "S0PF56225865",
@@ -857,8 +860,7 @@
     },
     {
       "material": "S0PF56225855",
-      "centro": "2000",
-      "stock": 11.0
+      "centro": "2000"
     },
     {
       "material": "S0PF56225852",
@@ -881,7 +883,7 @@
     {
       "material": "S0PF56225841",
       "centro": "2000",
-      "stock": 2.0
+      "stock": 14.0
     },
     {
       "material": "S0PF56225830",
@@ -890,7 +892,7 @@
     {
       "material": "S0PF56225829",
       "centro": "2000",
-      "stock": 35.0
+      "stock": 28.0
     },
     {
       "material": "S0PF56225826",
@@ -961,7 +963,7 @@
     {
       "material": "S0PF56225717",
       "centro": "2000",
-      "stock": 7.0
+      "stock": 4.0
     },
     {
       "material": "S0PF56225713",
@@ -971,7 +973,7 @@
     {
       "material": "S0PF56225712",
       "centro": "2000",
-      "stock": 2.0
+      "stock": 1.0
     },
     {
       "material": "S0PF56225709",
@@ -989,7 +991,7 @@
     {
       "material": "S0PF56225645",
       "centro": "2000",
-      "stock": 12.0
+      "stock": 17.0
     },
     {
       "material": "S0PF56225813",
@@ -998,7 +1000,8 @@
     },
     {
       "material": "S0PF56225864",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 37.0
     },
     {
       "material": "S0PF56225827",
@@ -1006,17 +1009,18 @@
     },
     {
       "material": "S0PF56225724",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 2.0
     },
     {
       "material": "S0PF56225624",
       "centro": "2000",
-      "stock": 11.0
+      "stock": 9.0
     },
     {
       "material": "S0PF56225628",
       "centro": "2000",
-      "stock": 49.0
+      "stock": 64.0
     },
     {
       "material": "S0PF56225631",
@@ -1026,47 +1030,45 @@
     {
       "material": "S0PF56225650",
       "centro": "2000",
-      "stock": 51.0
+      "stock": 42.0
     },
     {
       "material": "S0PF56225653",
       "centro": "2000",
-      "stock": 1.0
+      "stock": 2.0
     },
     {
       "material": "S0PF56225702",
       "centro": "2000",
-      "stock": 3.0
+      "stock": 8.0
     },
     {
       "material": "S0PF56225703",
       "centro": "2000",
-      "stock": 7.0
+      "stock": 4.0
     },
     {
       "material": "S0PF56225710",
       "centro": "2000",
-      "stock": 1.0
+      "stock": 3.0
     },
     {
       "material": "S0PF56225711",
       "centro": "2000",
-      "stock": 27.0
+      "stock": 26.0
     },
     {
       "material": "S0PF56225715",
-      "centro": "2000",
-      "stock": 4.0
+      "centro": "2000"
     },
     {
       "material": "S0PF56225716",
       "centro": "2000",
-      "stock": 15.0
+      "stock": 13.0
     },
     {
       "material": "S0PF56225718",
-      "centro": "2000",
-      "stock": 1.0
+      "centro": "2000"
     },
     {
       "material": "S0PF56225720",
@@ -1075,12 +1077,12 @@
     {
       "material": "S0PF56225728",
       "centro": "2000",
-      "stock": 2.0
+      "stock": 1.0
     },
     {
       "material": "S0PF56225731",
       "centro": "2000",
-      "stock": 5.0
+      "stock": 9.0
     },
     {
       "material": "S0PF56225795",
@@ -1102,26 +1104,27 @@
     {
       "material": "S0PF56225828",
       "centro": "2000",
-      "stock": 102.0
+      "stock": 89.0
     },
     {
       "material": "S0PF56225843",
       "centro": "2000",
-      "stock": 3.0
+      "stock": 21.0
     },
     {
       "material": "S0PF56226241",
       "centro": "2000",
-      "stock": 7.0
+      "stock": 3.0
     },
     {
       "material": "S0PF56226243",
       "centro": "2000",
-      "stock": 6.0
+      "stock": 4.0
     },
     {
       "material": "S0PF56226305",
-      "centro": "2000"
+      "centro": "2000",
+      "stock": 12.0
     },
     {
       "material": "S0PF56226306",
@@ -1136,7 +1139,7 @@
     {
       "material": "S0PF56226314",
       "centro": "2000",
-      "stock": 11.0
+      "stock": 9.0
     },
     {
       "material": "S0PF56226401",
@@ -1171,7 +1174,7 @@
     {
       "material": "S0PFA6225976",
       "centro": "2000",
-      "stock": 10.0
+      "stock": 32.0
     },
     {
       "material": "S0PFA6225979",

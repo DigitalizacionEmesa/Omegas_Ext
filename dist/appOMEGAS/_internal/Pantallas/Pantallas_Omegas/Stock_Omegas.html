@@ -21,7 +21,7 @@
     }
     .omegas-emesa-logo { height: 48px; margin-left: auto; display: block; }
     .omegas-main-container {
-      max-width: 700px; width: 96%; margin: 38px auto 0 auto; background: #fff;
+      max-width: 900px; width: 96%; margin: 38px auto 0 auto; background: #fff;
       border-radius: 12px; box-shadow: 0 2px 12px #1976d222; padding: 32px 32px 28px 32px;
       display: flex; flex-direction: column; align-items: center;
     }
@@ -72,6 +72,207 @@
       border-color: #1251a3;
       color: #fff;
     }
+    .sap-btn {
+      background: #2e7d32;
+      border: 1px solid #2e7d32;
+      color: #fff;
+      border-radius: 5px;
+      padding: 7px 18px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sap-btn:hover { background: #1b5e20; border-color: #1b5e20; }
+    .sap-btn:disabled { background: #9e9e9e; border-color: #9e9e9e; cursor: not-allowed; }
+    .sap-stock-cell { font-weight: 600; color: #333; }
+    .sap-stock-pos { color: #2e7d32; }
+    .sap-stock-zero { color: #b71c1c; }
+
+    /* === MODAL AJUSTES SAP === */
+    .sap-settings-btn {
+      background: #fff;
+      border: 1.5px solid #1976d2;
+      color: #1976d2;
+      border-radius: 5px;
+      padding: 7px 10px;
+      cursor: pointer;
+      font-size: 1rem;
+      transition: background 0.2s, color 0.2s;
+      display: flex;
+      align-items: center;
+    }
+    .sap-settings-btn:hover { background: #e3f0fb; }
+    .sap-modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .sap-modal-overlay.active { display: flex; }
+    .sap-modal {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(25,118,210,0.18);
+      padding: 32px 36px 28px 36px;
+      min-width: 340px;
+      max-width: 95vw;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .sap-modal h3 {
+      margin: 0;
+      font-size: 1.15rem;
+      color: #1976d2;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sap-modal-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .sap-modal-row label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .sap-modal-row input[type=time],
+    .sap-modal-row select {
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #b0b0b0;
+      font-size: 1rem;
+      width: 100%;
+    }
+    /* Toggle switch */
+    .sap-toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 0;
+    }
+    .sap-toggle-row span {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #333;
+    }
+    .sap-toggle {
+      position: relative;
+      width: 46px;
+      height: 26px;
+    }
+    .sap-toggle input { opacity: 0; width: 0; height: 0; }
+    .sap-toggle-slider {
+      position: absolute; inset: 0;
+      background: #ccc;
+      border-radius: 26px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .sap-toggle-slider:before {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      left: 3px; top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+    }
+    .sap-toggle input:checked + .sap-toggle-slider { background: #2e7d32; }
+    .sap-toggle input:checked + .sap-toggle-slider:before { transform: translateX(20px); }
+    .sap-modal-status {
+      font-size: 0.82rem;
+      color: #888;
+      min-height: 16px;
+    }
+    .sap-modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+    .sap-modal-save {
+      background: #1976d2; color: #fff; border: none;
+      padding: 8px 22px; border-radius: 6px; font-size: 0.95rem;
+      cursor: pointer; font-weight: 600;
+    }
+    .sap-modal-save:hover { background: #1251a3; }
+    .sap-modal-cancel {
+      background: #f5f5f5; color: #555; border: 1px solid #ccc;
+      padding: 8px 18px; border-radius: 6px; font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .sap-modal-cancel:hover { background: #e0e0e0; }
+
+    /* === EMAILS SECTION === */
+    .sap-email-section {
+      border-top: 1px solid #e0e0e0;
+      padding-top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sap-email-section h4 {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #555;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+    .sap-email-input-row {
+      display: flex;
+      gap: 8px;
+    }
+    .sap-email-input-row input {
+      flex: 1;
+      padding: 7px 10px;
+      border-radius: 6px;
+      border: 1px solid #b0b0b0;
+      font-size: 0.95rem;
+    }
+    .sap-email-input-row input:focus { outline: 2px solid #1976d2; border-color: #1976d2; }
+    .sap-email-add-btn {
+      background: #1976d2; color: #fff; border: none;
+      padding: 7px 14px; border-radius: 6px; font-size: 0.95rem;
+      cursor: pointer; white-space: nowrap;
+    }
+    .sap-email-add-btn:hover { background: #1251a3; }
+    .sap-email-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 130px;
+      overflow-y: auto;
+    }
+    .sap-email-tag {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: #f0f4ff;
+      border: 1px solid #c5d5f5;
+      border-radius: 5px;
+      padding: 5px 10px;
+      font-size: 0.88rem;
+      color: #1976d2;
+    }
+    .sap-email-tag button {
+      background: none; border: none; cursor: pointer;
+      color: #b71c1c; font-size: 1rem; line-height: 1; padding: 0 0 0 8px;
+    }
+    .sap-email-tag button:hover { color: #7f0000; }
+    .sap-email-empty {
+      font-size: 0.82rem; color: #aaa; font-style: italic;
+    }
   </style>
 </head>
 <body>
@@ -90,7 +291,18 @@
     <img src="/IMAGENES/Logo_EMESA.png" alt="EMESA Logo" class="omegas-emesa-logo">
   </header>
   <div class="omegas-main-container">
-    <div class="omegas-search-row">
+    <div class="omegas-search-row" style="justify-content: space-between;">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="sap-btn" id="sapBtn" onclick="loadSapStock()" data-translate-key="sap_query_button">
+          <i class="bi bi-cloud-download"></i> Consultar SAP
+        </button>
+        <button class="sap-settings-btn" onclick="openSapSettings()" title="Configurar actualización automática">
+          <i class="bi bi-gear-fill"></i>
+        </button>
+        <span id="sapTimestampWrapper" style="font-size:12px; color:#666; display:none;">
+          <span data-translate-key="sap_last_query">Última consulta</span>: <span id="sapTimestamp"></span>
+        </span>
+      </div>
       <input type="text" id="searchInput" placeholder="Buscar Omega por nombre..." data-translate-key-placeholder="search_placeholder">
     </div>
     <table class="omegas-table" id="stockTable">
@@ -100,6 +312,7 @@
           <th data-translate-key="table_header_entradas" style="display:none;">Entradas</th>
           <th data-translate-key="table_header_salidas" style="display:none;">Salidas</th>
           <th data-translate-key="table_header_stock">Stock Actual</th>
+          <th data-translate-key="table_header_sap_stock">Stock SAP</th>
           <th data-translate-key="table_header_reset">Reset Stock</th>
         </tr>
       </thead>
@@ -109,6 +322,52 @@
     </table>
   </div>
   
+  <!-- MODAL AJUSTES SAP AUTOMÁTICO -->
+  <div class="sap-modal-overlay" id="sapSettingsOverlay" onclick="closeSapSettingsOutside(event)">
+    <div class="sap-modal">
+      <h3><i class="bi bi-gear-fill"></i> <span data-translate-key="sap_settings_title">Configuración SAP automático</span></h3>
+
+      <div class="sap-toggle-row">
+        <span data-translate-key="sap_auto_enable">Actualización automática</span>
+        <label class="sap-toggle">
+          <input type="checkbox" id="sapAutoEnabled">
+          <span class="sap-toggle-slider"></span>
+        </label>
+      </div>
+
+      <div class="sap-modal-row">
+        <label data-translate-key="sap_time_label">Hora de consulta diaria</label>
+        <input type="time" id="sapScheduleTime" value="00:00">
+      </div>
+
+      <div class="sap-modal-status" id="sapSettingsStatus"></div>
+
+      <div class="sap-modal-row">
+        <label data-translate-key="sap_email_lang">Idioma del correo</label>
+        <select id="sapEmailLang" style="padding:5px 10px;border-radius:6px;border:1px solid #ccc;cursor:pointer;">
+          <option value="es">🇪🇸 Español</option>
+          <option value="en">🇬🇧 English</option>
+          <option value="cz">🇨🇿 Čeština</option>
+        </select>
+      </div>
+
+      <!-- SECCIÓN EMAILS -->
+      <div class="sap-email-section">
+        <h4 data-translate-key="sap_email_title">Avisos por correo</h4>
+        <div class="sap-email-input-row">
+          <input type="email" id="sapEmailInput" placeholder="correo@empresa.com" data-translate-key-placeholder="sap_email_placeholder">
+          <button class="sap-email-add-btn" onclick="addSapEmail()" data-translate-key="sap_email_add">Añadir</button>
+        </div>
+        <div class="sap-email-list" id="sapEmailList"></div>
+      </div>
+
+      <div class="sap-modal-actions">
+        <button class="sap-modal-cancel" onclick="closeSapSettings()" data-translate-key="sap_settings_cancel">Cancelar</button>
+        <button class="sap-modal-save" onclick="saveSapSettings()" data-translate-key="sap_settings_save">Guardar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SCRIPT ORIGINAL (con modificaciones para traducción) -->
   <script>
     // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
@@ -151,7 +410,11 @@
         window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
         return;
       }
-      loadStockData();
+      // Carga config SAP del servidor (global) y luego inicia el scheduler
+      loadSapSchedulerConfig().then(() => {
+        loadStockData().then(() => loadSapStockCached());
+        initSapScheduler();
+      });
 
       document.getElementById('searchInput').addEventListener('keyup', function() {
         const filter = this.value.toLowerCase();
@@ -164,7 +427,7 @@
     }
 
     function loadStockData() {
-      fetch('/api/stock_omegas')
+      return fetch('/api/stock_omegas')
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('stockTableBody');
@@ -176,7 +439,8 @@
               <td>${codigo}</td>
               <td style="display:none;">${item.entradas ?? 0}</td>
               <td style="display:none;">${item.salidas ?? 0}</td>
-              <td>${item.stock ?? 0}</td>
+              <td data-app-stock="${item.stock ?? 0}">${item.stock ?? 0}</td>
+              <td class="sap-stock-cell" data-codigo="${codigo}">-</td>
               <td><button class="reset-btn" title="Reset" onclick="goToResetOmega('${encodeURIComponent(codigo)}')">Reset <i class='bi bi-arrow-clockwise'></i></button></td>
             `;
             tbody.appendChild(tr);
@@ -187,10 +451,336 @@
         });
     }
 
+    async function loadSapStock() {
+      const btn = document.getElementById('sapBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="bi bi-hourglass-split"></i> ' + getTranslation('sap_querying');
+
+      // Mostrar estado de carga en todas las celdas SAP
+      document.querySelectorAll('.sap-stock-cell').forEach(td => {
+        td.textContent = '...';
+        td.className = 'sap-stock-cell';
+      });
+
+      try {
+        const res = await fetch('/api/stock_sap_omegas');
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || `Error ${res.status}`);
+        }
+        const sapData = await res.json();
+
+        // Rellenar columna Stock SAP (reutiliza la misma lógica que el caché)
+        fillSapCells(sapData);
+
+        // Enviar correo de diferencias si hay correos configurados
+        sendSapDiffEmail(sapData);
+
+        // Actualizar timestamp mostrado
+        const tsNow = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const tsStr = `${pad(tsNow.getDate())}/${pad(tsNow.getMonth()+1)}/${tsNow.getFullYear()} ${pad(tsNow.getHours())}:${pad(tsNow.getMinutes())}:${pad(tsNow.getSeconds())}`;
+        const tsSpan = document.getElementById('sapTimestamp');
+        const tsWrapper = document.getElementById('sapTimestampWrapper');
+        if (tsSpan) { tsSpan.textContent = tsStr; tsWrapper.style.display = ''; }
+
+        btn.innerHTML = '<i class="bi bi-check-circle"></i> ' + getTranslation('sap_updated');
+        setTimeout(() => {
+          btn.disabled = false;
+          btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + getTranslation('sap_query_button');
+        }, 3000);
+
+      } catch (err) {
+        console.error('[SAP STOCK]', err);
+        document.querySelectorAll('.sap-stock-cell').forEach(td => {
+          td.textContent = 'Error';
+          td.className = 'sap-stock-cell sap-stock-zero';
+        });
+        alert('Error al consultar SAP: ' + err.message);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-cloud-download"></i> ' + getTranslation('sap_query_button');
+      }
+    }
+
     function goToResetOmega(codigoOmega) {
       localStorage.setItem('omegaToReset', codigoOmega);
       window.location.href = '/Pantallas/Pantallas_Omegas/Reset_omegas.html';
     }
+
+    // Rellena la columna SAP desde el caché local (sin llamar a SAP)
+    function fillSapCells(sapArray) {
+      if (!sapArray || sapArray.length === 0) return;
+      const sapMap = {};
+      sapArray.forEach(item => {
+        const mat = (item.Material || item.material || '').toString().trim();
+        // compress=abap_true en ABAP omite el campo stock cuando es 0
+        sapMap[mat] = item.Stock ?? item.stock ?? 0;
+      });
+      document.querySelectorAll('.sap-stock-cell').forEach(cell => {
+        const codigo = (cell.getAttribute('data-codigo') || '').toString().trim();
+        if (codigo in sapMap) {
+          const val = sapMap[codigo];
+          cell.textContent = val;
+          cell.className = 'sap-stock-cell ' + (val > 0 ? 'sap-stock-pos' : 'sap-stock-zero');
+        } else {
+          cell.textContent = '-';
+        }
+      });
+    }
+
+    async function loadSapStockCached() {
+      try {
+        const res = await fetch('/api/stock_sap_cached');
+        if (!res.ok) return;
+        const cached = await res.json();
+        if (cached.data && cached.data.length > 0) {
+          fillSapCells(cached.data);
+          const tsSpan = document.getElementById('sapTimestamp');
+          const tsWrapper = document.getElementById('sapTimestampWrapper');
+          if (tsSpan && cached.timestamp) {
+            tsSpan.textContent = cached.timestamp;
+            tsWrapper.style.display = '';
+          }
+        }
+      } catch (e) {
+        console.warn('[SAP CACHE] No hay caché disponible:', e.message);
+      }
+    }
+
+    // ============================================================
+    // === ENVÍO DE CORREO DIFERENCIAS SAP vs APP ================
+    // ============================================================
+    /**
+     * Compara los datos SAP recibidos con el stock de la app visible en la tabla
+     * y envía un correo con las diferencias al backend.
+     */
+    async function sendSapDiffEmail(sapData) {
+      if (!sapData || sapData.length === 0) return;
+
+      const cfg    = getSapConfig();
+      const idioma = cfg.emailLang || 'es';
+
+      // Construir mapa SAP: { codigo -> stockSap }
+      const sapMap = {};
+      sapData.forEach(item => {
+        const mat = (item.Material || item.material || '').toString().trim();
+        sapMap[mat] = item.Stock ?? item.stock ?? 0;
+      });
+
+      // Recorrer filas de la tabla y detectar diferencias
+      const diferencias = [];
+      document.querySelectorAll('#stockTableBody tr').forEach(row => {
+        const sapCell = row.querySelector('.sap-stock-cell[data-codigo]');
+        if (!sapCell) return;
+        const codigo = (sapCell.getAttribute('data-codigo') || '').toString().trim();
+        if (!codigo || !(codigo in sapMap)) return;
+
+        const appStockCell = row.querySelector('td[data-app-stock]');
+        if (!appStockCell) return;
+
+        const stockApp = parseInt(appStockCell.getAttribute('data-app-stock'), 10) || 0;
+        const stockSap = sapMap[codigo];
+        if (stockApp !== stockSap) {
+          diferencias.push({ omega: codigo, stock_app: stockApp, stock_sap: stockSap });
+        }
+      });
+
+      if (!diferencias.length) {
+        console.log('[SAP EMAIL] Sin diferencias detectadas. Correo no enviado.');
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/sap/send-diff-email', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ diferencias, idioma })
+        });
+        if (res.ok) {
+          console.log(`[SAP EMAIL] Correo enviado (${diferencias.length} diferencias)`);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          console.warn('[SAP EMAIL] El servidor rechazó el envío:', err.error || res.status);
+        }
+      } catch (e) {
+        console.warn('[SAP EMAIL] Error de red al enviar correo:', e.message);
+      }
+    }
+
+    // ============================================================
+    // === SCHEDULER AUTOMÁTICO SAP ================================
+    // ============================================================
+    let _sapCfgCache = { enabled: false, time: '00:00', emailLang: 'es', lastRun: null };
+    let sapSchedulerTimer = null;
+
+    /** Descarga la config del servidor y la guarda en el caché local. */
+    async function loadSapSchedulerConfig() {
+      try {
+        const res = await fetch('/api/sap/scheduler-config');
+        if (res.ok) _sapCfgCache = await res.json();
+      } catch (e) {
+        console.warn('[SAP SCHED] No se pudo cargar config del servidor:', e.message);
+      }
+    }
+
+    function getSapConfig() {
+      return _sapCfgCache;
+    }
+
+    function saveSapConfig(cfg) {
+      _sapCfgCache = cfg;
+      // Persistir en servidor (fire-and-forget)
+      fetch('/api/sap/scheduler-config', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(cfg)
+      }).catch(e => console.warn('[SAP SCHED] Error guardando config:', e.message));
+    }
+
+    /** Devuelve los ms hasta la próxima ejecución (siempre diaria a la hora configurada) */
+    function msUntilNext(cfg) {
+      const [h, m] = (cfg.time || '00:00').split(':').map(Number);
+      const now = new Date();
+      const target = new Date(now);
+      target.setHours(h, m, 0, 0);
+      if (target <= now) target.setDate(target.getDate() + 1);
+      return target - now;
+    }
+
+    function scheduleNextSapRun(cfg) {
+      if (sapSchedulerTimer) clearTimeout(sapSchedulerTimer);
+      if (!cfg.enabled) return;
+
+      const delay = msUntilNext(cfg);
+      const nextDate = new Date(Date.now() + delay);
+      console.log(`[SAP SCHEDULER] Próxima consulta en ${Math.round(delay/1000)}s (${nextDate.toLocaleTimeString()})`);
+      updateSettingsStatus(cfg);
+
+      sapSchedulerTimer = setTimeout(async () => {
+        console.log('[SAP SCHEDULER] Ejecutando consulta automática SAP...');
+        await loadSapStock();
+        const updated = getSapConfig();
+        updated.lastRun = new Date().toISOString();
+        saveSapConfig(updated);
+        scheduleNextSapRun(updated); // programar la siguiente
+      }, delay);
+    }
+
+    function initSapScheduler() {
+      const cfg = getSapConfig();
+      if (cfg.enabled) scheduleNextSapRun(cfg);
+    }
+
+    function updateSettingsStatus(cfg) {
+      const el = document.getElementById('sapSettingsStatus');
+      if (!el) return;
+      if (!cfg.enabled) { el.textContent = ''; return; }
+      const delay = msUntilNext(cfg);
+      const nextDate = new Date(Date.now() + delay);
+      const pad = n => String(n).padStart(2, '0');
+      const ts = `${pad(nextDate.getDate())}/${pad(nextDate.getMonth()+1)}/${nextDate.getFullYear()} ${pad(nextDate.getHours())}:${pad(nextDate.getMinutes())}`;
+      el.textContent = `Próxima consulta: ${ts}`;
+    }
+
+    // === MODAL ===
+    function openSapSettings() {
+      const cfg = getSapConfig();
+      document.getElementById('sapAutoEnabled').checked = !!cfg.enabled;
+      document.getElementById('sapScheduleTime').value = cfg.time || '00:00';
+      updateSettingsStatus(cfg);
+      document.getElementById('sapEmailLang').value = cfg.emailLang || 'es';
+      loadSapEmails();
+      document.getElementById('sapSettingsOverlay').classList.add('active');
+    }
+
+    function closeSapSettings() {
+      document.getElementById('sapSettingsOverlay').classList.remove('active');
+    }
+
+    function closeSapSettingsOutside(event) {
+      if (event.target === document.getElementById('sapSettingsOverlay')) closeSapSettings();
+    }
+
+    function saveSapSettings() {
+      const cfg = {
+        enabled:   document.getElementById('sapAutoEnabled').checked,
+        time:      document.getElementById('sapScheduleTime').value,
+        lastRun:   getSapConfig().lastRun || null,
+        emailLang: document.getElementById('sapEmailLang').value,
+      };
+      saveSapConfig(cfg);
+      scheduleNextSapRun(cfg);
+      closeSapSettings();
+    }
+
+    // === GESTIÓN DE EMAILS ===
+    async function loadSapEmails() {
+      const list = document.getElementById('sapEmailList');
+      list.innerHTML = '<span class="sap-email-empty">Cargando...</span>';
+      try {
+        const res = await fetch('/api/sap/emails');
+        const data = await res.json();
+        renderEmailList(data.emails || []);
+      } catch {
+        list.innerHTML = '<span class="sap-email-empty">Error al cargar</span>';
+      }
+    }
+
+    function renderEmailList(emails) {
+      const list = document.getElementById('sapEmailList');
+      if (!emails.length) {
+        list.innerHTML = '<span class="sap-email-empty" data-translate-key="sap_email_empty">Sin correos añadidos</span>';
+        return;
+      }
+      list.innerHTML = emails.map(email => `
+        <div class="sap-email-tag">
+          <span>${email}</span>
+          <button onclick="removeSapEmail('${email}')" title="Eliminar"><i class="bi bi-x-lg"></i></button>
+        </div>
+      `).join('');
+    }
+
+    async function addSapEmail() {
+      const input = document.getElementById('sapEmailInput');
+      const email = input.value.trim();
+      if (!email || !email.includes('@')) {
+        input.focus();
+        return;
+      }
+      try {
+        const res = await fetch('/api/sap/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'add', email })
+        });
+        const data = await res.json();
+        renderEmailList(data.emails || []);
+        input.value = '';
+        input.focus();
+      } catch {
+        alert('Error al guardar el correo');
+      }
+    }
+
+    async function removeSapEmail(email) {
+      try {
+        const res = await fetch('/api/sap/emails', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'remove', email })
+        });
+        const data = await res.json();
+        renderEmailList(data.emails || []);
+      } catch {
+        alert('Error al eliminar el correo');
+      }
+    }
+
+    // Permitir añadir con Enter
+    document.addEventListener('DOMContentLoaded', () => {
+      const inp = document.getElementById('sapEmailInput');
+      if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') addSapEmail(); });
+    });
   </script>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->

@@ -53,6 +53,7 @@
   "sap_email_placeholder": "correo@empresa.com",
   "sap_email_add": "Añadir",
   "sap_email_empty": "Sin correos añadidos",
+  "sap_email_lang": "Idioma del correo",
   "notification_load_stock_error": "Error al cargar el stock de Omegas",
   "page_title_reset_beam_stock": "Reset Stock Beam",
   "header_reset_beam_stock": "Reset Stock Beam",

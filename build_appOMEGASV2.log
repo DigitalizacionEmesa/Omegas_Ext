@@ -1,0 +1,107 @@
+673 INFO: PyInstaller: 6.18.0, contrib hooks: 2025.10
+673 INFO: Python: 3.13.5
+771 INFO: Platform: Windows-11-10.0.26200-SP0
+771 INFO: Python environment: C:\Program Files\Python313
+835 INFO: Module search paths (PYTHONPATH):
+['\\\\EMEBIDWH\\DIgitalizacion\\Desarrollo_Omegas\\.build_appOMEGASV2',
+ 'C:\\Program Files\\Python313\\python313.zip',
+ 'C:\\Program Files\\Python313\\DLLs',
+ 'C:\\Program Files\\Python313\\Lib',
+ 'C:\\Program Files\\Python313',
+ 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages',
+ 'C:\\Program Files\\Python313\\Lib\\site-packages',
+ '\\\\EMEBIDWH\\DIgitalizacion\\Desarrollo_Omegas\\.build_appOMEGASV2']
+4065 INFO: Appending 'datas' from .spec
+4109 INFO: checking Analysis
+4109 INFO: Building Analysis because Analysis-00.toc is non existent
+4109 INFO: Looking for Python shared library...
+4109 INFO: Using Python shared library: C:\Program Files\Python313\python313.dll
+4109 INFO: Running Analysis Analysis-00.toc
+4109 INFO: Target bytecode optimization level: 0
+4109 INFO: Initializing module dependency graph...
+4121 INFO: Initializing module graph hook caches...
+4258 INFO: Analyzing modules for base_library.zip ...
+9245 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+11254 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+12823 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+16413 INFO: Caching module dependency graph...
+16466 INFO: Analyzing \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\appOMEGAS.py
+16677 INFO: Processing standard module hook 'hook-pyodbc.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+18048 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+18066 INFO: SetuptoolsInfo: initializing cached setuptools info...
+24393 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+24580 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+24990 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+26787 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+30474 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+31368 INFO: Processing standard module hook 'hook-bcrypt.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+31484 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+31759 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+32900 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+33347 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+34486 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+34495 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+34515 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+34582 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+34683 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+34690 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+34709 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+34716 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+35032 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+35345 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+35354 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+35390 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+35397 INFO: Setuptools: 'backports' appears to be a partial setuptools-vendored copy - extending search paths to ['C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\setuptools\\_vendor\\backports', 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\backports']!
+35408 INFO: Processing pre-safe-import-module hook 'hook-backports.tarfile.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+35415 INFO: Setuptools: 'backports.tarfile' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.backports.tarfile'!
+35513 INFO: Processing standard module hook 'hook-backports.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+36151 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+36160 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+37024 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+37031 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+37449 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+37458 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+37464 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+38140 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+40586 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+41053 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+41378 INFO: Processing standard module hook 'hook-pytz.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks'
+42337 INFO: Processing module hooks (post-graph stage)...
+43087 INFO: Performing binary vs. data reclassification (666 entries)
+47280 INFO: Looking for ctypes DLLs
+47430 INFO: Analyzing run-time hooks ...
+47433 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\rthooks'
+47442 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+47446 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\rthooks'
+47466 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\rthooks'
+47474 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\j.cortes\\AppData\\Roaming\\Python\\Python313\\site-packages\\PyInstaller\\hooks\\rthooks'
+47511 INFO: Creating base_library.zip...
+47909 INFO: Looking for dynamic libraries
+53008 INFO: Extra DLL search directories (AddDllDirectory): []
+53008 INFO: Extra DLL search directories (PATH): []
+54061 INFO: Warnings written to \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\build\appOMEGAS\warn-appOMEGAS.txt
+54496 INFO: Graph cross-reference written to \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\build\appOMEGAS\xref-appOMEGAS.html
+54724 INFO: checking PYZ
+54729 INFO: Building PYZ because PYZ-00.toc is non existent
+54729 INFO: Building PYZ (ZlibArchive) \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\build\appOMEGAS\PYZ-00.pyz
+56357 INFO: Building PYZ (ZlibArchive) \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\build\appOMEGAS\PYZ-00.pyz completed successfully.
+56404 INFO: checking PKG
+56406 INFO: Building PKG because PKG-00.toc is non existent
+56406 INFO: Building PKG (CArchive) appOMEGASV2.pkg
+56919 INFO: Building PKG (CArchive) appOMEGASV2.pkg completed successfully.
+56933 INFO: Bootloader C:\Users\j.cortes\AppData\Roaming\Python\Python313\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+56934 INFO: checking EXE
+56936 INFO: Building EXE because EXE-00.toc is non existent
+56936 INFO: Building EXE from EXE-00.toc
+56939 INFO: Copying bootloader EXE to \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\build\appOMEGAS\appOMEGASV2.exe
+57063 INFO: Copying icon to EXE
+57240 INFO: Copying 0 resources to EXE
+57240 INFO: Embedding manifest in EXE
+57400 INFO: Appending PKG archive to EXE
+57828 INFO: Fixing EXE headers
+58495 INFO: Building EXE from EXE-00.toc completed successfully.
+58514 INFO: checking COLLECT
+58516 INFO: Building COLLECT because COLLECT-00.toc is non existent
+58524 INFO: Building COLLECT COLLECT-00.toc
+78511 INFO: Building COLLECT COLLECT-00.toc completed successfully.
+78600 INFO: Build complete! The results are available in: \\EMEBIDWH\DIgitalizacion\Desarrollo_Omegas\.build_appOMEGASV2\dist

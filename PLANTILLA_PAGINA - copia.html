@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Plantilla - Tu Título Aquí</title>
+  
+  <!-- Estilos principales -->
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <!-- =============================================================== -->
+  <!-- HEADER GLOBAL - Reemplaza "TU TÍTULO" con el título de tu página -->
+  <!-- =============================================================== -->
+  <script src="/assets/globalHeader.js" data-title="TU TÍTULO AQUÍ"></script>
+  
+  <!-- =============================================================== -->
+  <!-- CONTENIDO DE TU PÁGINA -->
+  <!-- =============================================================== -->
+  <div style="max-width: 1200px; margin: 40px auto; padding: 20px;">
+    <h1>Contenido de tu página</h1>
+    
+    <p>Esta es una plantilla lista para usar con el sistema de header global y login modal.</p>
+    
+    <!-- Ejemplo de botón que requiere usuario -->
+    <button onclick="accionProtegida()" style="padding: 10px 20px; background: #1976d2; color: white; border: none; border-radius: 4px; cursor: pointer;">
+      Acción que requiere usuario
+    </button>
+    
+    <!-- Área para mostrar información del usuario -->
+    <div id="userInfoArea" style="margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 8px;">
+      <h3>Información del Usuario</h3>
+      <div id="userDetails">Cargando...</div>
+    </div>
+  </div>
+
+  <!-- =============================================================== -->
+  <!-- SCRIPTS DE TU PÁGINA -->
+  <!-- =============================================================== -->
+  <script>
+    // Mostrar información del usuario actual
+    function mostrarInfoUsuario() {
+      const user = LoginModal.getCurrentUser();
+      const userDetails = document.getElementById('userDetails');
+      
+      if (user) {
+        userDetails.innerHTML = `
+          <p><strong>Nombre:</strong> ${user.nombre}</p>
+          <p><strong>Número de Operario:</strong> ${user.num_operario}</p>
+          <p><strong>Nivel de Permisos:</strong> ${user.nivel}</p>
+          <p><strong>Rol:</strong> ${user.rol || 'Sin rol asignado'}</p>
+        `;
+      } else {
+        userDetails.innerHTML = '<p><em>No hay usuario logueado</em></p>';
+      }
+    }
+
+    // Ejemplo de función que requiere usuario logueado
+    function accionProtegida() {
+      LoginModal.requireUser(() => {
+        const user = LoginModal.getCurrentUser();
+        
+        // Aquí puedes verificar permisos adicionales
+        if (user.nivel >= 5) {
+          alert(`¡Acción ejecutada por ${user.nombre}!`);
+          // Aquí va tu lógica...
+        } else {
+          alert('No tienes permisos suficientes para esta acción');
+        }
+      }, 'Debes iniciar sesión para realizar esta acción');
+    }
+
+    // Escuchar cuando un usuario inicie sesión
+    window.addEventListener('userLoggedIn', (event) => {
+      console.log('Usuario logueado:', event.detail);
+      mostrarInfoUsuario();
+    });
+
+    // Mostrar información del usuario al cargar la página
+    window.addEventListener('load', () => {
+      mostrarInfoUsuario();
+    });
+
+    // Ejemplo de petición a la API con usuario actual
+    async function consultarAPI() {
+      const user = LoginModal.getCurrentUser();
+      
+      if (!user) {
+        alert('Debes iniciar sesión primero');
+        LoginModal.show();
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/tu-endpoint', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            // Puedes enviar datos del usuario si es necesario
+            'X-User-Id': user.id,
+            'X-User-Level': user.nivel
+          }
+        });
+
+        const data = await response.json();
+        console.log('Respuesta de la API:', data);
+        
+      } catch (error) {
+        console.error('Error en la petición:', error);
+        alert('Error de conexión con el servidor');
+      }
+    }
+
+    // Ejemplo de verificación de nivel de permisos
+    function tienePermisoAdmin() {
+      const user = LoginModal.getCurrentUser();
+      return user && user.nivel >= 9;
+    }
+
+    function tienePermisoSupervisor() {
+      const user = LoginModal.getCurrentUser();
+      return user && user.nivel >= 5;
+    }
+
+    function tienePermisoOperario() {
+      const user = LoginModal.getCurrentUser();
+      return user && user.nivel >= 1;
+    }
+  </script>
+
+  <!-- =============================================================== -->
+  <!-- ESTILOS PERSONALIZADOS (OPCIONAL) -->
+  <!-- =============================================================== -->
+  <style>
+    /* Tus estilos personalizados aquí */
+    
+    /* Ejemplo de card */
+    .card {
+      background: white;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin-bottom: 20px;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      transition: all 0.3s ease;
+    }
+
+    /* Ejemplo de botón secundario */
+    .btn-secondary {
+      padding: 10px 20px;
+      background: #e0e0e0;
+      color: #333;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: #d0d0d0;
+    }
+  </style>
+</body>
+</html>

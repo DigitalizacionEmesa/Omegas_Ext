@@ -19,6 +19,10 @@ import json
 import requests
 # Instalar con: pip install schedule
 import schedule
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from cryptography.fernet import Fernet
 
 
 # Configuración de conexión al servicio ICF de SAP
@@ -26,6 +30,19 @@ SAP_STOCK_URL = 'http://emesapprdapp:8000/sap/bc/z_ordenes_stock'
 SAP_CLIENT    = '100'
 SAP_USER      = 'EMESA.MM'
 SAP_PASSWORD  = 'EMESA1234'
+
+# ----- CORREO (cargado desde OB.Notificaciones en DataLakeSCCZ al arrancar) -----
+SMTP_SERVIDOR         = None
+SMTP_PUERTO           = 587
+SMTP_USAR_TLS         = True
+SMTP_USUARIO          = None
+SMTP_CONTRASENA       = None
+SMTP_CORREO_ORIGEN    = None
+SMTP_NOMBRE_REMITENTE = 'Sistema Omegas'
+CORREOS_ALERTAS       = []          # Cargado desde correos_alertas (separados por ;)
+
+# Clave Fernet para descifrar credenciales SMTP almacenadas en BD
+FERNET_KEY = b'xV8ospZBTJS8xfrWhlIrwoNJ0lKtGZkS4Ufr-01QOMY='
 
 # Configuración directa de usuario y contraseña de la base de datos
 DB_USER = 'Usrconsulta'
@@ -61,6 +78,73 @@ print(f"[CONFIG] BASE_DIR: {BASE_DIR}")
 print(f"[CONFIG] RUTA_ASSETS: {RUTA_ASSETS} -> Existe: {os.path.exists(RUTA_ASSETS)}")
 print(f"[CONFIG] RUTA_IMAGENES: {RUTA_IMAGENES} -> Existe: {os.path.exists(RUTA_IMAGENES)}")
 print(f"[CONFIG] RUTA_TRADUCCIONES: {RUTA_TRADUCCIONES} -> Existe: {os.path.exists(RUTA_TRADUCCIONES)}")
+
+# ====================================================================================
+# CARGA DE CONFIGURACIÓN SMTP DESDE BD (OB.Notificaciones en DataLakeSCCZ)
+# ====================================================================================
+def cargar_config_smtp():
+    """Lee OB.Notificaciones y actualiza las variables globales SMTP.
+    Las credenciales vienen cifradas con Fernet y se descifran en memoria.
+    """
+    global SMTP_SERVIDOR, SMTP_PUERTO, SMTP_USAR_TLS
+    global SMTP_USUARIO, SMTP_CONTRASENA, SMTP_CORREO_ORIGEN, SMTP_NOMBRE_REMITENTE
+    global CORREOS_ALERTAS
+
+    try:
+        fernet = Fernet(FERNET_KEY)
+    except Exception as e:
+        logging.error(f"[SMTP] Clave Fernet inválida: {e}")
+        return
+
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                logging.warning("[SMTP] Sin conexión a DataLakeSCCZ — correo desactivado.")
+                return
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT smtp_servidor, smtp_puerto, smtp_usuario_cifrado, smtp_contrasena_cifrada,
+                       smtp_usar_tls, correo_origen, nombre_remitente, correos_alertas
+                FROM OB.Notificaciones
+                WHERE id_config = 1
+            """)
+            row = cursor.fetchone()
+            if not row:
+                logging.warning("[SMTP] Sin registro en OB.Notificaciones (id_config=1) — correo desactivado.")
+                return
+
+            servidor, puerto, usuario_enc, contrasena_enc, usar_tls, correo_origen, nombre_rem, correos_raw = row
+
+            def descifrar(valor):
+                if not valor:
+                    return None
+                try:
+                    return fernet.decrypt(valor.strip().encode()).decode()
+                except Exception:
+                    logging.warning("[SMTP] No se pudo descifrar credencial — ¿clave Fernet incorrecta?")
+                    return None
+
+            SMTP_SERVIDOR         = servidor or None
+            SMTP_PUERTO           = int(puerto) if puerto else 587
+            SMTP_USAR_TLS         = bool(usar_tls)
+            SMTP_USUARIO          = descifrar(usuario_enc)
+            SMTP_CONTRASENA       = descifrar(contrasena_enc)
+            SMTP_CORREO_ORIGEN    = correo_origen or None
+            SMTP_NOMBRE_REMITENTE = nombre_rem or 'Sistema Omegas'
+            CORREOS_ALERTAS       = [
+                e.strip()
+                for e in (correos_raw or '').replace(',', ';').split(';')
+                if e.strip()
+            ]
+
+            logging.info(
+                f"[SMTP] Config cargada — servidor: {SMTP_SERVIDOR}, "
+                f"origen: {SMTP_CORREO_ORIGEN}, destinatarios: {len(CORREOS_ALERTAS)}"
+            )
+    except Exception as e:
+        logging.error(f"[SMTP] Error cargando OB.Notificaciones: {e}")
+
+# NOTA: cargar_config_smtp() se llama desde __main__ (ConexionODBCCZ se define más adelante)
 
 # ====================================================================================
 # FUNCIÓN SCHEDULER PARA EJECUCIÓN AUTOMÁTICA DIARIA
@@ -291,8 +375,8 @@ def auto_sync_sequenced():
                 stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 # Obtener stock de Beams
-                cursor_main.execute("SELECT BeamCode, CurrentStock FROM OB.V_CurrentStock_Beams")
-                stock_beams = {row.BeamCode: row.CurrentStock for row in cursor_main.fetchall()}
+                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
+                stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 # Log de stock inicial de beams para diagnóstico
                 beams_con_stock = {k: v for k, v in stock_beams.items() if v > 0}
@@ -376,177 +460,28 @@ def start_auto_sync_thread():
 # ====================================================================================
 # INICIAR EL AUTO-SYNC DE STOCK DE BEAMS
 # ====================================================================================
-import pyodbc
-from datetime import datetime, timedelta
-import time
-
-# Asumiendo que tus clases de conexión (ConexionODBCCZ, ConexionODBCCZ) están definidas en otra parte del código.
-
 def auto_sync_beams_stock():
     """
-    Sincroniza periódicamente el stock de Beams. Obtiene las entradas de producción
-    del centro 'Clinching' y actualiza la base de datos de Digitalización.
-    Ahora también descuenta el consumo de Beams por producción de Omegas tipo C.
+    Lanza periódicamente el procedimiento SQL de sincronización de Beams.
+    La lógica incremental vive en SQL Server para mantener el mismo patrón que Omegas.
     """
-    print('[AUTO-SYNC BEAMS] Servicio de sincronización de stock de Beams iniciado (ENTRADAS Y CONSUMOS).')
-
-    PRODUCCION_MOVEMENT_ID = 1
-    CONSUMO_MOVEMENT_ID = 9  # Ajusta si tu MovementID de consumo es otro
-
-    INTERVALO_SEGUNDOS = 15
-
-    last_sync_time = datetime.now() - timedelta(minutes=5)
-    print(f"[AUTO-SYNC BEAMS] Sincronización inicial. Rango de inicio: {last_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    intervalo_segundos = 15
+    print('[AUTO-SYNC BEAMS] Servicio de sincronización SQL de stock de Beams iniciado.')
 
     while True:
         try:
-            current_time = datetime.now()
-            last_sync_time_str = last_sync_time.strftime('%Y-%m-%d %H:%M:%S')
-            current_time_str = current_time.strftime('%Y-%m-%d %H:%M:%S')
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                if conn_main is None:
+                    raise Exception('No se pudo conectar a DataLakeSCCZ')
 
-            print(f"\n[AUTO-SYNC BEAMS] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: Iniciando ciclo de sincronización.")
-            print(f"[AUTO-SYNC BEAMS] Rango de consulta: [{last_sync_time_str} -> {current_time_str}]")
+                cursor_main = conn_main.cursor()
+                cursor_main.execute("{CALL OB.sp_Sync_Beams_RawData}")
 
-            # 1. Obtener la lista de Beams activos
-            beam_map = {}
-            try:
-                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                    cursor_main = conn_main.cursor()
-                    cursor_main.execute("SELECT BeamID, BeamCode FROM OB.Beams WHERE IsActive = 1")
-                    rows = cursor_main.fetchall()
-                    print(f"[AUTO-SYNC BEAMS] Beams activos encontrados: {rows}")
-                    beam_map = {row.BeamCode: row.BeamID for row in rows}
-            except Exception as e:
-                print(f"[AUTO-SYNC BEAMS] [ERROR] No se pudo obtener la lista de Beams activos: {e}")
-                time.sleep(INTERVALO_SEGUNDOS)
-                continue
-
-            if not beam_map:
-                print("[AUTO-SYNC BEAMS] [INFO] No hay Beams activos configurados. Saltando ciclo.")
-                last_sync_time = current_time
-                time.sleep(INTERVALO_SEGUNDOS)
-                continue
-
-            set_de_beams_activos = set(beam_map.keys())
-
-            # 2. Obtener Omegas tipo C y su Beam asociado
-            omegas_tipo_c = {}
-            try:
-                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                    cursor_main = conn_main.cursor()
-                    cursor_main.execute("SELECT Assy, Beam FROM OB.Omegas WHERE [W/C]='C' AND Beam IS NOT NULL")
-                    omegas_tipo_c = {row.Assy: row.Beam for row in cursor_main.fetchall()}
-            except Exception as e:
-                print(f"[AUTO-SYNC BEAMS] [ERROR] No se pudo obtener Omegas tipo C: {e}")
-
-            movimientos = []
-
-            try:
-                with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                    cursor_cz = conn_cz.cursor()
-
-                    # 2a. Entradas (Producción de Beams)
-                    print("[AUTO-SYNC BEAMS] [PASO 1/2] Obteniendo producción de 'Clinching'...")
-                    query_in = """
-                        SELECT 
-                            Cod_producto, 
-                            SUM(Unidades_OK) AS CantidadTotal
-                        FROM 
-                            dbo.F_HIS_CT(?, ?, ?, ?, ?, ?)
-                        WHERE 
-                            WorkGroup1 = '50 Assembly'
-                        GROUP BY
-                            Cod_producto
-                    """
-                    params_in = ['WORKCENTER', 'DETAIL', 'PRODUCT', last_sync_time_str, current_time_str, 2]
-                    cursor_cz.execute(query_in, params_in)
-                    rows_in = cursor_cz.fetchall()
-                    produccion_encontrada = 0
-                    for row in rows_in:
-                        if row.Cod_producto in set_de_beams_activos and row.CantidadTotal and row.CantidadTotal > 0:
-                            movimientos.append({
-                                'beam_code': row.Cod_producto,
-                                'movement_id': PRODUCCION_MOVEMENT_ID,
-                                'quantity': int(row.CantidadTotal)
-                            })
-                            produccion_encontrada += 1
-                    print(f"[AUTO-SYNC BEAMS] [INFO] Producción encontrada para {produccion_encontrada} Beams activos.")
-
-                    # 2b. Consumo de Beams por producción de Omegas tipo C
-                    if omegas_tipo_c:
-                        assys_c = list(omegas_tipo_c.keys())
-                        placeholders = ','.join('?' for _ in assys_c)
-                        query_c = f"""
-                            SELECT Cod_producto, SUM(Unidades_OK) AS CantidadTotal
-                            FROM dbo.F_HIS_CT(?, ?, ?, ?, ?, ?)
-                            WHERE WorkGroup1 = '50 Assembly' AND Cod_producto IN ({placeholders})
-                            GROUP BY Cod_producto
-                        """
-                        params_c = ['WORKCENTER', 'DETAIL', 'PRODUCT', last_sync_time_str, current_time_str, 2] + assys_c
-                        cursor_cz.execute(query_c, params_c)
-                        rows_c = cursor_cz.fetchall()
-                        consumo_encontrado = 0
-                        for row in rows_c:
-                            assy = row.Cod_producto
-                            cantidad = int(row.CantidadTotal)
-                            beam_code = omegas_tipo_c.get(assy)
-                            beam_id = beam_map.get(beam_code)
-                            if beam_id and cantidad > 0:
-                                # Mostrar las Assy asociadas a la Beam que se va a restar cantidad
-                                print(f"[AUTO-SYNC BEAMS] Assy asociada a Beam {beam_code}: {assy} (cantidad a restar: {cantidad})")
-                                movimientos.append({
-                                    'beam_code': beam_code,
-                                    'movement_id': CONSUMO_MOVEMENT_ID,
-                                    'quantity': -cantidad  # Consumo es negativo
-                                })
-                                consumo_encontrado += 1
-                        print(f"[AUTO-SYNC BEAMS] [INFO] Consumo registrado para {consumo_encontrado} Omegas tipo C.")
-
-            except pyodbc.Error as db_err:
-                print(f"[AUTO-SYNC BEAMS] [ERROR] Falló la consulta a la base de datos Mapex: {db_err}")
-                time.sleep(INTERVALO_SEGUNDOS)
-                continue
-
-            # 3. Registrar los movimientos en la base de datos de destino
-            if not movimientos:
-                print("[AUTO-SYNC BEAMS] [INFO] No se encontraron nuevos movimientos de stock en este ciclo.")
-            else:
-                datos_para_insertar = []
-                for mov in movimientos:
-                    beam_id = beam_map.get(mov['beam_code'])
-                    if beam_id:
-                        datos_para_insertar.append((
-                            beam_id, mov['movement_id'], mov['quantity'], 1, 'Sincronización automática Beams'
-                        ))
-
-                if datos_para_insertar:
-                    try:
-                        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                            cursor_main = conn_main.cursor()
-                            sql_insert = "{CALL OB.sp_AddBeamStockMovement(?, ?, ?, ?, ?)}"
-                            # Insertar uno por uno para mejor control de errores
-                            insertados = 0
-                            for datos in datos_para_insertar:
-                                try:
-                                    cursor_main.execute(sql_insert, datos)
-                                    conn_main.commit()
-                                    insertados += 1
-                                except pyodbc.Error as insert_err:
-                                    print(f"[AUTO-SYNC BEAMS] ERROR insertando BeamID={datos[0]}: {insert_err}")
-                            print(f"[AUTO-SYNC BEAMS] [ÉXITO] Se registraron {insertados}/{len(datos_para_insertar)} movimientos de stock.")
-                    except pyodbc.Error as db_err:
-                        print(f"[AUTO-SYNC BEAMS] [ERROR] Falló la inserción de movimientos de stock: {db_err}")
-                        time.sleep(INTERVALO_SEGUNDOS)
-                        continue
-
-            last_sync_time = current_time
-            print(f"[AUTO-SYNC BEAMS] Ciclo finalizado. Esperando {INTERVALO_SEGUNDOS} segundos...")
-            time.sleep(INTERVALO_SEGUNDOS)
-
+            print(f"[AUTO-SYNC BEAMS] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: sincronización SQL completada.")
         except Exception as e:
-            print(f"[AUTO-SYNC BEAMS] [ERROR CRÍTICO] Ocurrió un error inesperado en el bucle principal: {e}")
-            time.sleep(INTERVALO_SEGUNDOS)
-            continue
+            print(f"[AUTO-SYNC BEAMS] [ERROR] Falló la ejecución de OB.sp_Sync_Beams_RawData: {e}")
+
+        time.sleep(intervalo_segundos)
 
 
 # ====================================================================================
@@ -1624,8 +1559,8 @@ def incremental_sync():
                 stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 # Obtener stock de Beam
-                cursor_main.execute("SELECT BeamCode, CurrentStock FROM OB.V_CurrentStock_Beams")
-                stock_beams = {row.BeamCode: row.CurrentStock for row in cursor_main.fetchall()}
+                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
+                stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
                 
                 cursor_main.execute("""
                     SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam, ps.PriorityOrder
@@ -2409,35 +2344,72 @@ def get_stock_sap_cached():
 
 
 # ====================================================================================
-# ENDPOINTS PARA GESTIONAR CORREOS DE AVISOS SAP STOCK
+# ENDPOINTS PARA GESTIONAR CORREOS DE AVISOS SAP STOCK (BD: OB.Notificaciones)
 # ====================================================================================
-SAP_EMAILS_FILE = os.path.join(BASE_DIR, 'sap_alert_emails.txt')
+
+def _leer_emails_bd():
+    """Lee correos_alertas de OB.Notificaciones y devuelve una lista de strings."""
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                print("[SAP EMAILS DEBUG] Sin conexión a DataLakeSCCZ")
+                return []
+            cursor = conn.cursor()
+            cursor.execute("SELECT correos_alertas FROM OB.Notificaciones WHERE id_config = 1")
+            row = cursor.fetchone()
+            if not row or not row[0]:
+                print("[SAP EMAILS DEBUG] Sin fila o correos_alertas vacío")
+                return []
+            raw = row[0]
+            print(f"[SAP EMAILS DEBUG] Valor raw de BD: {repr(raw)}")
+            result = [e.strip() for e in raw.replace(',', ';').split(';') if e.strip()]
+            print(f"[SAP EMAILS DEBUG] Lista parseada: {result}")
+            return result
+    except Exception as e:
+        print(f"[SAP EMAILS DEBUG] Excepción: {e}")
+        logging.error(f"[SAP EMAILS] Error leyendo BD: {e}")
+        return []
+
+
+def _guardar_emails_bd(emails):
+    """Persiste la lista de emails en OB.Notificaciones.correos_alertas y recarga CORREOS_ALERTAS."""
+    global CORREOS_ALERTAS
+    valor = '; '.join(emails)
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                raise Exception('Sin conexión a DataLakeSCCZ')
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE OB.Notificaciones SET correos_alertas = ?, ultima_actualizacion = GETDATE() WHERE id_config = 1",
+                valor
+            )
+        CORREOS_ALERTAS = list(emails)
+        return True
+    except Exception as e:
+        logging.error(f"[SAP EMAILS] Error guardando en BD: {e}")
+        return False
+
 
 @app.route('/api/sap/emails', methods=['GET'])
 @cross_origin()
 def get_sap_emails():
-    """Devuelve la lista de correos guardados en sap_alert_emails.txt"""
-    emails = []
-    if os.path.exists(SAP_EMAILS_FILE):
-        with open(SAP_EMAILS_FILE, 'r', encoding='utf-8') as f:
-            emails = [line.strip() for line in f if line.strip()]
-    return jsonify({'emails': emails})
+    """Devuelve la lista de correos guardados en OB.Notificaciones."""
+    return jsonify({'emails': _leer_emails_bd()})
+
 
 @app.route('/api/sap/emails', methods=['POST'])
 @cross_origin()
 def manage_sap_emails():
-    """Añade o elimina un correo de sap_alert_emails.txt"""
-    data = request.get_json() or {}
+    """Añade o elimina un correo en OB.Notificaciones.correos_alertas."""
+    data   = request.get_json() or {}
     action = data.get('action')
     email  = (data.get('email') or '').strip()
 
     if not email or '@' not in email:
         return jsonify({'error': 'Email inválido'}), 400
 
-    emails = []
-    if os.path.exists(SAP_EMAILS_FILE):
-        with open(SAP_EMAILS_FILE, 'r', encoding='utf-8') as f:
-            emails = [line.strip() for line in f if line.strip()]
+    emails = _leer_emails_bd()
 
     if action == 'add':
         if email not in emails:
@@ -2447,15 +2419,178 @@ def manage_sap_emails():
     else:
         return jsonify({'error': 'Acción no válida'}), 400
 
-    with open(SAP_EMAILS_FILE, 'w', encoding='utf-8') as f:
-        f.write('\n'.join(emails))
+    if not _guardar_emails_bd(emails):
+        return jsonify({'error': 'Error al guardar en base de datos'}), 500
 
     return jsonify({'emails': emails})
 
 
 # ====================================================================================
+# FUNCIÓN Y ENDPOINT PARA ENVÍO DE CORREO DE DIFERENCIAS SAP vs APP
+# ====================================================================================
+def enviar_correo_sap_diff(diferencias, idioma='es'):
+    """Envía un correo HTML con las diferencias de stock entre la app y SAP."""
+    # Recargar config de BD por si fue actualizada en caliente
+    cargar_config_smtp()
+
+    if not SMTP_SERVIDOR or not SMTP_CORREO_ORIGEN:
+        logging.warning("[SAP EMAIL] SMTP no configurado — correo no enviado.")
+        return False
+
+    # Destinatarios: vienen de CORREOS_ALERTAS (cargados desde OB.Notificaciones)
+    emails = list(CORREOS_ALERTAS)
+
+    if not emails:
+        logging.warning("[SAP EMAIL] Sin destinatarios en OB.Notificaciones — correo no enviado.")
+        return False
+
+    textos = {
+        'es': {
+            'asunto':    'Diferencias Stock SAP vs Aplicación',
+            'titulo':    'Diferencias detectadas entre Stock SAP y Aplicación',
+            'col_omega': 'Omega',
+            'col_app':   'Stock App',
+            'col_sap':   'Stock SAP',
+            'col_dif':   'Diferencia',
+            'mensaje':   f'Se han detectado {len(diferencias)} omega(s) con diferencia de stock entre la aplicación y SAP.',
+            'pie':       'Sistema de Gestión Omegas',
+        },
+        'en': {
+            'asunto':    'SAP vs Application Stock Differences',
+            'titulo':    'Stock differences detected between SAP and Application',
+            'col_omega': 'Omega',
+            'col_app':   'App Stock',
+            'col_sap':   'SAP Stock',
+            'col_dif':   'Difference',
+            'mensaje':   f'{len(diferencias)} omega(s) with stock differences detected between application and SAP.',
+            'pie':       'Omegas Management System',
+        },
+        'cz': {
+            'asunto':    'Rozdíly skladu SAP vs Aplikace',
+            'titulo':    'Zjištěny rozdíly skladu mezi SAP a aplikací',
+            'col_omega': 'Omega',
+            'col_app':   'Sklad App',
+            'col_sap':   'Sklad SAP',
+            'col_dif':   'Rozdíl',
+            'mensaje':   f'Bylo zjištěno {len(diferencias)} omega(s) s rozdílem skladu mezi aplikací a SAP.',
+            'pie':       'Systém správy Omega',
+        },
+    }
+    t = textos.get(idioma, textos['es'])
+
+    filas_html = ''
+    for d in diferencias:
+        dif   = d['stock_sap'] - d['stock_app']
+        color = '#d9534f' if dif < 0 else '#5cb85c'
+        signo = '+' if dif > 0 else ''
+        filas_html += f"""
+        <tr>
+          <td style="padding:8px;border:1px solid #ddd;">{d['omega']}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center;">{d['stock_app']}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center;">{d['stock_sap']}</td>
+          <td style="padding:8px;border:1px solid #ddd;text-align:center;color:{color};font-weight:bold;">{signo}{dif}</td>
+        </tr>"""
+
+    cuerpo_html = f"""<html>
+<body style="font-family:Arial,sans-serif;margin:0;padding:0;">
+  <div style="background:#2c3e50;color:white;padding:20px;">
+    <h2 style="margin:0;">⚠️ {t['titulo']}</h2>
+  </div>
+  <div style="padding:20px;border:1px solid #ddd;">
+    <p><strong>Fecha:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}</p>
+    <p>{t['mensaje']}</p>
+    <table style="border-collapse:collapse;width:100%;margin-top:10px;">
+      <thead>
+        <tr style="background:#34495e;color:white;">
+          <th style="padding:10px;border:1px solid #ddd;">{t['col_omega']}</th>
+          <th style="padding:10px;border:1px solid #ddd;">{t['col_app']}</th>
+          <th style="padding:10px;border:1px solid #ddd;">{t['col_sap']}</th>
+          <th style="padding:10px;border:1px solid #ddd;">{t['col_dif']}</th>
+        </tr>
+      </thead>
+      <tbody>{filas_html}</tbody>
+    </table>
+  </div>
+  <div style="background:#f5f5f5;padding:10px;font-size:12px;color:#777;">{t['pie']}</div>
+</body>
+</html>"""
+
+    try:
+        msg = MIMEMultipart()
+        msg['From']    = f"{SMTP_NOMBRE_REMITENTE} <{SMTP_CORREO_ORIGEN}>"
+        msg['To']      = ', '.join(emails)
+        msg['Subject'] = f"[OMEGAS] {t['asunto']}"
+        msg.attach(MIMEText(cuerpo_html, 'html'))
+
+        server = smtplib.SMTP(SMTP_SERVIDOR, SMTP_PUERTO, timeout=10)
+        if SMTP_USAR_TLS:
+            server.starttls()
+        if SMTP_USUARIO and SMTP_CONTRASENA:
+            server.login(SMTP_USUARIO, SMTP_CONTRASENA)
+        server.send_message(msg)
+        server.quit()
+        logging.info(f"[SAP EMAIL] Correo enviado a {len(emails)} destinatarios ({len(diferencias)} diferencias)")
+        return True
+    except Exception as e:
+        logging.error(f"[SAP EMAIL] Error enviando correo: {e}")
+        return False
+
+
+@app.route('/api/sap/send-diff-email', methods=['POST'])
+@cross_origin()
+def send_sap_diff_email():
+    """Recibe una lista de diferencias y envía un correo HTML a los destinatarios configurados."""
+    data        = request.get_json() or {}
+    diferencias = data.get('diferencias', [])
+    idioma      = data.get('idioma', 'es')
+
+    if not diferencias:
+        return jsonify({'error': 'Sin diferencias que reportar'}), 400
+
+    ok = enviar_correo_sap_diff(diferencias, idioma)
+    if ok:
+        return jsonify({'success': True, 'enviados': len(diferencias)}), 200
+    else:
+        return jsonify({'error': 'Error enviando correo. Verifica la configuración SMTP o los destinatarios.'}), 500
+
+
+# ====================================================================================
 # ENDPOINT PARA LISTAR TODOS LOS OMEGAS
 # ====================================================================================
+SAP_SCHEDULER_CONFIG_FILE = os.path.join(BASE_DIR, 'sap_scheduler_config.json')
+
+@app.route('/api/sap/scheduler-config', methods=['GET'])
+@cross_origin()
+def get_sap_scheduler_config():
+    """Devuelve la configuración del scheduler SAP desde sap_scheduler_config.json."""
+    if not os.path.exists(SAP_SCHEDULER_CONFIG_FILE):
+        return jsonify({'enabled': False, 'time': '00:00', 'emailLang': 'es', 'lastRun': None})
+    try:
+        with open(SAP_SCHEDULER_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        logging.error(f"[SCHED CONFIG] Error leyendo: {e}")
+        return jsonify({'enabled': False, 'time': '00:00', 'emailLang': 'es', 'lastRun': None})
+
+
+@app.route('/api/sap/scheduler-config', methods=['POST'])
+@cross_origin()
+def save_sap_scheduler_config():
+    """Guarda la configuración del scheduler SAP en sap_scheduler_config.json."""
+    data = request.get_json() or {}
+    cfg = {
+        'enabled':   bool(data.get('enabled', False)),
+        'time':      (data.get('time') or '00:00').strip(),
+        'emailLang': (data.get('emailLang') or 'es').strip(),
+        'lastRun':   data.get('lastRun', None),
+    }
+    try:
+        with open(SAP_SCHEDULER_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(cfg, f, ensure_ascii=False, indent=2)
+        return jsonify({'success': True})
+    except Exception as e:
+        logging.error(f"[SCHED CONFIG] Error guardando: {e}")
+        return jsonify({'error': str(e)}), 500
 @app.route('/api/omegas/all', methods=['GET'])
 @cross_origin()
 def get_all_omegas():
@@ -2681,12 +2816,16 @@ def sequence_pedido():
 @cross_origin()
 def get_beams_stock():
     """
-    Devuelve el stock actual de todos los Beams desde la vista OB.V_CurrentStock_Beams.
+    Devuelve el stock actual de todos los Beams desde la vista OB.Stock_Beams_New.
     """
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             cursor = conn.cursor()
-            query = "SELECT BeamID, BeamCode, CurrentStock FROM OB.V_CurrentStock_Beams ORDER BY BeamCode;"
+            query = """
+                SELECT BeamID, Cod_producto AS BeamCode, Entradas, Salidas, StockActual AS CurrentStock
+                FROM OB.Stock_Beams_New
+                ORDER BY Cod_producto;
+            """
             cursor.execute(query)
             
             columns = [column[0] for column in cursor.description]
@@ -2713,25 +2852,11 @@ def adjust_beam_stock():
     beam_id = data['beamId']
     real_stock_count = data['realStockCount']
     usuario_id = data['usuarioId']
-    notes = "Reset de stock de Beam desde aplicación web"
-
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             cursor = conn.cursor()
-            
-            # 1. Obtenemos el stock actual para calcular el ajuste
-            cursor.execute("SELECT CurrentStock FROM OB.V_CurrentStock_Beams WHERE BeamID = ?", beam_id)
-            row = cursor.fetchone()
-            if not row:
-                return jsonify({"error": "El BeamID no existe"}), 404
-            
-            current_stock = row.CurrentStock
-            adjustment_quantity = int(real_stock_count) - current_stock
-            
-            # 2. Llamamos al procedimiento para insertar el movimiento de ajuste
-            # Asumimos que el MovementID para 'Reset' es 3
-            sql = "{CALL OB.sp_AddBeamStockMovement(?, ?, ?, ?, ?)}"
-            params = (beam_id, 3, adjustment_quantity, usuario_id, notes)
+            sql = "{CALL OB.sp_Reset_Beam_Stock(?, ?, ?, ?)}"
+            params = (beam_id, int(real_stock_count), usuario_id, 'AJUSTE_MANUAL')
             cursor.execute(sql, params)
             
             return jsonify({"message": f"Stock del BeamID {beam_id} actualizado a {real_stock_count}"}), 200
@@ -2961,6 +3086,9 @@ if __name__ == '__main__':
     # Silenciar los logs ruidosos de Flask
     logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
+    # Cargar configuración SMTP desde BD (ahora ConexionODBCCZ ya está definida)
+    cargar_config_smtp()
+
     # --- INICIAR EL SERVIDOR FLASK ---
     print("="*50)
     hostname = socket.gethostname()
@@ -2976,12 +3104,12 @@ if __name__ == '__main__':
     pedidos_thread.start()
     print("[MAIN] -> Hilo de pedidos iniciado.")
 
-    """ # --- INICIAR EL WORKER DE STOCK DE BEAMS ---
-    print("[MAIN] Creando hilo para el stock de Beams (auto_sync_beams_stock)...")
+    # --- INICIAR EL WORKER QUE DISPARA LA SINCRONIZACIÓN SQL DE STOCK DE BEAMS ---
+    print("[MAIN] Creando hilo para el stock de Beams (OB.sp_Sync_Beams_RawData)...")
     beams_stock_thread = threading.Thread(target=auto_sync_beams_stock, name="BeamStockSync")
     beams_stock_thread.daemon = True
     beams_stock_thread.start()
-    print("[MAIN] -> Hilo de stock de Beams iniciado.") """
+    print("[MAIN] -> Hilo de stock de Beams iniciado (lógica en SQL).")
     
     # --- STOCK DE OMEGAS: Ya no se ejecuta en hilo Python ---
     # La sincronización de stock de Omegas se gestiona ahora mediante SQL Server Agent Job

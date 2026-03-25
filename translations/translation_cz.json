@@ -53,6 +53,7 @@
   "sap_email_placeholder": "email@firma.cz",
   "sap_email_add": "Přidat",
   "sap_email_empty": "Žádné e-maily nepřidány",
+  "sap_email_lang": "Jazyk e-mailu",
   "notification_load_stock_error": "Chyba při načítání skladu Omegas",
   "page_title_reset_beam_stock": "Resetovat Sklad Beam",
   "header_reset_beam_stock": "Resetovat Sklad Beam",
