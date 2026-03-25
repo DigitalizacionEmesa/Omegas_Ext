@@ -1304,11 +1304,12 @@
             const filterFaltantes = document.getElementById('filter-faltantes').checked;
 
             filteredData = summaryData
-                // Filtra filas donde Assembly y Picking NO sean ambos "NO" (insensible a mayúsculas/minúsculas y espacios)
+                // Solo ocultar filas que estén completamente entregadas (UniValMapex >= UnidadesPedidas)
+                // Mostrar siempre si el pedido aún no está completado, independientemente del estado Assembly/Picking
                 .filter(row => {
-                    const assembly = (row.Assembly || '').toString().trim().toUpperCase();
-                    const picking = (row.Picking || '').toString().trim().toUpperCase();
-                    return !(assembly === "NO" && picking === "NO");
+                    const unidadesPedidas = parseFloat(row.UnidadesPedidas) || 0;
+                    const uniValMapex = parseFloat(row.UniValMapex) || 0;
+                    return uniValMapex < unidadesPedidas;
                 })
                 .filter(row => {
                     const sequenceValue = row.SequenceValue || row.Sequence || '';
