@@ -52,6 +52,7 @@
     
     let pedidosCache = [];
     let extendersCache = {}; // Cache para almacenar info de extensores por numero_pedido
+    let descuentoCache = {}; // Cache para almacenar info del material de descuento por numero_pedido
 
     async function getPedidosSecuenciadosC() {
       const res = await fetch('/api/pedidos_secuenciados_c');
@@ -81,26 +82,56 @@
       }
     }
 
+    // Nueva función: obtener info del material de descuento para un pedido
+    async function obtenerMaterialDescuentoPedido(numeroPedido) {
+      // Si ya está en caché, devolver
+      if (descuentoCache.hasOwnProperty(numeroPedido)) {
+        return descuentoCache[numeroPedido];
+      }
+      
+      try {
+        const res = await fetch(`/api/obtener-material-descuento-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
+        if (!res.ok) {
+          console.warn(`No se pudo obtener material de descuento para pedido ${numeroPedido}`);
+          return { assy_descuento: null };
+        }
+        const data = await res.json();
+        descuentoCache[numeroPedido] = data;
+        return data;
+      } catch (error) {
+        console.error(`Error obteniendo material de descuento: ${error}`);
+        return { assy_descuento: null };
+      }
+    }
+
     // Nueva función: verificar si un Assy es extensor
     function esAssynExtensor(assy, extendersData) {
       if (!extendersData || !extendersData.assy_extensores) return false;
       return extendersData.assy_extensores.some(ext => ext.toUpperCase() === (assy || '').toUpperCase());
     }
 
+    // Nueva función: verificar si un Assy es el material de descuento
+    function esAssynDescuento(assy, descuentoData) {
+      if (!descuentoData || !descuentoData.assy_descuento) return false;
+      return (assy || '').toUpperCase() === descuentoData.assy_descuento.toUpperCase();
+    }
+
     async function actualizarCantidadesExtender() {
       const extenderQtyNodes = Array.from(document.querySelectorAll('.extender-qty-value'));
       const pedidos = [...new Set(extenderQtyNodes.map(node => node.dataset.salesOrder).filter(Boolean))];
 
-      await Promise.all(pedidos.map(obtenerExtendersDelPedido));
+      // Obtener datos del material de descuento (OmegaType)
+      await Promise.all(pedidos.map(obtenerMaterialDescuentoPedido));
 
       extenderQtyNodes.forEach(node => {
         const salesOrder = node.dataset.salesOrder || '';
-        const assy = node.dataset.assy || '';
+        const assy = (node.dataset.assy || '').toUpperCase();
         const qty = Number(node.dataset.qty || 0);
-        const extendersData = extendersCache[salesOrder] || { assy_extensores: [] };
-        const debeRestar = esAssynExtensor(assy, extendersData);
-
-        node.textContent = debeRestar ? Math.max(0, qty - 2) : '-';
+        const descuentoData = descuentoCache[salesOrder] || { assy_descuento: null };
+        
+        // Comparar si este Assy es el material de descuento (OmegaType)
+        const esAssynDescuento = descuentoData.assy_descuento && assy === descuentoData.assy_descuento.toUpperCase();
+        node.textContent = esAssynDescuento ? Math.max(0, qty - 2) : '-';
       });
     }
 

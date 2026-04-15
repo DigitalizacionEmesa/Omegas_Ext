@@ -96,6 +96,7 @@
                         <th data-translate-key="table_header_if2">IF2</th>
                         <th data-translate-key="table_header_wc">W/C</th>
                         <th>Extender</th>
+                        <th>GRP_OMEGA_BRACKET_TYPE</th>
                         <th data-translate-key="table_header_delete">Eliminar</th>
                     </tr>
                     <tr id="quick-add-row">
@@ -114,6 +115,7 @@
                             </select>
                         </td>
                         <td><input type="text" id="quick-extender" placeholder="Extender" style="width:100px;"></td>
+                        <td><input type="text" id="quick-bracket-type" placeholder="Bracket Type" style="width:120px;"></td>
                         <td style="text-align:center;">
                             <button id="quick-add-btn" style="background:#28a745;color:#fff;border:none;border-radius:4px;padding:0.3em 1em;cursor:pointer;font-weight:600;">+</button>
                         </td>
@@ -196,7 +198,7 @@
             const tbody = document.getElementById('omegas-tbody');
             tbody.innerHTML = '';
             if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#888;">${getTranslation('text_no_data')}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#888;">${getTranslation('text_no_data')}</td></tr>`;
                 return;
             }
             // Orden personalizado: C primero, luego W, luego CWT, luego DS, luego EX, luego TB
@@ -212,7 +214,7 @@
             });
             data.forEach((row, rowIdx) => {
                 const tr = document.createElement('tr');
-                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable'];
+                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable', 'OmegaType'];
                 columns.forEach(col => {
                     const td = document.createElement('td');
                     // Mostrar '-' si el valor es null, undefined, string vacío o 'NULL' (insensible a mayúsculas)
@@ -233,6 +235,8 @@
                                 const payload = row.OmegaID != null ? { OmegaID: row.OmegaID } : { Assy: row.Assy };
                                 if (col === 'Assy') {
                                     payload['newAssy'] = newValue;
+                                } else if (col === 'OmegaType') {
+                                    payload['OmegaType'] = newValue;
                                 } else {
                                     payload[col] = newValue;
                                 }
@@ -307,6 +311,7 @@
                 const if1Raw = document.getElementById('quick-if1').value.trim();
                 const if2Raw = document.getElementById('quick-if2').value.trim();
                 const extenderRaw = document.getElementById('quick-extender').value.trim();
+                const bracketTypeRaw = document.getElementById('quick-bracket-type').value.trim();
                 const assy = assyInput.value.trim();
                 const wc = wcInput.value;
                 const errorDiv = document.getElementById('quick-add-error');
@@ -334,12 +339,13 @@
                     }, 500);
                     return;
                 }
-                // Optional fields as null if blank (except ExtenderVariable which gets empty string for NOT NULL)
+                // Optional fields as null if blank (except ExtenderVariable and OmegaType which get empty string for NOT NULL)
                 const beam = beamRaw === '' ? null : beamRaw;
                 const if1 = if1Raw === '' ? null : if1Raw;
                 const if2 = if2Raw === '' ? null : if2Raw;
                 const extender = extenderRaw === '' ? '' : extenderRaw;
-                const payload = { Assy: assy, Beam: beam, IF1: if1, IF2: if2, 'W/C': wc, ExtenderVariable: extender };
+                const bracketType = bracketTypeRaw === '' ? '' : bracketTypeRaw;
+                const payload = { Assy: assy, Beam: beam, IF1: if1, IF2: if2, 'W/C': wc, ExtenderVariable: extender, OmegaType: bracketType };
                 console.log('📤 Payload enviado:', payload);
                 fetch('/api/omegas/bulk-insert', {
                     method: 'POST',
@@ -360,6 +366,7 @@
                         document.getElementById('quick-if2').value = '';
                         document.getElementById('quick-wc').value = 'C';
                         document.getElementById('quick-extender').value = '';
+                        document.getElementById('quick-bracket-type').value = '';
                         errorDiv.textContent = '';
                         errorDiv.style.display = 'none';
                         assyInput.classList.remove('input-error','shake');
@@ -446,7 +453,7 @@
 
             function showPreview(data) {
                 if (!data.length) { previewArea.innerHTML = `<div style="color:#c00;">${getTranslation('alert_no_valid_data')}</div>`; confirmImportBtn.disabled = true; return; }
-                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable'];
+                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable', 'OmegaType'];
                 let html = `<div class="preview-message">${getTranslation('text_preview_message').replace('{count}', data.length)}</div>`;
                 html += '<table class="preview-table"><thead><tr>';
                 columns.forEach(col => html += `<th>${col}</th>`);

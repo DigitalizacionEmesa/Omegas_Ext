@@ -1378,7 +1378,6 @@ def get_pedidos_secuenciados_c():
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
-                  AND (ps.TB IS NULL OR LTRIM(RTRIM(ps.TB)) = '')
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -1539,6 +1538,89 @@ def obtener_extenders_pedido():
         logging.error(f"Error en /api/obtener-extenders-pedido: {str(e)}", exc_info=True)
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
+# ====================================================================================
+# ENDPOINT: OBTENER MATERIAL QUE DEBE RESTAR CANTIDAD (GRP_OMEGA_BRACKET_TYPE)
+# ====================================================================================
+@app.route('/api/obtener-material-descuento-pedido', methods=['GET'])
+@cross_origin()
+def obtener_material_descuento_pedido():
+    """
+    Para un pedido (numero_pedido), devuelve el Assy que debe restar -2 en cantidad.
+    
+    Lógica:
+    1. Busca GRP_OMEGA_BRACKET_TYPE_HEAD en pedidos_exportados
+    2. Si está vacío, usa GRP_OMEGA_BRACKET_TYPE_TRAV
+    3. Busca en OB.Omegas qué Assy tiene ese valor en la columna OmegaType
+    4. Retorna ese Assy (es el material que debe restar)
+    
+    Restricción: Máximo UN material por pedido (ya validado en frontend/lógica)
+    """
+    try:
+        numero_pedido = request.args.get('numero_pedido')
+        if not numero_pedido:
+            return jsonify({"error": "Parámetro numero_pedido requerido"}), 400
+        
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+            
+            cursor = conn.cursor()
+            
+            # PASO 1: Obtener GRP_OMEGA_BRACKET_TYPE_HEAD y GRP_OMEGA_BRACKET_TYPE_TRAV
+            cursor.execute("""
+                SELECT 
+                    characteristic_value,
+                    characteristic_name
+                FROM [OB].[pedidos_exportados]
+                WHERE sales_document = ?
+                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+            """, (numero_pedido,))
+            
+            rows = cursor.fetchall()
+            bracket_type_head = None
+            bracket_type_trav = None
+            
+            for row in rows:
+                value, char_name = row[0], row[1]
+                if char_name == 'GRP_OMEGA_BRACKET_TYPE_HEAD' and value:
+                    bracket_type_head = value.strip()
+                elif char_name == 'GRP_OMEGA_BRACKET_TYPE_TRAV' and value:
+                    bracket_type_trav = value.strip()
+            
+            # PASO 2: Resolver con prioridad HEAD > TRAV
+            bracket_type_efectivo = bracket_type_head if bracket_type_head else bracket_type_trav
+            
+            if not bracket_type_efectivo:
+                # No hay bracket type para buscar, retornar vacío
+                return jsonify({
+                    "numero_pedido": numero_pedido,
+                    "bracket_type_head": bracket_type_head,
+                    "bracket_type_trav": bracket_type_trav,
+                    "assy_descuento": None
+                }), 200
+            
+            # PASO 3: Buscar qué Assy en OB.Omegas tiene ese OmegaType
+            cursor.execute("""
+                SELECT DISTINCT LTRIM(RTRIM(Assy))
+                FROM OB.Omegas
+                WHERE LTRIM(RTRIM(OmegaType)) = ?
+                  AND LTRIM(RTRIM(Assy)) != ''
+            """, (bracket_type_efectivo,))
+            
+            assy_resultado = cursor.fetchone()
+            
+            return jsonify({
+                "numero_pedido": numero_pedido,
+                "bracket_type_head": bracket_type_head,
+                "bracket_type_trav": bracket_type_trav,
+                "bracket_type_efectivo": bracket_type_efectivo,
+                "assy_descuento": assy_resultado[0] if assy_resultado else None
+            }), 200
+    
+    except Exception as e:
+        logging.error(f"Error en /api/obtener-material-descuento-pedido: {str(e)}", exc_info=True)
+        return jsonify({"error": "Error interno", "details": str(e)}), 500
+
     
 # ====================================================================================
 # ENDPOINT PARA PEDIDOS SECUENCIADOS W (para pantalla OB_W)
@@ -1578,7 +1660,6 @@ def get_pedidos_secuenciados_w():
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
-                  AND (ps.TB IS NULL OR LTRIM(RTRIM(ps.TB)) = '')
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -3045,7 +3126,7 @@ def get_all_omegas():
             if conn is None:
                 return jsonify({"error": "No se pudo conectar a la base de datos Digitalizacion"}), 500
             cursor = conn.cursor()
-            query = "SELECT OmegaID, Assy, Beam, IF1, IF2, [W/C], ExtenderVariable FROM OB.Omegas ORDER BY Assy;"
+            query = "SELECT OmegaID, Assy, Beam, IF1, IF2, [W/C], ExtenderVariable, OmegaType FROM OB.Omegas ORDER BY Assy;"
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [column[0] for column in cursor.description]
@@ -3071,7 +3152,7 @@ def update_omega():
     if not data:
         return jsonify({'success': False, 'error': 'No se recibieron datos.'}), 400
 
-    campos_validos = ['Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable']
+    campos_validos = ['Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable', 'OmegaType']
     set_clauses = []
     params = []
 
@@ -3119,7 +3200,7 @@ def bulk_insert_omegas():
         return jsonify({'success': False, 'error': 'No se recibieron datos válidos.'}), 400
 
     # Solo columnas válidas
-    columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable']
+    columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable', 'OmegaType']
     values = []
     for i, row in enumerate(data):
         print(f"[BULK INSERT] Fila {i}: {row}")
@@ -3141,7 +3222,7 @@ def bulk_insert_omegas():
             if conn is None:
                 return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos'}), 500
             cursor = conn.cursor()
-            sql = "INSERT INTO OB.Omegas (Assy, Beam, IF1, IF2, [W/C], ExtenderVariable) VALUES (?, ?, ?, ?, ?, ?)"
+            sql = "INSERT INTO OB.Omegas (Assy, Beam, IF1, IF2, [W/C], ExtenderVariable, OmegaType) VALUES (?, ?, ?, ?, ?, ?, ?)"
             print(f"[BULK INSERT] SQL: {sql}")
             print(f"[BULK INSERT] Values: {values}")
             cursor.executemany(sql, values)
@@ -3675,9 +3756,11 @@ def importar_pedidos():
         def es_caracteristica_relevante(characteristic_name, characteristic_value):
             """
             Determina si una característica es relevante para guardar.
-            SOLO GUARDA:
+            GUARDA:
             - GRP_HSK_TYPE = 'LH'
             - GRP_OMEGA_BRACKET_TYPE_TSD con cualquier valor
+            - GRP_OMEGA_BRACKET_TYPE_HEAD con cualquier valor
+            - GRP_OMEGA_BRACKET_TYPE_TRAV con cualquier valor
             """
             char_upper = normalizar_valor(characteristic_name).upper()
             
@@ -3688,6 +3771,14 @@ def importar_pedidos():
             # Relevante 2: GRP_OMEGA_BRACKET_TYPE_TSD con valor
             if char_upper == 'GRP_OMEGA_BRACKET_TYPE_TSD' and normalizar_valor(characteristic_value):
                 return True, 'GRP_OMEGA_BRACKET_TYPE_TSD'
+            
+            # Relevante 3: GRP_OMEGA_BRACKET_TYPE_HEAD con valor
+            if char_upper == 'GRP_OMEGA_BRACKET_TYPE_HEAD' and normalizar_valor(characteristic_value):
+                return True, 'GRP_OMEGA_BRACKET_TYPE_HEAD'
+            
+            # Relevante 4: GRP_OMEGA_BRACKET_TYPE_TRAV con valor
+            if char_upper == 'GRP_OMEGA_BRACKET_TYPE_TRAV' and normalizar_valor(characteristic_value):
+                return True, 'GRP_OMEGA_BRACKET_TYPE_TRAV'
             
             # No relevante
             return False, None
