@@ -3,8 +3,10 @@
 # ====================================================================================
 import os
 import sys
+import io
 import time
 import logging
+import hashlib
 import pyodbc
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
 from flask_jwt_extended  import (JWTManager, create_access_token, jwt_required, get_jwt_identity)
@@ -23,6 +25,16 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from cryptography.fernet import Fernet
+
+try:
+    from dotenv import load_dotenv
+except ImportError:
+    load_dotenv = None
+
+
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
 # Configuración de conexión al servicio ICF de SAP
@@ -64,20 +76,149 @@ CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}}, method
 # - En modo desarrollo (python api/appOMEGAS.py): sube un nivel desde api/ al raíz del proyecto
 if getattr(sys, 'frozen', False):
     BASE_DIR = sys._MEIPASS
+    APP_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    APP_DIR = BASE_DIR
+
+if load_dotenv is not None:
+    load_dotenv(os.path.join(APP_DIR, '.env'))
+
+DB_USER = os.getenv('OMEGAS_DB_USER', DB_USER)
+DB_PASSWORD = os.getenv('OMEGAS_DB_PASSWORD', DB_PASSWORD)
+DB_USERCZ = os.getenv('OMEGAS_DB_USER_CZ', DB_USERCZ)
+DB_PASSWORDCZ = os.getenv('OMEGAS_DB_PASSWORD_CZ', DB_PASSWORDCZ)
+APP_PORT = int(os.getenv('OMEGAS_PORT', '5014'))
+DEV_MODE = os.getenv('OMEGAS_DEV_MODE', 'false').strip().lower() == 'true'
+
+LOGS_DIR = os.path.join(APP_DIR, 'logs')
+LOG_FILE = os.path.join(LOGS_DIR, 'appOMEGAS.log')
+
+
+def configure_logging():
+    os.makedirs(LOGS_DIR, exist_ok=True)
+
+    handlers = [logging.StreamHandler()]
+    try:
+        handlers.insert(0, logging.FileHandler(LOG_FILE, encoding='utf-8'))
+    except Exception:
+        pass
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        handlers=handlers,
+        force=True,
+    )
+    logging.getLogger('werkzeug').setLevel(logging.ERROR)
+
+
+configure_logging()
 
 # Rutas de recursos
 RUTA_PANTALLAS = os.path.join(BASE_DIR, 'Pantallas')
 RUTA_ASSETS = os.path.join(BASE_DIR, 'assets')
 RUTA_IMAGENES = os.path.join(BASE_DIR, 'IMAGENES')
 RUTA_TRADUCCIONES = os.path.join(BASE_DIR, 'translations')
+DB_CONNECTION_CONFIG_FILE = os.path.join(APP_DIR, 'db_connection_config.json')
 
-# Debug: Imprimir rutas para verificar
-print(f"[CONFIG] BASE_DIR: {BASE_DIR}")
-print(f"[CONFIG] RUTA_ASSETS: {RUTA_ASSETS} -> Existe: {os.path.exists(RUTA_ASSETS)}")
-print(f"[CONFIG] RUTA_IMAGENES: {RUTA_IMAGENES} -> Existe: {os.path.exists(RUTA_IMAGENES)}")
-print(f"[CONFIG] RUTA_TRADUCCIONES: {RUTA_TRADUCCIONES} -> Existe: {os.path.exists(RUTA_TRADUCCIONES)}")
+
+def _unique_preserve_order(values):
+    ordered = []
+    seen = set()
+
+    for value in values:
+        if value is None:
+            continue
+
+        text = str(value).strip()
+        if not text or text in seen:
+            continue
+
+        seen.add(text)
+        ordered.append(text)
+
+    return ordered
+
+
+def _parse_config_list(raw_value):
+    if isinstance(raw_value, list):
+        return _unique_preserve_order(raw_value)
+    if isinstance(raw_value, str):
+        return _unique_preserve_order(raw_value.split(','))
+    return []
+
+
+def load_db_connection_config():
+    config = {
+        'drivers': [
+            'ODBC Driver 18 for SQL Server',
+            'ODBC Driver 17 for SQL Server',
+            'SQL Server'
+        ],
+        'main_servers': ['EMEBIDWH', '172.16.10.10'],
+        'cz_servers': ['172.16.10.10', 'EMEBIDWH']
+    }
+
+    if os.path.exists(DB_CONNECTION_CONFIG_FILE):
+        try:
+            with open(DB_CONNECTION_CONFIG_FILE, 'r', encoding='utf-8') as config_file:
+                loaded = json.load(config_file)
+
+            config['drivers'] = _unique_preserve_order(
+                _parse_config_list(loaded.get('drivers')) + config['drivers']
+            )
+            config['main_servers'] = _unique_preserve_order(
+                _parse_config_list(loaded.get('main_servers')) + config['main_servers']
+            )
+            config['cz_servers'] = _unique_preserve_order(
+                _parse_config_list(loaded.get('cz_servers')) + config['cz_servers']
+            )
+        except Exception as e:
+            print(f"[CONFIG] No se pudo leer {DB_CONNECTION_CONFIG_FILE}: {e}")
+
+    env_drivers = _parse_config_list(os.getenv('OMEGAS_DB_DRIVERS'))
+    env_main_servers = _parse_config_list(os.getenv('OMEGAS_DB_MAIN_SERVERS'))
+    env_cz_servers = _parse_config_list(os.getenv('OMEGAS_DB_CZ_SERVERS'))
+
+    if env_drivers:
+        config['drivers'] = _unique_preserve_order(env_drivers + config['drivers'])
+    if env_main_servers:
+        config['main_servers'] = _unique_preserve_order(env_main_servers + config['main_servers'])
+    if env_cz_servers:
+        config['cz_servers'] = _unique_preserve_order(env_cz_servers + config['cz_servers'])
+
+    return config
+
+
+DB_CONNECTION_CONFIG = load_db_connection_config()
+
+
+def build_connection_candidates(default_servers, explicit_server=None):
+    servers = [explicit_server] if explicit_server else list(default_servers)
+
+    configured_drivers = list(DB_CONNECTION_CONFIG.get('drivers', []))
+    try:
+        installed_drivers = pyodbc.drivers()
+    except Exception:
+        installed_drivers = []
+
+    sql_server_drivers = [driver for driver in installed_drivers if 'SQL Server' in driver]
+    if sql_server_drivers:
+        drivers = [driver for driver in configured_drivers if driver in sql_server_drivers]
+        drivers.extend([driver for driver in sql_server_drivers if driver not in drivers])
+    else:
+        drivers = configured_drivers
+
+    return _unique_preserve_order(servers), _unique_preserve_order(drivers)
+
+logging.info(f"[CONFIG] BASE_DIR: {BASE_DIR}")
+logging.info(f"[CONFIG] APP_DIR: {APP_DIR}")
+logging.info(f"[CONFIG] DB_CONNECTION_CONFIG_FILE: {DB_CONNECTION_CONFIG_FILE}")
+logging.info(f"[CONFIG] RUTA_ASSETS: {RUTA_ASSETS} -> Existe: {os.path.exists(RUTA_ASSETS)}")
+logging.info(f"[CONFIG] RUTA_IMAGENES: {RUTA_IMAGENES} -> Existe: {os.path.exists(RUTA_IMAGENES)}")
+logging.info(f"[CONFIG] RUTA_TRADUCCIONES: {RUTA_TRADUCCIONES} -> Existe: {os.path.exists(RUTA_TRADUCCIONES)}")
 
 # ====================================================================================
 # CARGA DE CONFIGURACIÓN SMTP DESDE BD (OB.Notificaciones en DataLakeSCCZ)
@@ -176,6 +317,18 @@ def scheduled_daily_sync():
             print(f"[SCHEDULER] ERROR al obtener Omegas: {e}")
             return
         
+        # Obtener mapping de Extensores
+        extender_map = {}
+        try:
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                cursor_main = conn_main.cursor()
+                cursor_main.execute("SELECT ExtenderVariable, Assy FROM OB.Omegas WHERE ExtenderVariable IS NOT NULL")
+                extender_map = {row.ExtenderVariable: row.Assy for row in cursor_main.fetchall()}
+        except Exception as e:
+            print(f"[SCHEDULER] ADVERTENCIA al obtener ExtenderMap: {e}")
+            # No es error crítico, solo continuamos sin extensores
+            extender_map = {}
+        
         # Extraer datos de MAPEXBP
         datos_externos = []
         try:
@@ -226,19 +379,26 @@ def scheduled_daily_sync():
 
         cabeceras_a_procesar, lineas_a_insertar = {}, []
         for pedido_id, lineas in pedidos_agrupados.items():
-            cwt, ds = None, None
+            cwt, ds, ex, tb = None, None, None, None
+            
+            primera_linea = lineas[0]
+            
             for linea in lineas:
+                # Verificar CWT/DS/EX/TB
                 wc_type = omegas_map.get(linea['Cod_producto'])
                 if wc_type == 'CWT' and not cwt: 
                     cwt = linea['Cod_producto']
                 elif wc_type == 'DS' and not ds: 
                     ds = linea['Cod_producto']
+                elif wc_type == 'EX' and not ex:
+                    ex = linea['Cod_producto']
+                elif wc_type == 'TB' and not tb:
+                    tb = linea['Cod_producto']
             
-            primera_linea = lineas[0]
             cabeceras_a_procesar[pedido_id] = (
                 pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
                 primera_linea['Bsark'], primera_linea['EstadoERP'],
-                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds
+                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
             )
             for linea in lineas:
                 lineas_a_insertar.append((
@@ -263,7 +423,7 @@ def scheduled_daily_sync():
 
                 # Insertar datos
                 if lista_cabeceras:
-                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
                     cursor_main.executemany(sql_cabecera, lista_cabeceras)
                 
                 if lineas_a_insertar:
@@ -882,7 +1042,7 @@ def get_summary_fast():
             if conn is None:
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM OB.V_PedidosSummary_Pendientes")
+            cursor.execute("SELECT * FROM OB.V_PedidosSummary_Pendientes_EX")
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             result = [dict(zip(columns, row)) for row in rows]
@@ -905,10 +1065,10 @@ def get_summary_sequenced():
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             cursor = conn.cursor()
             
-            # La consulta ahora incluye el ORDER BY usando las columnas de la vista
+            # Usar la vista wrapper que ya incluye EX y TB
             query = """
                 SELECT * 
-                FROM OB.V_PedidosSummary_Secuenciados
+                FROM OB.V_PedidosSummary_Secuenciados_Full
                 ORDER BY
                     -- Las filas con prioridad manual se ordenan por su prioridad
                     CASE WHEN PriorityOrder IS NOT NULL THEN 0 ELSE 1 END,
@@ -1186,8 +1346,9 @@ def delete_all_sequences():
 @cross_origin()
 def get_pedidos_secuenciados_c():
     """
-    Devuelve los pedidos secuenciados tipo C (Assembly = 'Yes C') usando la vista OB.V_PedidosSecuenciados,
-    pero IF1 e IF2 se traen de la tabla OB.Omegas.
+    Devuelve los pedidos secuenciados tipo C (Assembly = 'Yes C').
+    Usa la vista OB.V_PedidosSummary_Secuenciados_Full como fuente única.
+    Excluye pedidos con TB para evitar solape con la tarjeta Tie Brackets.
     Ordenados por PriorityOrder primero (manual) y luego por Sequence (automático).
     """
     try:
@@ -1206,10 +1367,18 @@ def get_pedidos_secuenciados_c():
                     o.IF1,
                     o.IF2,
                     ps.OFs AS WO,
-                    ps.PriorityOrder
-                FROM OB.V_PedidosSummary_Secuenciados ps
+                    ISNULL(ps.EX, '') AS Extender,
+                    ps.PriorityOrder,
+                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
+                    CASE 
+                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
+                        THEN ps.UnidadesPedidas - 2
+                        ELSE NULL
+                    END AS ExtenderQuantity
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
+                  AND (ps.TB IS NULL OR LTRIM(RTRIM(ps.TB)) = '')
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -1227,6 +1396,7 @@ def get_pedidos_secuenciados_c():
                 else:
                     item['IF'] = item.get('IF1','')
                 result.append(item)
+            
             return jsonify(result)
     except Exception as e:
         print(f"Error en /api/pedidos_secuenciados_c: {e}")
@@ -1241,6 +1411,7 @@ def get_pedidos_secuenciados_c_trazabilidad():
     """
     Devuelve los pedidos secuenciados tipo C para trazabilidad de Beams.
     DoneQty = AssignedStockBeam (solo stock de Beam asignado)
+    Incluye Extender (EX) y ExtenderQty.
     """
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1258,59 +1429,18 @@ def get_pedidos_secuenciados_c_trazabilidad():
                     o.IF1,
                     o.IF2,
                     ps.OFs AS WO,
-                    ps.PriorityOrder
-                FROM OB.V_PedidosSummary_Secuenciados ps
+                    ps.EX AS Extender,
+                    ps.PriorityOrder,
+                    -- Verificar si el Extender (EX) existe en OB.Omegas como ExtenderVariable
+                    CASE 
+                        WHEN EXISTS (SELECT 1 FROM OB.Omegas ox WHERE ox.ExtenderVariable = ps.EX)
+                        THEN ps.UnidadesPedidas - 2
+                        ELSE NULL
+                    END AS ExtenderQuantity
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
                   AND ps.UnidadesPedidas > ISNULL(ps.AssignedStockBeam,0)
-                ORDER BY 
-                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                    ps.PriorityOrder ASC,
-                    ps.Sequence ASC
-            '''
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
-            result = []
-            for row in rows:
-                item = dict(zip(columns, row))
-                result.append(item)
-            return jsonify(result)
-    except Exception as e:
-        print(f"Error en /api/pedidos_secuenciados_c_trazabilidad: {e}")
-        return jsonify({"error": "Error interno", "details": str(e)}), 500
-    
-# ====================================================================================
-# ENDPOINT PARA PEDIDOS SECUENCIADOS W (para pantalla OB_W)
-# ====================================================================================
-@app.route('/api/pedidos_secuenciados_w', methods=['GET'])
-@cross_origin()
-def get_pedidos_secuenciados_w():
-    """
-    Devuelve los pedidos secuenciados tipo W (Assembly = 'Yes W') usando la vista OB.V_PedidosSecuenciados,
-    pero IF1 e IF2 se traen de la tabla OB.Omegas.
-    Ordenados por PriorityOrder primero (manual) y luego por SequenceValue (automático).
-    """
-    try:
-        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-            cursor = conn.cursor()
-            query = '''
-                SELECT 
-                    ps.Sequence AS Sequence,
-                    ps.NumeroPedido AS SalesOrder,
-                    ps.UnidadesPedidas AS Qty,
-                    ISNULL(ps.UniValMapex,0) + ISNULL(ps.AssignedStock,0) AS DoneQty,
-                    ps.Assy,
-                    ps.Beam,
-                    o.IF1,
-                    o.IF2,
-                    ps.OFs AS WO,
-                    ps.PriorityOrder
-                FROM OB.V_PedidosSummary_Secuenciados ps
-                LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
-                WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -1330,7 +1460,195 @@ def get_pedidos_secuenciados_w():
                 result.append(item)
             return jsonify(result)
     except Exception as e:
-        print(f"Error en /api/pedidos_secuenciados_c: {e}")
+        print(f"Error en /api/pedidos_secuenciados_c_trazabilidad: {e}")
+        return jsonify({"error": "Error interno", "details": str(e)}), 500
+
+
+# ====================================================================================
+# ENDPOINT: OBTENER MATERIALES EXTENSORES DE UN PEDIDO
+# ====================================================================================
+@app.route('/api/obtener-extenders-pedido', methods=['GET'])
+@cross_origin()
+def obtener_extenders_pedido():
+    """
+    Para un pedido (numero_pedido), devuelve:
+    - bracket_type: valor de GRP_OMEGA_BRACKET_TYPE_TSD
+    - assy_extensores: lista de Assy en OB.Omegas para ese ExtenderVariable
+
+    El frontend solo necesita saber en qué Assy del pedido aplicar la regla Qty - 2.
+    """
+    try:
+        numero_pedido = request.args.get('numero_pedido')
+        if not numero_pedido:
+            return jsonify({"error": "Parámetro numero_pedido requerido"}), 400
+        
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+            
+            cursor = conn.cursor()
+            
+            # PASO 1: Confirmar que el pedido tiene GRP_HSK_TYPE = LH y obtener el bracket type.
+            cursor.execute("""
+                SELECT 
+                    characteristic_value,
+                    characteristic_name
+                FROM [OB].[pedidos_exportados]
+                WHERE sales_document = ?
+                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_TSD', 'GRP_HSK_TYPE')
+            """, (numero_pedido,))
+            
+            rows = cursor.fetchall()
+            bracket_type = None
+            es_lh = False
+            
+            for row in rows:
+                value, char_name = row[0], row[1]
+                if char_name == 'GRP_OMEGA_BRACKET_TYPE_TSD' and value:
+                    bracket_type = value.strip()
+                elif char_name == 'GRP_HSK_TYPE' and value and value.upper() == 'LH':
+                    es_lh = True
+            
+            # Si no hay bracket_type o no es LH, no hay extensores aplicables.
+            if not bracket_type or not es_lh:
+                return jsonify({
+                    "numero_pedido": numero_pedido,
+                    "es_lh": es_lh,
+                    "bracket_type": None,
+                    "assy_extensores": []
+                }), 200
+            
+            # PASO 2: Resolver qué Assy deben considerarse extensores para ese bracket.
+            cursor.execute("""
+                SELECT DISTINCT LTRIM(RTRIM(Assy))
+                FROM OB.Omegas
+                WHERE LTRIM(RTRIM(ExtenderVariable)) = ?
+                  AND LTRIM(RTRIM(Assy)) != ''
+            """, (bracket_type,))
+            
+            assy_extensores = [row[0] for row in cursor.fetchall()]
+            
+            return jsonify({
+                "numero_pedido": numero_pedido,
+                "es_lh": es_lh,
+                "bracket_type": bracket_type,
+                "assy_extensores": assy_extensores
+            }), 200
+    
+    except Exception as e:
+        logging.error(f"Error en /api/obtener-extenders-pedido: {str(e)}", exc_info=True)
+        return jsonify({"error": "Error interno", "details": str(e)}), 500
+
+    
+# ====================================================================================
+# ENDPOINT PARA PEDIDOS SECUENCIADOS W (para pantalla OB_W)
+# ====================================================================================
+@app.route('/api/pedidos_secuenciados_w', methods=['GET'])
+@cross_origin()
+def get_pedidos_secuenciados_w():
+    """
+    Devuelve los pedidos secuenciados tipo W (Assembly = 'Yes W') usando la vista OB.V_PedidosSummary_Secuenciados_Full,
+    con IF1 e IF2 de OB.Omegas. Excluye pedidos con TB para evitar solape con Tie Brackets.
+    Ordenados por PriorityOrder primero (manual) y luego por Sequence (automático).
+    """
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+            cursor = conn.cursor()
+            query = '''
+                SELECT 
+                    ps.Sequence AS Sequence,
+                    ps.NumeroPedido AS SalesOrder,
+                    ps.UnidadesPedidas AS Qty,
+                    ISNULL(ps.UniValMapex,0) + ISNULL(ps.AssignedStock,0) AS DoneQty,
+                    ps.Assy,
+                    ps.Beam,
+                    o.IF1,
+                    o.IF2,
+                    ps.OFs AS WO,
+                    ps.EX AS Extender,
+                    ps.PriorityOrder,
+                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
+                    CASE 
+                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
+                        THEN ps.UnidadesPedidas - 2
+                        ELSE NULL
+                    END AS ExtenderQuantity
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
+                WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
+                  AND (ps.TB IS NULL OR LTRIM(RTRIM(ps.TB)) = '')
+                ORDER BY 
+                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                    ps.PriorityOrder ASC,
+                    ps.Sequence ASC
+            '''
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            result = []
+            for row in rows:
+                item = dict(zip(columns, row))
+                # IF: Si IF1 e IF2 no coinciden, mostrar ambos separados por /, si coinciden solo uno
+                if item.get('IF1') != item.get('IF2'):
+                    item['IF'] = f"{item.get('IF1','')}/{item.get('IF2','')}"
+                else:
+                    item['IF'] = item.get('IF1','')
+                result.append(item)
+            
+            return jsonify(result)
+    except Exception as e:
+        print(f"Error en /api/pedidos_secuenciados_w: {e}")
+        return jsonify({"error": "Error interno", "details": str(e)}), 500
+
+# ====================================================================================
+# ENDPOINT PARA PEDIDOS CON TIE BRACKET (TB)
+# ====================================================================================
+@app.route('/api/pedidos_tb', methods=['GET'])
+@cross_origin()
+def get_pedidos_tb():
+    """
+    Devuelve los pedidos secuenciados que tengan TB (Tie Bracket) asignado.
+    Usa la vista wrapper OB.V_PedidosSummary_Secuenciados_Full que ya incluye EX y TB.
+    Esta tarjeta es exclusiva para pedidos con TB para que no se solapen con OB_C/OB_W.
+    Muestra: Sequence, SalesOrder, Qty, TieBracket, Extender, ExtenderQuantity
+    Ordenados por PriorityOrder primero y luego por Sequence.
+    """
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+            cursor = conn.cursor()
+            query = '''
+                SELECT 
+                    ps.Sequence AS Sequence,
+                    ps.NumeroPedido AS SalesOrder,
+                    ps.UnidadesPedidas AS Qty,
+                    ps.Assy AS Assy,
+                    ISNULL(ps.TB, '') AS TieBracket,
+                    ISNULL(ps.EX, '') AS Extender,
+                    ps.PriorityOrder,
+                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
+                    CASE 
+                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
+                        THEN ps.UnidadesPedidas - 2
+                        ELSE NULL
+                    END AS ExtenderQuantity
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                WHERE ps.TB IS NOT NULL AND LTRIM(RTRIM(ps.TB)) != ''
+                ORDER BY 
+                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                    ps.PriorityOrder ASC,
+                    ps.Sequence ASC
+            '''
+            cursor.execute(query)
+            rows = cursor.fetchall()
+            columns = [desc[0] for desc in cursor.description]
+            result = [dict(zip(columns, row)) for row in rows]
+            return jsonify(result)
+    except Exception as e:
+        print(f"Error en /api/pedidos_tb: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
 # ====================================================================================
@@ -1371,6 +1689,27 @@ def get_pedidos_picking():
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
 # ====================================================================================
+# HELPER PARA POC DE MATERIAL 1035 (EXTENSORES)
+# ====================================================================================
+def get_extender_values_for_material_1035(cod_producto):
+    """
+    POC: Si el material es 1035, retorna valores fabricados para extensores.
+    Esto permite validar el pipeline completo sin datos reales de SAP.
+    """
+    if not cod_producto:
+        return None
+    
+    material_str = str(cod_producto).strip().upper()
+    if '1035' in material_str or 'SCOS59001035' in material_str:
+        print(f"[EXTENDER POC] Material 1035 detectado: {cod_producto}")
+        return {
+            'GRP_HSK_TYPE': 'LH',
+            'GRP_NUM_OMEGA': 4,
+            'GRP_OMEGA_BRACKET_TYPE_TSD': 'TSD21_O_A2_1002'
+        }
+    return None
+
+# ====================================================================================
 # ENDPOINT PARA ACTUALIZACIÓN MANUAL DE PEDIDOS (1 DÍA ATRÁS)
 # ====================================================================================
 @app.route('/api/sync/manual-full', methods=['POST'])
@@ -1397,6 +1736,18 @@ def manual_full_sync():
         except Exception as e:
             print(f"[MANUAL SYNC] ERROR al obtener Omegas: {e}")
             return jsonify({"error": f"Error al obtener Omegas: {str(e)}"}), 500
+
+        # Obtener mapping de Extensores
+        extender_map = {}
+        try:
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                cursor_main = conn_main.cursor()
+                cursor_main.execute("SELECT ExtenderVariable, Assy FROM OB.Omegas WHERE ExtenderVariable IS NOT NULL")
+                extender_map = {row.ExtenderVariable: row.Assy for row in cursor_main.fetchall()}
+        except Exception as e:
+            print(f"[MANUAL SYNC] ADVERTENCIA al obtener ExtenderMap: {e}")
+            # No es error crítico, solo continuamos sin extensores
+            extender_map = {}
 
         # Extraer solo pedidos creados en el último día (usando FechaPedido)
         datos_externos = []
@@ -1451,18 +1802,26 @@ def manual_full_sync():
 
         cabeceras_a_procesar, lineas_a_insertar = {}, []
         for pedido_id, lineas in pedidos_agrupados.items():
-            cwt, ds = None, None
+            cwt, ds, ex, tb = None, None, None, None
+            
+            primera_linea = lineas[0]
+            
             for linea in lineas:
+                # Verificar CWT/DS/EX/TB
                 wc_type = omegas_map.get(linea['Cod_producto'])
                 if wc_type == 'CWT' and not cwt: 
                     cwt = linea['Cod_producto']
                 elif wc_type == 'DS' and not ds: 
                     ds = linea['Cod_producto']
-            primera_linea = lineas[0]
+                elif wc_type == 'EX' and not ex:
+                    ex = linea['Cod_producto']
+                elif wc_type == 'TB' and not tb:
+                    tb = linea['Cod_producto']
+            
             cabeceras_a_procesar[pedido_id] = (
                 pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
                 primera_linea['Bsark'], primera_linea['EstadoERP'],
-                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds
+                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
             )
             for linea in lineas:
                 lineas_a_insertar.append((
@@ -1485,7 +1844,7 @@ def manual_full_sync():
                     cursor_main.execute(f"DELETE FROM OB.PedidosCabecera WHERE ID_PedidoCabecera_Externa IN ({placeholders})", ids_cabeceras_afectadas)
                 # Insertar cabeceras
                 if lista_cabeceras:
-                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
                     cursor_main.executemany(sql_cabecera, lista_cabeceras)
                 # Insertar líneas
                 if lineas_a_insertar:
@@ -1831,8 +2190,8 @@ def run_sequencing():
                         
                         cursor_dig.execute("""
                             INSERT INTO OB.PedidosSecuenciados 
-                            (NumeroPedido, Assy, Beam, SequenceValue, OFs, FechaSecuenciacion)
-                            VALUES (?, ?, ?, ?, ?, GETDATE())
+                            (NumeroPedido, Assy, Beam, SequenceValue, OFs, FechaSecuenciacion, AssignedStock, AssignedStockBeam)
+                            VALUES (?, ?, ?, ?, ?, GETDATE(), 0, 0)
                         """, (numero_pedido, assy, beam_value, sequence_value, ofs_str))
                         
                         resultados_secuenciacion.append({
@@ -1937,8 +2296,7 @@ def run_sequencing():
 # CLASE DE CONEXIÓN ODBC
 # ====================================================================================
 class ConexionODBC:
-    def __init__(self, database=None, servidor='EMEBIDWH'):
-        self.driver = 'ODBC Driver 17 for SQL Server'
+    def __init__(self, database=None, servidor=None):
         self.server = servidor
         self.database = database
         self.conn = None
@@ -1947,17 +2305,37 @@ class ConexionODBC:
         try:
             if not DB_USER or not DB_PASSWORD:
                 raise Exception('Faltan credenciales de base de datos')
-            conn_str = (
-                f"DRIVER={{{self.driver}}};"
-                f"SERVER={self.server};"
-                f"DATABASE={self.database};"
-                f"UID={DB_USER};PWD={DB_PASSWORD};"
-                "TrustServerCertificate=yes;"
+
+            servers, drivers = build_connection_candidates(
+                DB_CONNECTION_CONFIG.get('main_servers', []),
+                self.server
             )
-            self.conn = pyodbc.connect(conn_str, timeout=5, autocommit=True)
-            return self.conn
+            last_error = None
+
+            for driver in drivers:
+                for server in servers:
+                    conn_str = (
+                        f"DRIVER={{{driver}}};"
+                        f"SERVER={server};"
+                        f"DATABASE={self.database};"
+                        f"UID={DB_USER};PWD={DB_PASSWORD};"
+                        "Encrypt=yes;"
+                        "TrustServerCertificate=yes;"
+                        "Connection Timeout=10;"
+                    )
+
+                    try:
+                        self.conn = pyodbc.connect(conn_str, timeout=10, autocommit=True)
+                        self.server = server
+                        logging.info(f"[DB MAIN] Conectado a {self.database} con server={server}, driver={driver}")
+                        return self.conn
+                    except Exception as conn_error:
+                        last_error = conn_error
+                        logging.warning(f"[DB MAIN] Fallo de conexión con server={server}, driver={driver}: {conn_error}")
+
+            raise last_error or Exception('No se encontró una combinación válida de servidor/driver')
         except Exception as e:
-            print(f"Error CRÍTICO al conectar con la base de datos: {e}")
+            logging.error(f"Error CRÍTICO al conectar con la base de datos: {e}")
             return None
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -1968,9 +2346,7 @@ class ConexionODBC:
 # CLASE DE CONEXIÓN ODBC PARA CZ
 # ====================================================================================
 class ConexionODBCCZ:
-    def __init__(self, database='mapexbp', servidor='172.16.10.10'):
-        # Usa el mismo driver moderno que la clase principal
-        self.driver = 'ODBC Driver 17 for SQL Server'
+    def __init__(self, database='mapexbp', servidor=None):
         self.server = servidor
         self.database = database
         self.conn = None
@@ -1979,18 +2355,37 @@ class ConexionODBCCZ:
         try:
             if not DB_USERCZ or not DB_PASSWORDCZ:
                 raise Exception('Faltan credenciales de base de datos CZ')
-            conn_str = (
-                f"DRIVER={{{self.driver}}};"
-                f"SERVER={self.server};"
-                f"DATABASE={self.database};"
-                f"UID={DB_USERCZ};PWD={DB_PASSWORDCZ};"
-                "TrustServerCertificate=yes;"
+
+            servers, drivers = build_connection_candidates(
+                DB_CONNECTION_CONFIG.get('cz_servers', []),
+                self.server
             )
-            # Timeout y autocommit igual que la principal
-            self.conn = pyodbc.connect(conn_str, timeout=5, autocommit=True)
-            return self.conn
+            last_error = None
+
+            for driver in drivers:
+                for server in servers:
+                    conn_str = (
+                        f"DRIVER={{{driver}}};"
+                        f"SERVER={server};"
+                        f"DATABASE={self.database};"
+                        f"UID={DB_USERCZ};PWD={DB_PASSWORDCZ};"
+                        "Encrypt=yes;"
+                        "TrustServerCertificate=yes;"
+                        "Connection Timeout=10;"
+                    )
+
+                    try:
+                        self.conn = pyodbc.connect(conn_str, timeout=10, autocommit=True)
+                        self.server = server
+                        logging.info(f"[DB CZ] Conectado a {self.database} con server={server}, driver={driver}")
+                        return self.conn
+                    except Exception as conn_error:
+                        last_error = conn_error
+                        logging.warning(f"[DB CZ] Fallo de conexión con server={server}, driver={driver}: {conn_error}")
+
+            raise last_error or Exception('No se encontró una combinación válida de servidor/driver para CZ')
         except Exception as e:
-            print(f"Error CRÍTICO al conectar con la base de datos CZ: {e}")
+            logging.error(f"Error CRÍTICO al conectar con la base de datos CZ: {e}")
             return None
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -2008,6 +2403,56 @@ def servir_pantalla(nombre_archivo):
     return send_from_directory(RUTA_PANTALLAS, nombre_archivo)
 
 
+def buscar_usuario_cz(cursor, columnas_sql, usuario):
+    usuario = str(usuario).strip()
+
+    if usuario.isdigit():
+        cursor.execute(
+            f"""
+                SELECT {columnas_sql}
+                FROM OB.Usuarios_CZ_hash
+                WHERE Num_Operario = ? OR Nombre = ?
+            """,
+            (int(usuario), usuario)
+        )
+    else:
+        cursor.execute(
+            f"""
+                SELECT {columnas_sql}
+                FROM OB.Usuarios_CZ_hash
+                WHERE Nombre = ?
+            """,
+            (usuario,)
+        )
+
+    return cursor.fetchone()
+
+
+def verificar_password_usuario(stored_password, plain_password):
+    if stored_password is None or plain_password is None:
+        return False
+
+    if isinstance(stored_password, bytes):
+        stored_password = stored_password.decode('utf-8', errors='ignore')
+
+    stored_text = str(stored_password).strip()
+    plain_text = str(plain_password).strip()
+
+    if not stored_text or not plain_text:
+        return False
+
+    if stored_text == plain_text:
+        return True
+
+    if len(stored_text) == 64 and all(char in '0123456789abcdefABCDEF' for char in stored_text):
+        return hashlib.sha256(plain_text.encode('utf-8')).hexdigest().lower() == stored_text.lower()
+
+    try:
+        return check_password_hash(stored_text, plain_text)
+    except Exception:
+        return False
+
+
 # ====================================================================================
 # ENDPOINTS DE LA API
 # ====================================================================================
@@ -2017,39 +2462,33 @@ def login():
     Endpoint de autenticación.
     Soporta contraseñas en texto plano (legacy) y hash pbkdf2 (si se migra).
     """
-    data = request.json
-    usuario = data.get('usuario')
-    password = data.get('password')
+    data = request.get_json(silent=True) or {}
+    usuario = str(data.get('usuario', '')).strip()
+    password = str(data.get('password', '')).strip()
     
     if not usuario or not password:
         return jsonify({'success': False, 'message': 'Usuario y contraseña son requeridos'}), 400
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                raise Exception('No se pudo conectar con DataLakeSCCZ')
             cursor = conn.cursor()
-            # Buscar usuario por Num_Operario o Nombre
-            cursor.execute("""
-                SELECT Id_Usuario, Num_Operario, Nombre, Contrasena, Nivel_Permisos, Roles 
-                FROM OB.Usuarios_CZ_hash 
-                WHERE Num_Operario = ? OR Nombre = ?
-            """, (usuario, usuario))
-            row = cursor.fetchone()
+            row = buscar_usuario_cz(
+                cursor,
+                'Id_Usuario, Num_Operario, Nombre, Contrasena, Nivel_Permisos, Roles',
+                usuario
+            )
             
             if not row:
+                logging.warning(f"[LOGIN] Usuario no encontrado: {usuario}")
                 return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 401
             
             stored_password = row[3]
-            password_valid = False
-            
-            # Verificar contraseña - soporta hash pbkdf2 o texto plano (legacy)
-            if stored_password.startswith('pbkdf2:'):
-                # Contraseña hasheada
-                password_valid = check_password_hash(stored_password, password)
-            else:
-                # Contraseña en texto plano (legacy)
-                password_valid = (stored_password == password)
+            password_valid = verificar_password_usuario(stored_password, password)
             
             if password_valid:
+                logging.info(f"[LOGIN] Login correcto para usuario={usuario} nombre={row[2]}")
                 return jsonify({
                     'success': True,
                     'id': row[0],
@@ -2060,11 +2499,15 @@ def login():
                     'roles': row[5]
                 })
             else:
+                logging.warning(f"[LOGIN] Contraseña incorrecta para usuario={usuario}")
                 return jsonify({'success': False, 'message': 'Contraseña incorrecta'}), 401
                 
     except Exception as e:
-        print(f"Error en /api/login: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        logging.error(f"Error en /api/login: {str(e)}", exc_info=True)
+        response = {'success': False, 'message': 'Error interno del servidor'}
+        if DEV_MODE:
+            response['error'] = str(e)
+        return jsonify(response), 500
     
 @app.route('/api/cambiar_password', methods=['POST'])
 def cambiar_password():
@@ -2072,10 +2515,10 @@ def cambiar_password():
     Endpoint para cambiar contraseña.
     La nueva contraseña se guarda con hash pbkdf2.
     """
-    data = request.json
-    usuario = data.get('usuario')
-    actual = data.get('actual')
-    nueva = data.get('nueva')
+    data = request.get_json(silent=True) or {}
+    usuario = str(data.get('usuario', '')).strip()
+    actual = str(data.get('actual', '')).strip()
+    nueva = str(data.get('nueva', '')).strip()
     
     if not usuario or not actual or not nueva:
         return jsonify({'success': False, 'message': 'Todos los campos son requeridos'}), 400
@@ -2085,13 +2528,10 @@ def cambiar_password():
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                raise Exception('No se pudo conectar con DataLakeSCCZ')
             cursor = conn.cursor()
-            # Buscar usuario
-            cursor.execute("""
-                SELECT Id_Usuario, Contrasena FROM OB.Usuarios_CZ_hash 
-                WHERE Num_Operario = ? OR Nombre = ?
-            """, (usuario, usuario))
-            row = cursor.fetchone()
+            row = buscar_usuario_cz(cursor, 'Id_Usuario, Contrasena', usuario)
             
             if not row:
                 return jsonify({'success': False, 'message': 'Usuario no encontrado'}), 401
@@ -2100,11 +2540,7 @@ def cambiar_password():
             stored_password = row[1]
             
             # Verificar contraseña actual
-            password_valid = False
-            if stored_password.startswith('pbkdf2:'):
-                password_valid = check_password_hash(stored_password, actual)
-            else:
-                password_valid = (stored_password == actual)
+            password_valid = verificar_password_usuario(stored_password, actual)
             
             if not password_valid:
                 return jsonify({'success': False, 'message': 'Contraseña actual incorrecta'}), 401
@@ -2119,7 +2555,7 @@ def cambiar_password():
             return jsonify({'success': True, 'message': 'Contraseña actualizada correctamente'})
             
     except Exception as e:
-        print(f"Error en /api/cambiar_password: {str(e)}")
+        logging.error(f"Error en /api/cambiar_password: {str(e)}", exc_info=True)
         return jsonify({'success': False, 'message': 'Error interno del servidor'}), 500
 
 @app.route('/api/logout', methods=['POST'])
@@ -2151,12 +2587,22 @@ def verify_session():
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                raise Exception('No se pudo conectar con DataLakeSCCZ')
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT Id_Usuario, Nombre, Nivel_Permisos, Roles 
-                FROM OB.Usuarios_CZ_hash 
-                WHERE Id_Usuario = ? OR Num_Operario = ?
-            """, (user_id, num_operario))
+
+            if num_operario is not None and str(num_operario).strip().isdigit():
+                cursor.execute("""
+                    SELECT Id_Usuario, Nombre, Nivel_Permisos, Roles 
+                    FROM OB.Usuarios_CZ_hash 
+                    WHERE Id_Usuario = ? OR Num_Operario = ?
+                """, (user_id, int(str(num_operario).strip())))
+            else:
+                cursor.execute("""
+                    SELECT Id_Usuario, Nombre, Nivel_Permisos, Roles 
+                    FROM OB.Usuarios_CZ_hash 
+                    WHERE Id_Usuario = ?
+                """, (user_id,))
             row = cursor.fetchone()
             
             if row:
@@ -2599,7 +3045,7 @@ def get_all_omegas():
             if conn is None:
                 return jsonify({"error": "No se pudo conectar a la base de datos Digitalizacion"}), 500
             cursor = conn.cursor()
-            query = "SELECT OmegaID, Assy, Beam, IF1, IF2, [W/C] FROM OB.Omegas ORDER BY Assy;"
+            query = "SELECT OmegaID, Assy, Beam, IF1, IF2, [W/C], ExtenderVariable FROM OB.Omegas ORDER BY Assy;"
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [column[0] for column in cursor.description]
@@ -2625,7 +3071,7 @@ def update_omega():
     if not data:
         return jsonify({'success': False, 'error': 'No se recibieron datos.'}), 400
 
-    campos_validos = ['Beam', 'IF1', 'IF2', 'W/C']
+    campos_validos = ['Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable']
     set_clauses = []
     params = []
 
@@ -2668,22 +3114,41 @@ def update_omega():
 @cross_origin()
 def bulk_insert_omegas():
     data = request.get_json()
+    print(f"[BULK INSERT] Datos recibidos: {data}")
     if not data or not isinstance(data, list) or not data:
         return jsonify({'success': False, 'error': 'No se recibieron datos válidos.'}), 400
 
     # Solo columnas válidas
-    columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C']
+    columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable']
     values = []
-    for row in data:
-        values.append(tuple(row.get(col) for col in columns))
+    for i, row in enumerate(data):
+        print(f"[BULK INSERT] Fila {i}: {row}")
+        # Construir tupla con valores en el orden correcto
+        # Convertir strings vacíos a None para campos opcionales
+        values_list = []
+        for col in columns:
+            val = row.get(col)
+            # Si es string vacío y no es Assy (requerido), convertir a None
+            if val == '' and col != 'Assy':
+                val = None
+            values_list.append(val)
+        values_tuple = tuple(values_list)
+        print(f"[BULK INSERT] Tupla {i}: {values_tuple}")
+        values.append(values_tuple)
 
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos'}), 500
             cursor = conn.cursor()
-            sql = "INSERT INTO OB.Omegas (Assy, Beam, IF1, IF2, [W/C]) VALUES (?, ?, ?, ?, ?)"
+            sql = "INSERT INTO OB.Omegas (Assy, Beam, IF1, IF2, [W/C], ExtenderVariable) VALUES (?, ?, ?, ?, ?, ?)"
+            print(f"[BULK INSERT] SQL: {sql}")
+            print(f"[BULK INSERT] Values: {values}")
             cursor.executemany(sql, values)
+            print(f"[BULK INSERT] ✅ Insertadas {cursor.rowcount} filas")
         return jsonify({'success': True, 'inserted': len(values)})
     except Exception as e:
+        print(f"[BULK INSERT] ❌ Error: {e}")
         import logging
         logging.error(f'Error en bulk_insert_omegas: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -2734,8 +3199,8 @@ def delete_omega():
 @cross_origin()
 def get_summary_omegas():
     """
-    Endpoint optimizado que usa la vista OB.V_PedidosSummary_Pendientes
-    para obtener todos los pedidos pendientes de secuenciar con todos los campos necesarios.
+    Endpoint optimizado que usa la vista OB.V_PedidosSummary_Pendientes_EX
+    para obtener todos los pedidos pendientes de secuenciar con detección automática de EX y TB.
     """
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -2743,7 +3208,12 @@ def get_summary_omegas():
                 return jsonify({"error": "No se pudo conectar a la base de datos Digitalizacion"}), 500
 
             cursor = conn.cursor()
-            query = "SELECT * FROM OB.V_PedidosSummary_Pendientes"
+            # Query mejorada: agregar columnas EX y TB desde PedidosCabecera
+            query = """
+                SELECT 
+                    vp.*
+                FROM OB.V_PedidosSummary_Pendientes_EX vp
+            """
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
@@ -2757,6 +3227,25 @@ def get_summary_omegas():
                     cwt = item.get('CWT', '') or ''
                     item['Ord'] = f"{beam}_{assy}_{cwt}"
                 results.append(item)
+
+            # [POC] Agregar pedido de prueba hardcodeado para demostración del Extender
+            test_order = {
+                'NumeroPedido': '99999_POC_TEST',
+                'FechaEntrega': '2026-04-16T00:00:00',
+                'Bsark': 'ES1',
+                'UnidadesPedidas': 13,
+                'UniValMapex': 0,
+                'Assy': 'S0PF56225841',
+                'Beam': 'S01SAB973106',
+                'C/W': 'C',
+                'CWT': 'S0PF56225628',
+                'DS': 'S0PF56225650',
+                'EX': 'S0PF51975238',  # ← EX visible aquí
+                'TB': 'S0PF51975239',  # ← TB visible aquí
+                'Pendiente': 1,
+                'Ord': 'S01SAB973106_S0PF56225628_S0PF56225841'
+            }
+            results.append(test_order)
 
             return jsonify(results), 200
 
@@ -2802,7 +3291,7 @@ def sequence_pedido():
         sequence_value = f"{bsark}-{count+1}"
         # Paso C: Guardar estado
         cursor_dig.execute(
-            "INSERT INTO OB.PedidosSecuenciados (NumeroPedido, Assy, SequenceValue, OFs) VALUES (?, ?, ?, ?)",
+            "INSERT INTO OB.PedidosSecuenciados (NumeroPedido, Assy, SequenceValue, OFs, AssignedStock, AssignedStockBeam) VALUES (?, ?, ?, ?, 0, 0)",
             (numero_pedido, assy, sequence_value, ofs_str)
         )
         conn_dig.commit()
@@ -3068,23 +3557,1158 @@ def get_faltantes_batch():
 
 
 # ====================================================================================
+# ENDPOINT DE IMPORTACIÓN DE PEDIDOS DESDE ARCHIVOS
+# ====================================================================================
+@app.route('/api/importar-pedidos', methods=['POST'])
+@cross_origin()
+def importar_pedidos():
+    """
+    Endpoint para importar pedidos desde archivos CSV o Excel.
+    SOLO guarda líneas relevantes:
+    - GRP_HSK_TYPE = 'LH' (línea del tipo de ensamblaje LH)
+    - GRP_OMEGA_BRACKET_TYPE_TSD con su valor (línea del bracket type)
+    
+    El resto de características se ignoran.
+    """
+    try:
+        logging.info("[IMPORTAR-PEDIDOS] === INICIANDO IMPORTACIÓN v2 ===")
+        
+        # Validar que hay archivo
+        if 'archivo' not in request.files:
+            logging.error("[IMPORTAR-PEDIDOS] No se envió archivo")
+            return jsonify({'success': False, 'mensaje': 'No se envió archivo'}), 400
+        
+        archivo = request.files['archivo']
+        logging.info(f"[IMPORTAR-PEDIDOS] Archivo recibido: {archivo.filename}")
+        
+        if archivo.filename == '':
+            logging.error("[IMPORTAR-PEDIDOS] Archivo vacío")
+            return jsonify({'success': False, 'mensaje': 'Archivo vacío'}), 400
+        
+        # Detectar tipo de archivo
+        filename_lower = archivo.filename.lower()
+        es_excel = filename_lower.endswith(('.xlsx', '.xls'))
+        es_csv = filename_lower.endswith('.csv')
+        
+        logging.info(f"[IMPORTAR-PEDIDOS] Es Excel: {es_excel}, Es CSV: {es_csv}")
+        
+        if not (es_excel or es_csv):
+            logging.error(f"[IMPORTAR-PEDIDOS] Formato no soportado: {filename_lower}")
+            return jsonify({'success': False, 'mensaje': 'Formato no soportado. Use Excel (.xlsx) o CSV'}), 400
+        
+        encabezados_requeridos = ['Sales document', 'Material', 'Characteristic Name', 'Characteristic Value']
+        aliases_columnas = {
+            'Sales document': ['sales document', 'salesdocument', 'doc.vtas', 'doc vtas', 'docventas', 'documento venta', 'documento de venta', 'pedido', 'numero pedido', 'numero de pedido', 'numeropedido'],
+            'Material': ['material', 'codigo material', 'cod material', 'codigo', 'cod_producto', 'cod producto', 'assy'],
+            'Characteristic Name': ['characteristic name', 'characteristicname', 'nombre caracteristica', 'nombre de caracteristica', 'caracteristica', 'characteristic', 'nombre característica', 'nombre de característica'],
+            'Characteristic Value': ['characteristic value', 'characteristicvalue', 'valor caracteristica', 'valor de caracteristica', 'valor', 'valor característica', 'valor de característica']
+        }
+        registros_insertados = 0
+        errores = []
+        resumen_por_pedido = {}  # Para contabilizar
+
+        def normalizar_valor(valor):
+            if valor is None:
+                return ''
+            if isinstance(valor, float) and valor.is_integer():
+                return str(int(valor))
+            if isinstance(valor, int):
+                return str(valor)
+            return str(valor).strip()
+
+        def simplificar_encabezado(valor):
+            texto = normalizar_valor(valor).lower()
+            reemplazos = {
+                'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u', 'ñ': 'n'
+            }
+            for origen, destino in reemplazos.items():
+                texto = texto.replace(origen, destino)
+            for caracter in (' ', '.', '_', '-', '/', '\\', ':', ';', ',', '(', ')'):
+                texto = texto.replace(caracter, '')
+            return texto
+
+        def encontrar_columna(encabezados, columna_canonica):
+            aliases_columnas = {
+                'Sales document': ['sales document', 'salesdocument', 'doc.vtas', 'doc vtas', 'docventas', 'documento venta', 'documento de venta', 'pedido', 'numero pedido', 'numero de pedido', 'numeropedido'],
+                'Material': ['material', 'codigo material', 'cod material', 'codigo', 'cod_producto', 'cod producto', 'assy'],
+                'Characteristic Name': ['characteristic name', 'characteristicname', 'nombre caracteristica', 'nombre de caracteristica', 'caracteristica', 'characteristic', 'nombre característica', 'nombre de característica'],
+                'Characteristic Value': ['characteristic value', 'characteristicvalue', 'valor caracteristica', 'valor de caracteristica', 'valor', 'valor característica', 'valor de característica']
+            }
+            
+            candidatos = [simplificar_encabezado(columna_canonica)]
+            candidatos.extend(simplificar_encabezado(alias) for alias in aliases_columnas.get(columna_canonica, []))
+
+            for idx, encabezado in enumerate(encabezados):
+                encabezado_simple = simplificar_encabezado(encabezado)
+                if not encabezado_simple:
+                    continue
+                if encabezado_simple in candidatos or any(candidato in encabezado_simple or encabezado_simple in candidato for candidato in candidatos):
+                    return idx
+            return None
+
+        def obtener_indices_columnas(encabezados):
+            encabezados_normalizados = [normalizar_valor(h) for h in encabezados]
+            idx_sales = encontrar_columna(encabezados_normalizados, 'Sales document')
+            idx_material = encontrar_columna(encabezados_normalizados, 'Material')
+            idx_characteristic = encontrar_columna(encabezados_normalizados, 'Characteristic Name')
+            idx_value = encontrar_columna(encabezados_normalizados, 'Characteristic Value')
+
+            faltantes = []
+            if idx_sales is None:
+                faltantes.append('Sales document')
+            if idx_material is None:
+                faltantes.append('Material')
+            if idx_characteristic is None:
+                faltantes.append('Characteristic Name')
+            if idx_value is None:
+                faltantes.append('Characteristic Value')
+
+            if faltantes:
+                raise ValueError(
+                    'Columnas incorrectas o incompletas. Faltan: '
+                    + ', '.join(faltantes)
+                    + '. Se aceptan nombres equivalentes en ingles o espanol.'
+                )
+
+            return (idx_sales, idx_material, idx_characteristic, idx_value)
+
+        def es_caracteristica_relevante(characteristic_name, characteristic_value):
+            """
+            Determina si una característica es relevante para guardar.
+            SOLO GUARDA:
+            - GRP_HSK_TYPE = 'LH'
+            - GRP_OMEGA_BRACKET_TYPE_TSD con cualquier valor
+            """
+            char_upper = normalizar_valor(characteristic_name).upper()
+            
+            # Relevante 1: GRP_HSK_TYPE = LH
+            if char_upper == 'GRP_HSK_TYPE' and normalizar_valor(characteristic_value).upper() == 'LH':
+                return True, 'GRP_HSK_TYPE=LH'
+            
+            # Relevante 2: GRP_OMEGA_BRACKET_TYPE_TSD con valor
+            if char_upper == 'GRP_OMEGA_BRACKET_TYPE_TSD' and normalizar_valor(characteristic_value):
+                return True, 'GRP_OMEGA_BRACKET_TYPE_TSD'
+            
+            # No relevante
+            return False, None
+
+        def insertar_registro(cursor, sales_doc, material, characteristic, value):
+            cursor.execute("""
+                INSERT INTO [OB].[pedidos_exportados] (
+                    sales_document,
+                    material,
+                    characteristic_name,
+                    characteristic_value
+                ) VALUES (?, ?, ?, ?)
+            """, (sales_doc, material, characteristic, value))
+
+        def procesar_filas(cursor, filas, indices, origen):
+            nonlocal registros_insertados
+
+            idx_sales, idx_material, idx_characteristic, idx_value = indices
+
+            for idx_fila, fila in enumerate(filas, start=2):
+                fila_lista = list(fila) if fila is not None else []
+
+                if not fila_lista or not any(normalizar_valor(cell) for cell in fila_lista):
+                    logging.debug(f"[IMPORTAR-PEDIDOS] {origen} fila {idx_fila} vacía, saltando")
+                    continue
+
+                try:
+                    if len(fila_lista) < max(idx_sales, idx_material, idx_characteristic, idx_value) + 1:
+                        msg = f"Fila {idx_fila}: Estructura incompleta"
+                        logging.warning(f"[IMPORTAR-PEDIDOS] {msg}")
+                        errores.append(msg)
+                        continue
+
+                    sales_doc = normalizar_valor(fila_lista[idx_sales])
+                    material = normalizar_valor(fila_lista[idx_material])
+                    characteristic = normalizar_valor(fila_lista[idx_characteristic])
+                    value = normalizar_valor(fila_lista[idx_value])
+
+                    if not sales_doc or not material or not characteristic:
+                        msg = f"Fila {idx_fila}: Faltan campos obligatorios"
+                        logging.warning(f"[IMPORTAR-PEDIDOS] {msg}")
+                        errores.append(msg)
+                        continue
+
+                    # ANÁLISIS: ¿Es esta característica relevante?
+                    es_relevante, tipo_relevancia = es_caracteristica_relevante(characteristic, value)
+
+                    if not es_relevante:
+                        logging.debug(
+                            f"[IMPORTAR-PEDIDOS] {origen} fila {idx_fila} IGNORADA (no es relevante): "
+                            f"{sales_doc} | {material} | {characteristic} | {value}"
+                        )
+                        continue
+
+                    # GUARDADO: Solo guarda si es relevante
+                    insertar_registro(cursor, sales_doc, material, characteristic, value)
+                    registros_insertados += 1
+
+                    # Contabilizar por pedido
+                    clave_pedido = (sales_doc, material)
+                    if clave_pedido not in resumen_por_pedido:
+                        resumen_por_pedido[clave_pedido] = {'lh': False, 'bracket': False}
+                    
+                    if tipo_relevancia == 'GRP_HSK_TYPE=LH':
+                        resumen_por_pedido[clave_pedido]['lh'] = True
+                    elif tipo_relevancia == 'GRP_OMEGA_BRACKET_TYPE_TSD':
+                        resumen_por_pedido[clave_pedido]['bracket'] = True
+
+                    logging.info(
+                        f"[IMPORTAR-PEDIDOS] {origen} fila {idx_fila} GUARDADA ({tipo_relevancia}): "
+                        f"{sales_doc} | {material} | {characteristic} = {value}"
+                    )
+
+                except Exception as e:
+                    msg = f"Fila {idx_fila}: {str(e)}"
+                    logging.error(f"[IMPORTAR-PEDIDOS] {msg}")
+                    errores.append(msg)
+
+        try:
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+                cursor = conn.cursor()
+
+                if es_excel:
+                    logging.info("[IMPORTAR-PEDIDOS] Procesando archivo Excel...")
+                    try:
+                        from openpyxl import load_workbook
+                        import tempfile
+                        import os
+
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                            archivo.save(tmp.name)
+                            temp_path = tmp.name
+
+                        logging.info(f"[IMPORTAR-PEDIDOS] Archivo temporal guardado en: {temp_path}")
+
+                        try:
+                            wb = load_workbook(temp_path, data_only=True)
+                            ws = wb.active
+                            encabezados = [cell.value for cell in ws[1]]
+                            logging.info(f"[IMPORTAR-PEDIDOS] Encabezados Excel: {encabezados}")
+
+                            indices = obtener_indices_columnas(encabezados)
+                            procesar_filas(cursor, ws.iter_rows(min_row=2, values_only=True), indices, 'Excel')
+
+                        finally:
+                            try:
+                                os.unlink(temp_path)
+                                logging.info("[IMPORTAR-PEDIDOS] Archivo temporal eliminado")
+                            except Exception as e:
+                                logging.error(f"[IMPORTAR-PEDIDOS] Error al eliminar archivo temporal: {str(e)}")
+
+                    except ImportError as e:
+                        logging.error(f"[IMPORTAR-PEDIDOS] openpyxl no instalado: {str(e)}")
+                        return jsonify({
+                            'success': False,
+                            'mensaje': 'Librería openpyxl no instalada. Instale con: pip install openpyxl'
+                        }), 500
+
+                else:
+                    logging.info("[IMPORTAR-PEDIDOS] Procesando archivo CSV...")
+                    import csv
+                    import io
+
+                    contenido_bytes = archivo.read()
+                    contenido = None
+                    for encoding in ('utf-8-sig', 'utf-8', 'latin-1'):
+                        try:
+                            contenido = contenido_bytes.decode(encoding)
+                            logging.info(f"[IMPORTAR-PEDIDOS] CSV decodificado con {encoding}")
+                            break
+                        except UnicodeDecodeError:
+                            continue
+
+                    if contenido is None:
+                        raise ValueError('No se pudo decodificar el archivo CSV')
+
+                    sample = contenido[:2048]
+                    try:
+                        dialect = csv.Sniffer().sniff(sample, delimiters=',;\t|')
+                    except csv.Error:
+                        dialect = csv.excel
+
+                    reader = csv.reader(io.StringIO(contenido), dialect)
+
+                    try:
+                        encabezados = next(reader)
+                    except StopIteration:
+                        return jsonify({
+                            'success': False,
+                            'mensaje': 'El archivo CSV está vacío.'
+                        }), 400
+
+                    logging.info(f"[IMPORTAR-PEDIDOS] Encabezados CSV: {encabezados}")
+                    indices = obtener_indices_columnas(encabezados)
+                    procesar_filas(cursor, reader, indices, 'CSV')
+
+                # Confirmar transacción
+                logging.info(
+                    f"[IMPORTAR-PEDIDOS] Confirmando transacción... Registros guardados: {registros_insertados}"
+                )
+                conn.commit()
+                logging.info("[IMPORTAR-PEDIDOS] Transacción confirmada exitosamente")
+
+        except ValueError as e:
+            logging.error(f"[IMPORTAR-PEDIDOS] Validación fallida: {str(e)}")
+            return jsonify({
+                'success': False,
+                'mensaje': str(e)
+            }), 400
+        except Exception as e:
+            logging.error(f"[IMPORTAR-PEDIDOS] Error en BD: {str(e)}", exc_info=True)
+            return jsonify({
+                'success': False,
+                'mensaje': f'Error en la base de datos: {str(e)}'
+            }), 500
+        
+        # Validar que se insertó algo
+        if registros_insertados == 0:
+            logging.warning("[IMPORTAR-PEDIDOS] No se insertaron registros relevantes")
+            return jsonify({
+                'success': False,
+                'mensaje': 'No se insertaron registros. Verifica que el archivo contenga características GRP_HSK_TYPE=LH o GRP_OMEGA_BRACKET_TYPE_TSD.',
+                'errores': errores
+            }), 400
+        
+        # Contar resumen
+        pedidos_lh = sum(1 for datos in resumen_por_pedido.values() if datos['lh'])
+        pedidos_bracket = sum(1 for datos in resumen_por_pedido.values() if datos['bracket'])
+
+        # Respuesta exitosa
+        respuesta = {
+            'success': True,
+            'mensaje': (
+                f'Importación completada: {registros_insertados} registros guardados. '
+                f'Pedidos con GRP_HSK_TYPE=LH: {pedidos_lh}. '
+                f'Pedidos con GRP_OMEGA_BRACKET_TYPE_TSD: {pedidos_bracket}.'
+            ),
+            'registros_insertados': registros_insertados,
+            'pedidos_lh': pedidos_lh,
+            'pedidos_bracket': pedidos_bracket,
+            'errores': errores if errores else None
+        }
+        
+        logging.info(f"[IMPORTAR-PEDIDOS] === IMPORTACIÓN v2 COMPLETADA === Registros: {registros_insertados}, Errores: {len(errores)}")
+        
+        return jsonify(respuesta), 200
+    
+    except Exception as e:
+        logging.error(f"[IMPORTAR-PEDIDOS] Error inesperado: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error inesperado: {str(e)}'
+        }), 500
+
+
+@app.route('/api/exportar-ex', methods=['POST'])
+@cross_origin()
+def exportar_ex():
+    """
+    Endpoint para procesar extensores (EX y TB) desde archivos CSV o Excel.
+    Lee Material column, busca en OB.Omegas con W/C='EX' o W/C='TB', y actualiza PedidosCabecera.
+    Columnas esperadas:
+    - Doc.vtas (NumeroPedido)
+    - Material (Código a buscar como EX o TB)
+    - Resto de columnas son opcionales (solo referencia)
+    """
+    try:
+        logging.info("[EXPORTAR-EX-TB] === INICIANDO EXPORTACIÓN DE EXTENSORES (EX/TB) ===")
+        
+        # Validar archivo
+        if 'archivo' not in request.files:
+            logging.error("[EXPORTAR-EX-TB] No se envió archivo")
+            return jsonify({'success': False, 'mensaje': 'No se envió archivo'}), 400
+        
+        archivo = request.files['archivo']
+        logging.info(f"[EXPORTAR-EX-TB] Archivo recibido: {archivo.filename}")
+        
+        if archivo.filename == '':
+            logging.error("[EXPORTAR-EX-TB] Archivo vacío")
+            return jsonify({'success': False, 'mensaje': 'Archivo vacío'}), 400
+        
+        # Detectar tipo de archivo
+        filename_lower = archivo.filename.lower()
+        es_excel = filename_lower.endswith(('.xlsx', '.xls'))
+        es_csv = filename_lower.endswith('.csv')
+        
+        logging.info(f"[EXPORTAR-EX-TB] Es Excel: {es_excel}, Es CSV: {es_csv}")
+        
+        if not (es_excel or es_csv):
+            logging.error(f"[EXPORTAR-EX-TB] Formato no soportado: {filename_lower}")
+            return jsonify({'success': False, 'mensaje': 'Formato no soportado. Use Excel (.xlsx) o CSV'}), 400
+        
+        procesadas = 0
+        actualizado_ex = 0
+        actualizado_tb = 0
+        errores = []
+        
+        try:
+            # Leer archivo
+            if es_excel:
+                logging.info("[EXPORTAR-EX-TB] Procesando archivo Excel...")
+                try:
+                    from openpyxl import load_workbook
+                    import tempfile
+                    import os
+                    
+                    # Guardar archivo temporal
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                        archivo.save(tmp.name)
+                        temp_path = tmp.name
+                    
+                    logging.info(f"[EXPORTAR-EX-TB] Archivo temporal guardado en: {temp_path}")
+                    
+                    try:
+                        # Cargar Excel
+                        wb = load_workbook(temp_path)
+                        ws = wb.active
+                        logging.info(f"[EXPORTAR-EX-TB] Excel cargado. Hoja activa: {ws.title}")
+                        
+                        # Leer encabezados
+                        encabezados = [cell.value for cell in ws[1]]
+                        logging.info(f"[EXPORTAR-EX-TB] Encabezados leídos RAW: {encabezados}")
+                        
+                        encabezados_normalizados = [str(h).strip() if h else '' for h in encabezados]
+                        logging.info(f"[EXPORTAR-EX-TB] Encabezados normalizados: {encabezados_normalizados}")
+                        
+                        # Función para encontrar columna flexible
+                        def encontrar_columna(encabezados, patrones):
+                            """Busca una columna con flexibilidad de nombres"""
+                            for idx, encab in enumerate(encabezados):
+                                encab_lower = str(encab).lower().replace(' ', '').replace('.', '').replace('_', '')
+                                for patron in patrones:
+                                    patron_lower = patron.lower().replace(' ', '').replace('.', '').replace('_', '')
+                                    if patron_lower in encab_lower or encab_lower in patron_lower:
+                                        return idx
+                            return None
+                        
+                        # Buscar columnas con flexibilidad
+                        idx_doc_vtas = encontrar_columna(encabezados_normalizados, ['Doc.vtas', 'Doc vtas', 'Docventas', 'Documento venta', 'Sales document', 'Numeropedido'])
+                        idx_material = encontrar_columna(encabezados_normalizados, ['Material', 'Assy', 'Codigo', 'Code'])
+                        
+                        logging.info(f"[EXPORTAR-EX-TB] Índices detectados: Doc.vtas={idx_doc_vtas}, Material={idx_material}")
+                        
+                        # Si no encuentra, intentar posiciones por defecto (primera y segunda columna)
+                        if idx_doc_vtas is None:
+                            idx_doc_vtas = 0
+                            logging.warning(f"[EXPORTAR-EX-TB] Doc.vtas no encontrado, usando columna 0 (primera columna)")
+                        if idx_material is None:
+                            idx_material = 1
+                            logging.warning(f"[EXPORTAR-EX-TB] Material no encontrado, usando columna 1 (segunda columna)")
+                        
+                        logging.info(f"[EXPORTAR-EX-TB] Usando índices finales: Doc.vtas={idx_doc_vtas} ({encabezados_normalizados[idx_doc_vtas] if idx_doc_vtas < len(encabezados_normalizados) else 'N/A'}), Material={idx_material} ({encabezados_normalizados[idx_material] if idx_material < len(encabezados_normalizados) else 'N/A'})")
+                        
+                        # Conectar a BD
+                        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+                            cursor = conn.cursor()
+                            cursor_check = conn.cursor()
+                            logging.info("[EXPORTAR-EX-TB] Conexión a BD establecida")
+                            
+                            # Procesar filas desde la 2 en adelante
+                            for idx_fila, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                                # Saltar filas vacías
+                                if not row or not any(cell for cell in row):
+                                    logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila} vacía, saltando")
+                                    continue
+                                
+                                try:
+                                    # Validar estructura mínima
+                                    if len(row) < max(idx_doc_vtas, idx_material) + 1:
+                                        msg = f"Fila {idx_fila}: Estructura incompleta (tiene {len(row)} columnas, se necesitan {max(idx_doc_vtas, idx_material) + 1})"
+                                        logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                        errores.append(msg)
+                                        procesadas += 1
+                                        continue
+                                    
+                                    # Extraer datos
+                                    doc_vtas_raw = row[idx_doc_vtas]
+                                    material_raw = row[idx_material]
+                                    
+                                    # Conversión segura: manejar números que vienen como float
+                                    if isinstance(doc_vtas_raw, (int, float)):
+                                        doc_vtas = str(int(doc_vtas_raw)).strip()
+                                    else:
+                                        doc_vtas = str(doc_vtas_raw).strip() if doc_vtas_raw else ''
+                                    
+                                    if isinstance(material_raw, (int, float)):
+                                        material = str(int(material_raw)).strip()
+                                    else:
+                                        material = str(material_raw).strip() if material_raw else ''
+                                    
+                                    # Log detallado para DEBUG: mostrar longitud y caracteres
+                                    logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila}: Doc.vtas={doc_vtas}, Material={material}")
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: Material RAW - length={len(material)}, repr={repr(material)}, tipo={type(material_raw).__name__}")
+                                    
+                                    # VALIDACIÓN PREVIA: Verificar que el NumeroPedido existe en PedidosCabecera
+                                    cursor_check.execute("""
+                                        SELECT NumeroPedido FROM [OB].[PedidosCabecera]
+                                        WHERE NumeroPedido = ?
+                                    """, (doc_vtas,))
+                                    
+                                    pedido_existe = cursor_check.fetchone()
+                                    if not pedido_existe:
+                                        msg = f"Fila {idx_fila}: NumeroPedido='{doc_vtas}' NO existe en PedidosCabecera"
+                                        logging.error(f"[EXPORTAR-EX-TB] {msg}")
+                                        errores.append(msg)
+                                        procesadas += 1
+                                        continue
+                                    
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: ✅ NumeroPedido='{doc_vtas}' EXISTE en PedidosCabecera")
+                                    
+                                    # Validar obligatorios
+                                    if not doc_vtas or not material:
+                                        msg = f"Fila {idx_fila}: Faltan Doc.vtas ({doc_vtas}) o Material ({material})"
+                                        logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                        errores.append(msg)
+                                        procesadas += 1
+                                        continue
+                                    
+                                    # BÚSQUEDA 1: Verificar si existe como EX
+                                    logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila}: Buscando Material='{material}' con W/C='EX'")
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: BÚSQUEDA EX - Parámetro: repr={repr(material)}, length={len(material)}")
+                                    cursor_check.execute("""
+                                        SELECT Assy FROM [OB].[Omegas]
+                                        WHERE Assy = ? AND LTRIM(RTRIM([W/C])) = 'EX'
+                                    """, (material,))
+                                    
+                                    result_ex = cursor_check.fetchone()
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: Búsqueda EX - Material='{material}' -> Encontrado: {result_ex is not None}")
+                                    
+                                    if result_ex:
+                                        logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: 🔍 Material '{material}' encontrado en OB.Omegas con W/C='EX'")
+                                        cursor.execute("""
+                                            UPDATE [OB].[PedidosCabecera]
+                                            SET EX = ?
+                                            WHERE NumeroPedido = ?
+                                        """, (material, doc_vtas))
+                                        
+                                        if cursor.rowcount > 0:
+                                            actualizado_ex += 1
+                                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: ✅ ÉXITO - PedidosCabecera.{doc_vtas} actualizado con EX='{material}'")
+                                        else:
+                                            logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila}: ⚠️  UPDATE no afectó filas para EX (¿NumeroPedido={doc_vtas} existe en PedidosCabecera?)")
+                                    else:
+                                        logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila}: Material '{material}' NO encontrado como EX en OB.Omegas")
+                                    
+                                    # BÚSQUEDA 2: Verificar si existe como TB
+                                    cursor_check.execute("""
+                                        SELECT Assy FROM [OB].[Omegas]
+                                        WHERE Assy = ? AND LTRIM(RTRIM([W/C])) = 'TB'
+                                    """, (material,))
+                                    
+                                    result_tb = cursor_check.fetchone()
+                                    
+                                    if result_tb:
+                                        cursor.execute("""
+                                            UPDATE [OB].[PedidosCabecera]
+                                            SET TB = ?
+                                            WHERE NumeroPedido = ?
+                                        """, (material, doc_vtas))
+                                        
+                                        if cursor.rowcount > 0:
+                                            actualizado_tb += 1
+                                            logging.info(f"[TB] Encontrado: {material}")
+                                            logging.info(f"[TB] Pedido {doc_vtas} actualizado")
+                                    
+                                    # Si no encontró ni EX ni TB
+                                    if not result_ex and not result_tb:
+                                        msg = f"Fila {idx_fila}: Material '{material}' no encontrado en OB.Omegas como EX ni TB"
+                                        logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                        errores.append(msg)
+                                    else:
+                                        logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila}: ✅ Material '{material}' procesado correctamente")
+                                    
+                                    procesadas += 1
+                                    
+                                except Exception as e:
+                                    msg = f"Fila {idx_fila}: {str(e)}"
+                                    logging.error(f"[EXPORTAR-EX-TB] {msg}", exc_info=True)
+                                    errores.append(msg)
+                                    procesadas += 1
+                                    continue
+                            
+                            logging.info(f"[EXPORTAR-EX-TB] Confirmando transacción... Procesadas: {procesadas}, Actualizadas EX: {actualizado_ex}, Actualizadas TB: {actualizado_tb}")
+                            conn.commit()
+                            logging.info("[EXPORTAR-EX-TB] Transacción confirmada exitosamente")
+                    
+                    finally:
+                        # Limpiar archivo temporal
+                        try:
+                            os.unlink(temp_path)
+                            logging.info("[EXPORTAR-EX-TB] Archivo temporal eliminado")
+                        except Exception as e:
+                            logging.error(f"[EXPORTAR-EX-TB] Error al eliminar archivo temporal: {str(e)}")
+                
+                except ImportError as e:
+                    logging.error(f"[EXPORTAR-EX-TB] openpyxl no instalado: {str(e)}")
+                    return jsonify({
+                        'success': False,
+                        'mensaje': 'Librería openpyxl no instalada'
+                    }), 500
+            
+            else:
+                # Procesar CSV
+                logging.info("[EXPORTAR-EX-TB] Procesando archivo CSV...")
+                import csv
+                import io
+                
+                contenido = archivo.read().decode('utf-8')
+                logging.info(f"[EXPORTAR-EX-TB] Contenido CSV leído, primeros 200 caracteres: {contenido[:200]}")
+                
+                reader = csv.reader(io.StringIO(contenido))
+                
+                # Leer encabezados
+                encabezados = next(reader)
+                encabezados_normalizados = [h.strip() for h in encabezados]
+                
+                logging.info(f"[EXPORTAR-EX-TB] Encabezados CSV RAW: {encabezados}")
+                logging.info(f"[EXPORTAR-EX-TB] Encabezados CSV normalizados: {encabezados_normalizados}")
+                
+                # Función para encontrar columna flexible
+                def encontrar_columna(encabezados, patrones):
+                    """Busca una columna con flexibilidad de nombres"""
+                    for idx, encab in enumerate(encabezados):
+                        encab_lower = str(encab).lower().replace(' ', '').replace('.', '').replace('_', '')
+                        for patron in patrones:
+                            patron_lower = patron.lower().replace(' ', '').replace('.', '').replace('_', '')
+                            if patron_lower in encab_lower or encab_lower in patron_lower:
+                                return idx
+                    return None
+                
+                # Buscar columnas
+                idx_doc_vtas = encontrar_columna(encabezados_normalizados, ['Doc.vtas', 'Doc vtas', 'Docventas', 'Documento venta', 'Sales document', 'Numeropedido'])
+                idx_material = encontrar_columna(encabezados_normalizados, ['Material', 'Assy', 'Codigo', 'Code'])
+                
+                logging.info(f"[EXPORTAR-EX-TB] Índices CSV detectados: Doc.vtas={idx_doc_vtas}, Material={idx_material}")
+                
+                # Si no encuentra, intentar posiciones por defecto
+                if idx_doc_vtas is None:
+                    idx_doc_vtas = 0
+                    logging.warning(f"[EXPORTAR-EX-TB] Doc.vtas no encontrado en CSV, usando columna 0")
+                if idx_material is None:
+                    idx_material = 1
+                    logging.warning(f"[EXPORTAR-EX-TB] Material no encontrado en CSV, usando columna 1")
+                
+                logging.info(f"[EXPORTAR-EX-TB] Usando índices finales CSV: Doc.vtas={idx_doc_vtas} ({encabezados_normalizados[idx_doc_vtas] if idx_doc_vtas < len(encabezados_normalizados) else 'N/A'}), Material={idx_material} ({encabezados_normalizados[idx_material] if idx_material < len(encabezados_normalizados) else 'N/A'})")
+                
+                # Conectar a BD
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+                    cursor = conn.cursor()
+                    cursor_check = conn.cursor()
+                    logging.info("[EXPORTAR-EX-TB] Conexión a BD establecida (CSV)")
+                    
+                    for idx_fila, fila in enumerate(reader, start=2):
+                        if not fila or not any(cell.strip() for cell in fila):
+                            logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila} vacía, saltando")
+                            continue
+                        
+                        try:
+                            # Validar estructura mínima
+                            if len(fila) < max(idx_doc_vtas, idx_material) + 1:
+                                msg = f"Fila {idx_fila}: Estructura incompleta"
+                                logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                errores.append(msg)
+                                procesadas += 1
+                                continue
+                            
+                            doc_vtas = fila[idx_doc_vtas].strip()
+                            material = fila[idx_material].strip()
+                            
+                            # Conversión segura para CSV también (aunque CSV siempre viene como string)
+                            doc_vtas = str(doc_vtas).strip() if doc_vtas else ''
+                            material = str(material).strip() if material else ''
+                            
+                            logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Doc.vtas={doc_vtas}, Material={material}")
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Material RAW - length={len(material)}, repr={repr(material)}")
+                            
+                            # VALIDACIÓN PREVIA: Verificar que el NumeroPedido existe en PedidosCabecera
+                            cursor_check.execute("""
+                                SELECT NumeroPedido FROM [OB].[PedidosCabecera]
+                                WHERE NumeroPedido = ?
+                            """, (doc_vtas,))
+                            
+                            pedido_existe = cursor_check.fetchone()
+                            if not pedido_existe:
+                                msg = f"Fila {idx_fila} CSV: NumeroPedido='{doc_vtas}' NO existe en PedidosCabecera"
+                                logging.error(f"[EXPORTAR-EX-TB] {msg}")
+                                errores.append(msg)
+                                procesadas += 1
+                                continue
+                            
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ✅ NumeroPedido='{doc_vtas}' EXISTE en PedidosCabecera")
+                            
+                            if not doc_vtas or not material:
+                                msg = f"Fila {idx_fila}: Faltan Doc.vtas o Material"
+                                logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                errores.append(msg)
+                                procesadas += 1
+                                continue
+                            
+                            # BÚSQUEDA 1: Verificar si existe como EX
+                            logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Buscando Material='{material}' con W/C='EX'")
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: BÚSQUEDA EX - Parámetro: repr={repr(material)}, length={len(material)}")
+                            cursor_check.execute("""
+                                SELECT Assy FROM [OB].[Omegas]
+                                WHERE Assy = ? AND LTRIM(RTRIM([W/C])) = 'EX'
+                            """, (material,))
+                            
+                            result_ex = cursor_check.fetchone()
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Búsqueda EX - Material='{material}' -> Encontrado: {result_ex is not None}")
+                            
+                            if result_ex:
+                                logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: 🔍 Material '{material}' encontrado con W/C='EX'")
+                                cursor.execute("""
+                                    UPDATE [OB].[PedidosCabecera]
+                                    SET EX = ?
+                                    WHERE NumeroPedido = ?
+                                """, (material, doc_vtas))
+                                
+                                if cursor.rowcount > 0:
+                                    actualizado_ex += 1
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ✅ ÉXITO - Actualizado EX='{material}'")
+                                else:
+                                    logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ⚠️  UPDATE no afectó filas para EX (¿NumeroPedido={doc_vtas} existe en PedidosCabecera?)")
+                            else:
+                                logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Material '{material}' NO encontrado como EX en OB.Omegas")
+                            
+                            # BÚSQUEDA 2: Verificar si existe como TB
+                            logging.debug(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Buscando Material='{material}' con W/C='TB'")
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: BÚSQUEDA TB - Parámetro: repr={repr(material)}, length={len(material)}")
+                            cursor_check.execute("""
+                                SELECT Assy FROM [OB].[Omegas]
+                                WHERE Assy = ? AND LTRIM(RTRIM([W/C])) = 'TB'
+                            """, (material,))
+                            
+                            result_tb = cursor_check.fetchone()
+                            logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Búsqueda TB - Material='{material}' -> Encontrado: {result_tb is not None}")
+                            
+                            if result_tb:
+                                logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: 🔍 Material '{material}' encontrado con W/C='TB'")
+                                cursor.execute("""
+                                    UPDATE [OB].[PedidosCabecera]
+                                    SET TB = ?
+                                    WHERE NumeroPedido = ?
+                                """, (material, doc_vtas))
+                                
+                                if cursor.rowcount > 0:
+                                    actualizado_tb += 1
+                                    logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ✅ ÉXITO - Actualizado TB='{material}'")
+                                else:
+                                    logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ⚠️  UPDATE no afectó filas para TB (¿NumeroPedido={doc_vtas} existe en PedidosCabecera?)")
+                            else:
+                                logging.warning(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: Material '{material}' NO encontrado como TB en OB.Omegas")
+                            
+                            # Si no encontró ni EX ni TB
+                            if not result_ex and not result_tb:
+                                msg = f"Fila {idx_fila}: Material '{material}' no encontrado como EX ni TB"
+                                logging.warning(f"[EXPORTAR-EX-TB] {msg}")
+                                errores.append(msg)
+                            else:
+                                logging.info(f"[EXPORTAR-EX-TB] Fila {idx_fila} CSV: ✅ Material '{material}' procesado correctamente")
+                            
+                            procesadas += 1
+                        
+                        except Exception as e:
+                            msg = f"Fila {idx_fila}: {str(e)}"
+                            logging.error(f"[EXPORTAR-EX-TB] {msg}", exc_info=True)
+                            errores.append(msg)
+                            procesadas += 1
+                            continue
+                    
+                    logging.info(f"[EXPORTAR-EX-TB] Confirmando transacción CSV... Procesadas: {procesadas}, EX: {actualizado_ex}, TB: {actualizado_tb}")
+                    conn.commit()
+                    logging.info("[EXPORTAR-EX-TB] Transacción CSV confirmada")
+        
+        except Exception as e:
+            logging.error(f"[EXPORTAR-EX-TB] Error en BD: {str(e)}", exc_info=True)
+            return jsonify({
+                'success': False,
+                'mensaje': f'Error en la base de datos: {str(e)}'
+            }), 500
+        
+        # Respuesta
+        respuesta = {
+            'success': True,
+            'procesadas': procesadas,
+            'actualizado_ex': actualizado_ex,
+            'actualizado_tb': actualizado_tb,
+            'errores': errores if errores else []
+        }
+        
+        logging.info(f"[EXPORTAR-EX-TB] === EXPORTACIÓN COMPLETADA === Procesadas: {procesadas}, EX: {actualizado_ex}, TB: {actualizado_tb}, Errores: {len(errores)}")
+        
+        return jsonify(respuesta), 200
+    
+    except Exception as e:
+        logging.error(f"[EXPORTAR-EX-TB] Error inesperado: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error inesperado: {str(e)}'
+        }), 500
+    """
+    Endpoint para procesar extensores (EX) desde archivos CSV o Excel.
+    Lee Material column, busca en OB.Omegas con W/C='EX', y actualiza PedidosCabecera.
+    Columnas esperadas:
+    - Doc.vtas (NumeroPedido)
+    - Material (Código a buscar como EX)
+    - Resto de columnas son opcionales (solo referencia)
+    """
+    try:
+        logging.info("[EXPORTAR-EX] === INICIANDO EXPORTACIÓN DE EXTENSORES ===")
+        
+        # Validar archivo
+        if 'archivo' not in request.files:
+            logging.error("[EXPORTAR-EX] No se envió archivo")
+            return jsonify({'success': False, 'mensaje': 'No se envió archivo'}), 400
+        
+        archivo = request.files['archivo']
+        logging.info(f"[EXPORTAR-EX] Archivo recibido: {archivo.filename}")
+        
+        if archivo.filename == '':
+            logging.error("[EXPORTAR-EX] Archivo vacío")
+            return jsonify({'success': False, 'mensaje': 'Archivo vacío'}), 400
+        
+        # Detectar tipo de archivo
+        filename_lower = archivo.filename.lower()
+        es_excel = filename_lower.endswith(('.xlsx', '.xls'))
+        es_csv = filename_lower.endswith('.csv')
+        
+        logging.info(f"[EXPORTAR-EX] Es Excel: {es_excel}, Es CSV: {es_csv}")
+        
+        if not (es_excel or es_csv):
+            logging.error(f"[EXPORTAR-EX] Formato no soportado: {filename_lower}")
+            return jsonify({'success': False, 'mensaje': 'Formato no soportado. Use Excel (.xlsx) o CSV'}), 400
+        
+        procesadas = 0
+        actualizado = 0
+        errores = []
+        
+        try:
+            # Leer archivo
+            if es_excel:
+                logging.info("[EXPORTAR-EX] Procesando archivo Excel...")
+                try:
+                    from openpyxl import load_workbook
+                    import tempfile
+                    import os
+                    
+                    # Guardar archivo temporal
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+                        archivo.save(tmp.name)
+                        temp_path = tmp.name
+                    
+                    logging.info(f"[EXPORTAR-EX] Archivo temporal guardado en: {temp_path}")
+                    
+                    try:
+                        # Cargar Excel
+                        wb = load_workbook(temp_path)
+                        ws = wb.active
+                        logging.info(f"[EXPORTAR-EX] Excel cargado. Hoja activa: {ws.title}")
+                        
+                        # Leer encabezados
+                        encabezados = [cell.value for cell in ws[1]]
+                        logging.info(f"[EXPORTAR-EX] Encabezados leídos RAW: {encabezados}")
+                        
+                        encabezados_normalizados = [str(h).strip() if h else '' for h in encabezados]
+                        logging.info(f"[EXPORTAR-EX] Encabezados normalizados: {encabezados_normalizados}")
+                        
+                        # Función para encontrar columna flexible
+                        def encontrar_columna(encabezados, patrones):
+                            """Busca una columna con flexibilidad de nombres"""
+                            for idx, encab in enumerate(encabezados):
+                                encab_lower = str(encab).lower().replace(' ', '').replace('.', '').replace('_', '')
+                                for patron in patrones:
+                                    patron_lower = patron.lower().replace(' ', '').replace('.', '').replace('_', '')
+                                    if patron_lower in encab_lower or encab_lower in patron_lower:
+                                        return idx
+                            return None
+                        
+                        # Buscar columnas con flexibilidad
+                        idx_doc_vtas = encontrar_columna(encabezados_normalizados, ['Doc.vtas', 'Doc vtas', 'Docventas', 'Documento venta', 'Sales document', 'Numeropedido'])
+                        idx_material = encontrar_columna(encabezados_normalizados, ['Material', 'Assy', 'Codigo', 'Code'])
+                        
+                        logging.info(f"[EXPORTAR-EX] Índices detectados: Doc.vtas={idx_doc_vtas}, Material={idx_material}")
+                        
+                        # Si no encuentra, intentar posiciones por defecto (primera y segunda columna)
+                        if idx_doc_vtas is None:
+                            idx_doc_vtas = 0
+                            logging.warning(f"[EXPORTAR-EX] Doc.vtas no encontrado, usando columna 0 (primera columna)")
+                        if idx_material is None:
+                            idx_material = 1
+                            logging.warning(f"[EXPORTAR-EX] Material no encontrado, usando columna 1 (segunda columna)")
+                        
+                        logging.info(f"[EXPORTAR-EX] Usando índices finales: Doc.vtas={idx_doc_vtas} ({encabezados_normalizados[idx_doc_vtas] if idx_doc_vtas < len(encabezados_normalizados) else 'N/A'}), Material={idx_material} ({encabezados_normalizados[idx_material] if idx_material < len(encabezados_normalizados) else 'N/A'})")
+                        
+                        logging.info(f"[EXPORTAR-EX] Índices mapeados: Doc.vtas={idx_doc_vtas}, Material={idx_material}")
+                        
+                        # Conectar a BD
+                        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+                            cursor = conn.cursor()
+                            cursor_check = conn.cursor()
+                            logging.info("[EXPORTAR-EX] Conexión a BD establecida")
+                            
+                            # Procesar filas desde la 2 en adelante
+                            for idx_fila, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                                # Saltar filas vacías
+                                if not row or not any(cell for cell in row):
+                                    logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} vacía, saltando")
+                                    continue
+                                
+                                try:
+                                    # Validar estructura mínima
+                                    if len(row) < max(idx_doc_vtas, idx_material) + 1:
+                                        msg = f"Fila {idx_fila}: Estructura incompleta (tiene {len(row)} columnas, se necesitan {max(idx_doc_vtas, idx_material) + 1})"
+                                        logging.warning(f"[EXPORTAR-EX] {msg}")
+                                        errores.append(msg)
+                                        procesadas += 1
+                                        continue
+                                    
+                                    # Extraer datos
+                                    doc_vtas_raw = row[idx_doc_vtas]
+                                    material_raw = row[idx_material]
+                                    
+                                    doc_vtas = str(doc_vtas_raw).strip() if doc_vtas_raw else ''
+                                    material = str(material_raw).strip() if material_raw else ''
+                                    
+                                    logging.debug(f"[EXPORTAR-EX] Fila {idx_fila}: Doc.vtas_raw={doc_vtas_raw} ({type(doc_vtas_raw).__name__}), Material_raw={material_raw} ({type(material_raw).__name__})")
+                                    logging.debug(f"[EXPORTAR-EX] Fila {idx_fila}: Doc.vtas={doc_vtas}, Material={material}")
+                                    
+                                    # Validar obligatorios
+                                    if not doc_vtas or not material:
+                                        msg = f"Fila {idx_fila}: Faltan Doc.vtas ({doc_vtas}) o Material ({material})"
+                                        logging.warning(f"[EXPORTAR-EX] {msg}")
+                                        errores.append(msg)
+                                        procesadas += 1
+                                        continue
+                                    
+                                    # Verificar si el Material existe en OB.Omegas con W/C='EX'
+                                    logging.debug(f"[EXPORTAR-EX] Fila {idx_fila}: Buscando Material='{material}' en OB.Omegas con W/C='EX'")
+                                    cursor_check.execute("""
+                                        SELECT Assy FROM [OB].[Omegas]
+                                        WHERE Assy = ? AND [W/C] = 'EX'
+                                    """, (material,))
+                                    
+                                    result = cursor_check.fetchone()
+                                    logging.debug(f"[EXPORTAR-EX] Fila {idx_fila}: Resultado búsqueda: {result}")
+                                    
+                                    if result:
+                                        # Material encontrado, actualizar PedidosCabecera
+                                        logging.info(f"[EXPORTAR-EX] Fila {idx_fila}: 🔍 Material '{material}' encontrado en OB.Omegas con W/C='EX'")
+                                        logging.debug(f"[EXPORTAR-EX] Fila {idx_fila}: Ejecutando UPDATE: SET EX='{material}' WHERE NumeroPedido='{doc_vtas}'")
+                                        
+                                        cursor.execute("""
+                                            UPDATE [OB].[PedidosCabecera]
+                                            SET EX = ?
+                                            WHERE NumeroPedido = ?
+                                        """, (material, doc_vtas))
+                                        
+                                        rows_affected = cursor.rowcount
+                                        logging.info(f"[EXPORTAR-EX] Fila {idx_fila}: UPDATE ejecutado, filas afectadas: {rows_affected}")
+                                        
+                                        if rows_affected > 0:
+                                            actualizado += 1
+                                            logging.info(f"[EXPORTAR-EX] Fila {idx_fila}: ✅ ÉXITO - PedidosCabecera.{doc_vtas} actualizado con EX='{material}'")
+                                        else:
+                                            msg = f"Fila {idx_fila}: NumeroPedido '{doc_vtas}' no encontrado en PedidosCabecera"
+                                            logging.warning(f"[EXPORTAR-EX] {msg}")
+                                            errores.append(msg)
+                                    else:
+                                        # Material no encontrado
+                                        msg = f"Fila {idx_fila}: Material '{material}' no encontrado en OB.Omegas con W/C='EX'"
+                                        logging.warning(f"[EXPORTAR-EX] {msg}")
+                                        errores.append(msg)
+                                    
+                                    procesadas += 1
+                                    
+                                except Exception as e:
+                                    msg = f"Fila {idx_fila}: {str(e)}"
+                                    logging.error(f"[EXPORTAR-EX] {msg}", exc_info=True)
+                                    errores.append(msg)
+                                    procesadas += 1
+                                    continue
+                            
+                            logging.info(f"[EXPORTAR-EX] Confirmando transacción... Procesadas: {procesadas}, Actualizadas: {actualizado}")
+                            conn.commit()
+                            logging.info("[EXPORTAR-EX] Transacción confirmada exitosamente")
+                    
+                    finally:
+                        # Limpiar archivo temporal
+                        try:
+                            os.unlink(temp_path)
+                            logging.info("[EXPORTAR-EX] Archivo temporal eliminado")
+                        except Exception as e:
+                            logging.error(f"[EXPORTAR-EX] Error al eliminar archivo temporal: {str(e)}")
+                
+                except ImportError as e:
+                    logging.error(f"[EXPORTAR-EX] openpyxl no instalado: {str(e)}")
+                    return jsonify({
+                        'success': False,
+                        'mensaje': 'Librería openpyxl no instalada'
+                    }), 500
+            
+            else:
+                # Procesar CSV
+                logging.info("[EXPORTAR-EX] Procesando archivo CSV...")
+                import csv
+                import io
+                
+                contenido = archivo.read().decode('utf-8')
+                logging.info(f"[EXPORTAR-EX] Contenido CSV leído, primeros 200 caracteres: {contenido[:200]}")
+                
+                reader = csv.reader(io.StringIO(contenido))
+                
+                # Leer encabezados
+                encabezados = next(reader)
+                encabezados_normalizados = [h.strip() for h in encabezados]
+                
+                logging.info(f"[EXPORTAR-EX] Encabezados CSV RAW: {encabezados}")
+                logging.info(f"[EXPORTAR-EX] Encabezados CSV normalizados: {encabezados_normalizados}")
+                
+                # Función para encontrar columna flexible
+                def encontrar_columna(encabezados, patrones):
+                    """Busca una columna con flexibilidad de nombres"""
+                    for idx, encab in enumerate(encabezados):
+                        encab_lower = str(encab).lower().replace(' ', '').replace('.', '').replace('_', '')
+                        for patron in patrones:
+                            patron_lower = patron.lower().replace(' ', '').replace('.', '').replace('_', '')
+                            if patron_lower in encab_lower or encab_lower in patron_lower:
+                                return idx
+                    return None
+                
+                # Buscar columnas
+                idx_doc_vtas = encontrar_columna(encabezados_normalizados, ['Doc.vtas', 'Doc vtas', 'Docventas', 'Documento venta', 'Sales document', 'Numeropedido'])
+                idx_material = encontrar_columna(encabezados_normalizados, ['Material', 'Assy', 'Codigo', 'Code'])
+                
+                logging.info(f"[EXPORTAR-EX] Índices CSV detectados: Doc.vtas={idx_doc_vtas}, Material={idx_material}")
+                
+                # Si no encuentra, intentar posiciones por defecto
+                if idx_doc_vtas is None:
+                    idx_doc_vtas = 0
+                    logging.warning(f"[EXPORTAR-EX] Doc.vtas no encontrado en CSV, usando columna 0")
+                if idx_material is None:
+                    idx_material = 1
+                    logging.warning(f"[EXPORTAR-EX] Material no encontrado en CSV, usando columna 1")
+                
+                logging.info(f"[EXPORTAR-EX] Usando índices finales CSV: Doc.vtas={idx_doc_vtas} ({encabezados_normalizados[idx_doc_vtas] if idx_doc_vtas < len(encabezados_normalizados) else 'N/A'}), Material={idx_material} ({encabezados_normalizados[idx_material] if idx_material < len(encabezados_normalizados) else 'N/A'})")
+                
+                # Conectar a BD
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+                    cursor = conn.cursor()
+                    cursor_check = conn.cursor()
+                    logging.info("[EXPORTAR-EX] Conexión a BD establecida (CSV)")
+                    
+                    for idx_fila, fila in enumerate(reader, start=2):
+                        if not fila or not any(cell.strip() for cell in fila):
+                            logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} vacía, saltando")
+                            continue
+                        
+                        try:
+                            # Validar estructura mínima
+                            if len(fila) < max(idx_doc_vtas, idx_material) + 1:
+                                msg = f"Fila {idx_fila}: Estructura incompleta (tiene {len(fila)} columnas, se necesitan {max(idx_doc_vtas, idx_material) + 1})"
+                                logging.warning(f"[EXPORTAR-EX] {msg}")
+                                errores.append(msg)
+                                procesadas += 1
+                                continue
+                            
+                            doc_vtas = fila[idx_doc_vtas].strip()
+                            material = fila[idx_material].strip()
+                            
+                            logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} CSV: Doc.vtas={doc_vtas}, Material={material}")
+                            
+                            if not doc_vtas or not material:
+                                msg = f"Fila {idx_fila}: Faltan Doc.vtas ({doc_vtas}) o Material ({material})"
+                                logging.warning(f"[EXPORTAR-EX] {msg}")
+                                errores.append(msg)
+                                procesadas += 1
+                                continue
+                            
+                            # Verificar si el Material existe en OB.Omegas con W/C='EX'
+                            logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} CSV: Buscando Material='{material}' en OB.Omegas")
+                            cursor_check.execute("""
+                                SELECT Assy FROM [OB].[Omegas]
+                                WHERE Assy = ? AND [W/C] = 'EX'
+                            """, (material,))
+                            
+                            result = cursor_check.fetchone()
+                            logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} CSV: Resultado búsqueda: {result}")
+                            
+                            if result:
+                                # Material encontrado, actualizar
+                                logging.info(f"[EXPORTAR-EX] Fila {idx_fila} CSV: 🔍 Material '{material}' encontrado en OB.Omegas con W/C='EX'")
+                                logging.debug(f"[EXPORTAR-EX] Fila {idx_fila} CSV: Ejecutando UPDATE")
+                                
+                                cursor.execute("""
+                                    UPDATE [OB].[PedidosCabecera]
+                                    SET EX = ?
+                                    WHERE NumeroPedido = ?
+                                """, (material, doc_vtas))
+                                
+                                rows_affected = cursor.rowcount
+                                logging.info(f"[EXPORTAR-EX] Fila {idx_fila} CSV: UPDATE ejecutado, filas afectadas: {rows_affected}")
+                                
+                                if rows_affected > 0:
+                                    actualizado += 1
+                                    logging.info(f"[EXPORTAR-EX] Fila {idx_fila} CSV: ✅ ÉXITO - PedidosCabecera.{doc_vtas} actualizado con EX='{material}'")
+                                else:
+                                    msg = f"Fila {idx_fila}: NumeroPedido '{doc_vtas}' no encontrado"
+                                    logging.warning(f"[EXPORTAR-EX] {msg}")
+                                    errores.append(msg)
+                            else:
+                                msg = f"Fila {idx_fila}: Material '{material}' no encontrado en OB.Omegas con W/C='EX'"
+                                logging.warning(f"[EXPORTAR-EX] {msg}")
+                                errores.append(msg)
+                            
+                            procesadas += 1
+                        
+                        except Exception as e:
+                            msg = f"Fila {idx_fila}: {str(e)}"
+                            logging.error(f"[EXPORTAR-EX] {msg}", exc_info=True)
+                            errores.append(msg)
+                            procesadas += 1
+                            continue
+                    
+                    logging.info(f"[EXPORTAR-EX] Confirmando transacción CSV... Procesadas: {procesadas}, Actualizadas: {actualizado}")
+                    conn.commit()
+                    logging.info("[EXPORTAR-EX] Transacción CSV confirmada")
+        
+        except Exception as e:
+            logging.error(f"[EXPORTAR-EX] Error en BD: {str(e)}", exc_info=True)
+            return jsonify({
+                'success': False,
+                'mensaje': f'Error en la base de datos: {str(e)}'
+            }), 500
+        
+        # Respuesta (aunque procesadas sea 0)
+        respuesta = {
+            'success': True,
+            'procesadas': procesadas,
+            'actualizado': actualizado,
+            'errores': errores if errores else []
+        }
+        
+        logging.info(f"[EXPORTAR-EX] === EXPORTACIÓN COMPLETADA === Procesadas: {procesadas}, Actualizadas: {actualizado}, Errores: {len(errores)}")
+        
+        return jsonify(respuesta), 200
+    
+    except Exception as e:
+        logging.error(f"[EXPORTAR-EX] Error inesperado: {str(e)}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error inesperado: {str(e)}'
+        }), 500
+
+
+# ====================================================================================
 # EJECUCIÓN DE LA APLICACIÓN E INICIO DE WORKERS (VERSIÓN CORREGIDA)
 # ====================================================================================
 if __name__ == '__main__':
     print("="*50)
     print("INICIALIZANDO API OMEGAS...")
     print("="*50)
-    
-    # Configurar logging ANTES de iniciar cualquier cosa
-    import logging
-    import socket
-    logging.basicConfig(
-        level=logging.INFO, # Usa INFO para producción, DEBUG para depurar
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
-    )
-    # Silenciar los logs ruidosos de Flask
-    logging.getLogger('werkzeug').setLevel(logging.ERROR)
 
     # Cargar configuración SMTP desde BD (ahora ConexionODBCCZ ya está definida)
     cargar_config_smtp()
@@ -3093,7 +4717,7 @@ if __name__ == '__main__':
     print("="*50)
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
-    print(f"Servidor Flask iniciándose en: http://{local_ip}:3001")
+    print(f"Servidor Flask iniciándose en: http://{local_ip}:{APP_PORT}")
     print("="*50)
 
     # --- INICIAR EL WORKER DE PEDIDOS ---
@@ -3137,4 +4761,4 @@ if __name__ == '__main__':
     print("[MAIN] -> Hilo de scheduler diario iniciado.")
 
     # Ejecutar la aplicación principal. Esto SIEMPRE debe ser lo último.
-    app.run(host='0.0.0.0', port=3001, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=APP_PORT, debug=True, use_reloader=False)

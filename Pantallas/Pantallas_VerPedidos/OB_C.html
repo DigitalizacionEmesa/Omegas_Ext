@@ -51,11 +51,57 @@
     window.addEventListener('userLoggedIn', verificarPermisos);
     
     let pedidosCache = [];
+    let extendersCache = {}; // Cache para almacenar info de extensores por numero_pedido
 
     async function getPedidosSecuenciadosC() {
       const res = await fetch('/api/pedidos_secuenciados_c');
       if (!res.ok) return [];
       return await res.json();
+    }
+
+    // Nueva función: obtener info de extensores para un pedido
+    async function obtenerExtendersDelPedido(numeroPedido) {
+      // Si ya están en caché, devolver
+      if (extendersCache[numeroPedido]) {
+        return extendersCache[numeroPedido];
+      }
+      
+      try {
+        const res = await fetch(`/api/obtener-extenders-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
+        if (!res.ok) {
+          console.warn(`No se pudo obtener extensores para pedido ${numeroPedido}`);
+          return { assy_extensores: [] };
+        }
+        const data = await res.json();
+        extendersCache[numeroPedido] = data;
+        return data;
+      } catch (error) {
+        console.error(`Error obteniendo extensores: ${error}`);
+        return { assy_extensores: [] };
+      }
+    }
+
+    // Nueva función: verificar si un Assy es extensor
+    function esAssynExtensor(assy, extendersData) {
+      if (!extendersData || !extendersData.assy_extensores) return false;
+      return extendersData.assy_extensores.some(ext => ext.toUpperCase() === (assy || '').toUpperCase());
+    }
+
+    async function actualizarCantidadesExtender() {
+      const extenderQtyNodes = Array.from(document.querySelectorAll('.extender-qty-value'));
+      const pedidos = [...new Set(extenderQtyNodes.map(node => node.dataset.salesOrder).filter(Boolean))];
+
+      await Promise.all(pedidos.map(obtenerExtendersDelPedido));
+
+      extenderQtyNodes.forEach(node => {
+        const salesOrder = node.dataset.salesOrder || '';
+        const assy = node.dataset.assy || '';
+        const qty = Number(node.dataset.qty || 0);
+        const extendersData = extendersCache[salesOrder] || { assy_extensores: [] };
+        const debeRestar = esAssynExtensor(assy, extendersData);
+
+        node.textContent = debeRestar ? Math.max(0, qty - 2) : '-';
+      });
     }
 
     function renderCards(pedidos) {
@@ -110,6 +156,7 @@
               <span style="${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_if')}</span>
               <div style="font-size: 1.35rem;">${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? `${pedido.IF1} ${pedido.IF2}` : (pedido.IF1 || pedido.IF2 || '')}</div>
             </div>
+            <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
             <div class="pedido-info-container pedido-info-top" style="${pedido.WO && String(pedido.WO).split(',').length === 3 ? 'height:135px;' : ''}">
               <span style="${pedido.WO && String(pedido.WO).includes(',') ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_wo')}</span>
               <div style="font-size: 1.4rem !important;">${(pedido.WO || '').replace(/,/g, ', ')}</div>
@@ -118,6 +165,7 @@
           <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
             <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
             <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_extender_qty')}</span><div class="extender-qty-value" data-assy="${pedido.Assy}" data-sales-order="${pedido.SalesOrder}" data-qty="${pedido.Qty}">-</div></div>
             <!-- Mejorado: contenedor para el código de barras online, tamaño y contraste óptimos -->
             <div class="pedido-info-container pedido-info-bottom" style="background:#fff;min-width:260px;max-width:320px;width:100%;height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:2px solid #1976d2;">
               <span style="font-size:1.35rem;color:#1976d2;font-weight:700;margin-bottom:8px;letter-spacing:1px;">${getTranslation('barcode_label')}</span>
@@ -144,6 +192,8 @@
           if (img) img.src = '';
         }
       });
+
+      actualizarCantidadesExtender();
     }
 
     function setupPageLogic() {

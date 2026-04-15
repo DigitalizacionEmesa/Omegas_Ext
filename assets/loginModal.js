@@ -85,9 +85,20 @@ function createLoginModalHTML() {
 // Función para verificar si hay usuario logueado
 function checkUserSession() {
   try {
-    const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA'));
-    return usuarioSGA && usuarioSGA.id;
-  } catch {
+    const storedData = localStorage.getItem('usuarioSGA');
+    console.log('📦 localStorage.usuarioSGA:', storedData ? '✓ Existe' : '✗ No existe');
+    
+    if (!storedData) {
+      console.log('❌ No hay datos en localStorage');
+      return false;
+    }
+    
+    const usuarioSGA = JSON.parse(storedData);
+    const hasId = usuarioSGA && ('id' in usuarioSGA); // Aceptar id=0 (Admin)
+    console.log('👤 Usuario parseado:', hasId ? `ID=${usuarioSGA.id}, Nombre=${usuarioSGA.nombre}` : 'Inválido');
+    return hasId;
+  } catch (error) {
+    console.error('⚠️  Error parseando sesión:', error.message);
     return false;
   }
 }
@@ -197,17 +208,30 @@ async function handleLoginSubmit(event) {
     
     if (response.ok && userData.success !== false) {
       // Guardar usuario en localStorage
-      localStorage.setItem('usuarioSGA', JSON.stringify(userData));
+      const savedData = JSON.stringify(userData);
+      localStorage.setItem('usuarioSGA', savedData);
+      console.log('✅ Usuario guardado en localStorage:', userData.num_operario, savedData);
+      
+      // Verificar que se guardó correctamente
+      const verification = localStorage.getItem('usuarioSGA');
+      if (!verification) {
+        showLoginMessage('Error al guardar la sesión. Por favor intenta nuevamente.', 'error');
+        console.error('❌ Error: No se pudo guardar en localStorage');
+        submitBtn.disabled = false;
+        btnText.style.display = 'inline';
+        spinner.style.display = 'none';
+        return;
+      }
+      
+      // Mostrar mensaje de éxito
+      showLoginMessage(`¡Bienvenido, ${userData.nombre || userData.num_operario}!`, 'success');
       
       // Actualizar widget de usuario
       if (typeof updateUserWidget === 'function') {
         updateUserWidget();
       }
       
-      // Mostrar mensaje de éxito
-      showLoginMessage(`¡Bienvenido, ${userData.nombre || userData.num_operario}!`, 'success');
-      
-      // Ocultar modal después de un breve delay
+      // Ocultar modal después de un breve delay SIN RECARGAR
       setTimeout(() => {
         hideLoginModal();
         
@@ -217,9 +241,7 @@ async function handleLoginSubmit(event) {
         }));
         
         console.log('✅ Usuario autenticado exitosamente:', userData.num_operario);
-        
-        // Recargar la página para actualizar la interfaz con el usuario logueado
-        window.location.reload();
+        // NO hacer reload - la página continúa normalmente
         
       }, LOGIN_MODAL_CONFIG.REDIRECT_DELAY);
       
@@ -263,22 +285,20 @@ function clearLoginMessage() {
 
 // Función para verificar automáticamente la sesión
 function startSessionCheck() {
-  // Detener verificación previa si existe
-  if (loginModalState.checkInterval) {
-    clearInterval(loginModalState.checkInterval);
-  }
+  // Verificación inicial SOLO UNA VEZ al cargar
+  console.log('🔍 Verificando sesión inicial...');
+  const hasSession = checkUserSession();
+  console.log('✅ Usuario en sesión:', hasSession ? 'SÍ' : 'NO');
   
-  // Verificación inicial
-  if (!checkUserSession()) {
+  if (!hasSession) {
+    console.log('⚠️  No hay sesión activa - Mostrando login modal');
     showLoginModal();
+  } else {
+    console.log('✅ Sesión activa confirmada');
   }
   
-  // Verificación periódica
-  loginModalState.checkInterval = setInterval(() => {
-    if (!checkUserSession() && !loginModalState.isOpen) {
-      showLoginModal();
-    }
-  }, LOGIN_MODAL_CONFIG.AUTO_CHECK_INTERVAL);
+  // NOTA: Removemos el auto-check periódico (cada 30s) que causaba logout forzado
+  // El modal se mostrará solo cuando sea necesario (inicio de página)
 }
 
 // Función para detener la verificación automática

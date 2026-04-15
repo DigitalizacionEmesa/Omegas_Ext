@@ -15,11 +15,395 @@
     <div class="card" onclick="window.location.href='/Pantallas/Pantallas_Pedidos/Sequenced_Omegas.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
       <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="sequenced_orders_card">PEDIDOS SECUENCIADOS</div>
     </div>
+    <div class="card" onclick="abrirModalImportacion()" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="import_orders_card">IMPORTAR PEDIDOS</div>
+    </div>
+    <!--
+    <div class="card" onclick="abrirModalExportarEX()" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;">EXPORTAR EX</div>
+    </div>
+    -->
+  </div>
+
+  <!-- MODAL DE IMPORTACIÓN DE PEDIDOS -->
+  <div id="importModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 600px; width: 90%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;" data-translate-key="import_orders_title">IMPORTAR PEDIDOS</h2>
+        <button onclick="cerrarModalImportacion()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
+      </div>
+      
+      <div style="background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-weight: bold;">📋 Formato requerido:</p>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px;">
+          <li><strong>Columna A:</strong> Sales document (ej: 35850)</li>
+          <li><strong>Columna B:</strong> Material (ej: SCOS59001035)</li>
+          <li><strong>Columna C:</strong> Characteristic Name (ej: GRP_HSK_TYPE o GRP_OMEGA_BRACKET_TYPE_TSD)</li>
+          <li><strong>Columna D:</strong> Characteristic Value (ej: LH o TSD21_O_A2_1002)</li>
+        </ul>
+        <p style="margin: 12px 0 0 0; font-size: 13px; color: #444;">
+          Si para un mismo Sales document y Material existe <strong>GRP_HSK_TYPE = LH</strong>, el sistema buscará también <strong>GRP_OMEGA_BRACKET_TYPE_TSD</strong> y guardará su Characteristic Value.
+        </p>
+      </div>
+      
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; font-weight: bold;">Selecciona un archivo:</label>
+        <input type="file" id="archivoImportacion" accept=".xlsx,.xls,.csv" style="display: block; margin-bottom: 15px; width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        <small style="color: #666;">Formatos soportados: Excel (.xlsx, .xls) y CSV. La estructura de columnas debe ser exactamente la misma en ambos casos.</small>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: space-between;">
+        <button onclick="descargarPlantilla()" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">⬇️ Descargar Plantilla</button>
+        <div style="flex: 1; display: flex; gap: 10px;">
+          <button onclick="cerrarModalImportacion()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex: 1;">Cancelar</button>
+          <button onclick="procesarImportacion()" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">Importar</button>
+        </div>
+      </div>
+
+      <div id="mensajeImportacion" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL DE EXPORTACIÓN DE EXTENSORES (EX) -->
+  <div id="exportarEXModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 600px; width: 90%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;">EXPORTAR EX (EXTENSORES)</h2>
+        <button onclick="cerrarModalExportarEX()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
+      </div>
+      
+      <div style="background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
+        <p style="margin: 0 0 10px 0; font-weight: bold;">📋 Formato requerido:</p>
+        <ul style="margin: 0; padding-left: 20px; font-size: 13px;">
+          <li><strong>Columna A:</strong> Doc.vtas (ej: 33831) - Se usará para actualizar NumeroPedido</li>
+          <li><strong>Columna B:</strong> Material (ej: SCOS59001035) - Código a buscar como Extensor (EX)</li>
+          <li><strong>Columnas C-M:</strong> Ref.Clnte, RefClt(cb), Fecha doc., Fe.entrega, Posición, Descripción del material, CtPed(Pos), ValN(Pos), PosStEntr, Prc.neto, Sal.mcías (información de referencia, no se guardan)</li>
+        </ul>
+      </div>
+
+      <div style="background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 15px; margin-bottom: 20px; font-size: 13px;">
+        <strong>⚙️ Proceso:</strong>
+        <ul style="margin: 8px 0 0 20px; padding: 0;">
+          <li>Se leerá el archivo Excel/CSV</li>
+          <li>Para cada Material: se buscará en OB.Omegas con condición [W/C]='EX'</li>
+          <li>Si existe: se actualizará OB.PedidosCabecera SET EX=Material WHERE NumeroPedido=Doc.vtas</li>
+          <li>Si no existe: se registrará un error pero continuará el proceso</li>
+          <li>NO se guardará el archivo en la base de datos</li>
+        </ul>
+      </div>
+      
+      <div style="margin-bottom: 20px;">
+        <label style="display: block; margin-bottom: 10px; font-weight: bold;">Selecciona un archivo:</label>
+        <input type="file" id="archivoExportarEX" accept=".xlsx,.xls,.csv" style="display: block; margin-bottom: 15px; width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+        <small style="color: #666;">Formatos soportados: Excel (.xlsx, .xls), CSV</small>
+      </div>
+
+      <div style="display: flex; gap: 10px; justify-content: space-between;">
+        <button onclick="descargarPlantillaEX()" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">⬇️ Descargar Plantilla</button>
+        <div style="flex: 1; display: flex; gap: 10px;">
+          <button onclick="cerrarModalExportarEX()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex: 1;">Cancelar</button>
+          <button onclick="procesarExportarEX()" style="padding: 10px 20px; background-color: #FF9800; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">Procesar</button>
+        </div>
+      </div>
+
+      <div id="mensajeExportarEX" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+    </div>
   </div>
 
   <!-- SCRIPT DE VALIDACIÓN DE PERMISOS (NUEVO SISTEMA) -->
   <script>
-    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    // ===== FUNCIONES DE IMPORTACIÓN =====
+    
+    // Descargar plantilla base para importar pedidos.
+    function descargarPlantilla() {
+      // Encabezados exactos válidos para CSV y Excel.
+      const headers = ['Sales document', 'Material', 'Characteristic Name', 'Characteristic Value'];
+      
+      // Datos de ejemplo con caso de extensor.
+      const ejemplos = [
+        ['35850', 'SCOS59001035', 'GRP_HSK_TYPE', 'LH'],
+        ['35850', 'SCOS59001035', 'GRP_OMEGA_BRACKET_TYPE_TSD', 'TSD21_O_A2_1002'],
+        ['35850', 'SCOS59001035', 'GRP_SOURCING_ZONE', 'SC-EU'],
+        ['35850', 'SCOS59001035', 'GRP_INSTALLATION_ZONE', 'EU'],
+        ['', '', '', '']  // Fila vacía para que el usuario sepa dónde agregar datos
+      ];
+
+      // Crear contenido CSV
+      let csvContent = headers.join(',') + '\n';
+      ejemplos.forEach(row => {
+        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+      });
+
+      // Crear blob y descargar
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'plantilla_importar_pedidos.csv');
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function abrirModalImportacion() {
+      document.getElementById('importModal').style.display = 'flex';
+      document.getElementById('archivoImportacion').value = '';
+      document.getElementById('mensajeImportacion').style.display = 'none';
+      document.getElementById('mensajeImportacion').innerHTML = '';
+    }
+
+    function cerrarModalImportacion() {
+      document.getElementById('importModal').style.display = 'none';
+      document.getElementById('archivoImportacion').value = '';
+      document.getElementById('mensajeImportacion').style.display = 'none';
+      document.getElementById('mensajeImportacion').innerHTML = '';
+    }
+
+    // Función para parsear CSV
+    function parseCSV(csvText) {
+      const lines = csvText.split('\n').filter(line => line.trim() !== '');
+      const rows = [];
+      
+      lines.forEach(line => {
+        // Parsear CSV correctamente manejando comillas
+        const matches = line.match(/("([^"]*)"|[^,]*)/g);
+        const row = matches.map(cell => {
+          cell = cell.trim();
+          if (cell.startsWith('"') && cell.endsWith('"')) {
+            return cell.slice(1, -1);
+          }
+          return cell;
+        });
+        rows.push(row);
+      });
+      
+      return rows;
+    }
+
+    // Función para validar columnas
+    function validarColumnas(headers) {
+      const columnasRequeridas = ['Sales document', 'Material', 'Characteristic Name', 'Characteristic Value'];
+      const headersNormalizados = headers.map(h => h.trim());
+      
+      // Verificar que existan todas las columnas requeridas
+      return columnasRequeridas.every(col => 
+        headersNormalizados.some(h => h === col)
+      );
+    }
+
+    async function procesarImportacion() {
+      const archivo = document.getElementById('archivoImportacion').files[0];
+      const mensajeDiv = document.getElementById('mensajeImportacion');
+
+      if (!archivo) {
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#fee';
+        mensajeDiv.style.color = '#c33';
+        mensajeDiv.style.borderLeft = '4px solid #c33';
+        mensajeDiv.innerHTML = '⚠️ Por favor, selecciona un archivo.';
+        return;
+      }
+
+      try {
+        const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+        if (!usuarioActual.id) {
+          throw new Error('No hay sesión activa');
+        }
+
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#e3f2fd';
+        mensajeDiv.style.color = '#1565c0';
+        mensajeDiv.style.borderLeft = '4px solid #1565c0';
+        mensajeDiv.innerHTML = '⏳ Enviando archivo al servidor...';
+
+        const formData = new FormData();
+        formData.append('archivo', archivo);
+        formData.append('usuarioId', usuarioActual.id);
+
+        // Enviar archivo al servidor
+        const response = await fetch('/api/importar-pedidos', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${usuarioActual.token || ''}`
+          }
+        });
+
+        const resultado = await response.json();
+
+        if (response.ok) {
+          mensajeDiv.style.backgroundColor = '#e8f5e9';
+          mensajeDiv.style.color = '#2e7d32';
+          mensajeDiv.style.borderLeft = '4px solid #2e7d32';
+          
+          let htmlMensaje = `✅ ${resultado.mensaje}`;
+          if (resultado.errores && resultado.errores.length > 0) {
+            htmlMensaje += `<br><small style="margin-top: 5px; display: block; color: #f57c00;">⚠️ ${resultado.errores.length} advertencias</small>`;
+          }
+          
+          mensajeDiv.innerHTML = htmlMensaje;
+          
+          // Limpiar y cerrar después de 2 segundos
+          setTimeout(() => {
+            cerrarModalImportacion();
+          }, 2000);
+        } else {
+          throw new Error(resultado.mensaje || 'Error en la importación');
+        }
+      } catch (error) {
+        console.error('Error en importación:', error);
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#fee';
+        mensajeDiv.style.color = '#c33';
+        mensajeDiv.style.borderLeft = '4px solid #c33';
+        mensajeDiv.innerHTML = `❌ Error: ${error.message}`;
+      }
+    }
+
+    // Cerrar modal al hacer clic fuera de él
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('importModal').addEventListener('click', (e) => {
+        if (e.target.id === 'importModal') {
+          cerrarModalImportacion();
+        }
+      });
+    });
+    // ===== FIN FUNCIONES DE IMPORTACIÓN =====
+
+    // ===== FUNCIONES DE EXPORTACIÓN EX =====
+
+    function descargarPlantillaEX() {
+      // Encabezados exactos según el formato requerido
+      const headers = ['Doc.vtas', 'Material', 'Ref.Clnte', 'RefClt(cb)', 'Fecha doc.', 'Fe.entrega', 'Posición', 'Descripción del material', 'CtPed(Pos)', 'ValN(Pos)', 'PosStEntr', 'Prc.neto', 'Sal.mcías'];
+      
+      // Datos de ejemplo
+      const ejemplos = [
+        ['33831', 'SCOS59001035', 'REF001', 'CB001', '2026-04-01', '2026-04-15', '001', 'Extensores', '1', '100.50', 'PA', '100.50', '5000'],
+        ['33832', 'SCOS59001036', 'REF002', 'CB002', '2026-04-02', '2026-04-16', '001', 'Extensores', '2', '150.75', 'PA', '150.75', '7500'],
+        ['', '', '', '', '', '', '', '', '', '', '', '', '']  // Fila vacía
+      ];
+
+      // Crear contenido CSV
+      let csvContent = headers.join(',') + '\n';
+      ejemplos.forEach(row => {
+        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
+      });
+
+      // Crear blob y descargar
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', 'plantilla_exportar_ex.csv');
+      link.style.visibility = 'hidden';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function abrirModalExportarEX() {
+      document.getElementById('exportarEXModal').style.display = 'flex';
+      document.getElementById('archivoExportarEX').value = '';
+      document.getElementById('mensajeExportarEX').style.display = 'none';
+      document.getElementById('mensajeExportarEX').innerHTML = '';
+    }
+
+    function cerrarModalExportarEX() {
+      document.getElementById('exportarEXModal').style.display = 'none';
+      document.getElementById('archivoExportarEX').value = '';
+      document.getElementById('mensajeExportarEX').style.display = 'none';
+      document.getElementById('mensajeExportarEX').innerHTML = '';
+    }
+
+    async function procesarExportarEX() {
+      const archivo = document.getElementById('archivoExportarEX').files[0];
+      const mensajeDiv = document.getElementById('mensajeExportarEX');
+
+      if (!archivo) {
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#fee';
+        mensajeDiv.style.color = '#c33';
+        mensajeDiv.style.borderLeft = '4px solid #c33';
+        mensajeDiv.innerHTML = '⚠️ Por favor, selecciona un archivo.';
+        return;
+      }
+
+      try {
+        const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+        if (!usuarioActual.id) {
+          throw new Error('No hay sesión activa');
+        }
+
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#e3f2fd';
+        mensajeDiv.style.color = '#1565c0';
+        mensajeDiv.style.borderLeft = '4px solid #1565c0';
+        mensajeDiv.innerHTML = '⏳ Procesando extensores (EX)...';
+
+        const formData = new FormData();
+        formData.append('archivo', archivo);
+        formData.append('usuarioId', usuarioActual.id);
+
+        // Enviar archivo al servidor
+        const response = await fetch('/api/exportar-ex', {
+          method: 'POST',
+          body: formData,
+          headers: {
+            'Authorization': `Bearer ${usuarioActual.token || ''}`
+          }
+        });
+
+        const resultado = await response.json();
+
+        if (response.ok) {
+          mensajeDiv.style.backgroundColor = '#e8f5e9';
+          mensajeDiv.style.color = '#2e7d32';
+          mensajeDiv.style.borderLeft = '4px solid #2e7d32';
+          
+          let htmlMensaje = `✅ Proceso completado`;
+          if (resultado.actualizado) {
+            htmlMensaje += `<br><strong>Filas procesadas:</strong> ${resultado.procesadas}`;
+            htmlMensaje += `<br><strong>Extensores actualizados:</strong> ${resultado.actualizado}`;
+          }
+          if (resultado.errores && resultado.errores.length > 0) {
+            htmlMensaje += `<br><small style="margin-top: 5px; display: block; color: #f57c00;">⚠️ ${resultado.errores.length} errores</small>`;
+            htmlMensaje += `<small style="color: #f57c00; margin-top: 5px; display: block;">${resultado.errores.join('<br>')}</small>`;
+          }
+          
+          mensajeDiv.innerHTML = htmlMensaje;
+          
+          // Limpiar y cerrar después de 2 segundos
+          setTimeout(() => {
+            cerrarModalExportarEX();
+          }, 2000);
+        } else {
+          throw new Error(resultado.mensaje || 'Error en el procesamiento');
+        }
+      } catch (error) {
+        console.error('Error en exportar EX:', error);
+        mensajeDiv.style.display = 'block';
+        mensajeDiv.style.backgroundColor = '#fee';
+        mensajeDiv.style.color = '#c33';
+        mensajeDiv.style.borderLeft = '4px solid #c33';
+        mensajeDiv.innerHTML = `❌ Error: ${error.message}`;
+      }
+    }
+
+    // Cerrar modal al hacer clic fuera de él para EXPORTAR EX
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('exportarEXModal').addEventListener('click', (e) => {
+        if (e.target.id === 'exportarEXModal') {
+          cerrarModalExportarEX();
+        }
+      });
+    });
+
+    // ===== FIN FUNCIONES DE EXPORTACIÓN EX =====
     async function verificarPermisos() {
         try {
             // NUEVO SISTEMA: usar usuarioSGA (login modal)

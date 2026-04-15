@@ -1,0 +1,61 @@
+2026-04-14 17:48:05 - root - INFO - [CONFIG] BASE_DIR: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242
+2026-04-14 17:48:05 - root - INFO - [CONFIG] APP_DIR: C:\Proyectos\Desarrollo_Omegas - copia\dist
+2026-04-14 17:48:05 - root - INFO - [CONFIG] DB_CONNECTION_CONFIG_FILE: C:\Proyectos\Desarrollo_Omegas - copia\dist\db_connection_config.json
+2026-04-14 17:48:05 - root - INFO - [CONFIG] RUTA_ASSETS: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242\assets -> Existe: True
+2026-04-14 17:48:05 - root - INFO - [CONFIG] RUTA_IMAGENES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242\IMAGENES -> Existe: True
+2026-04-14 17:48:05 - root - INFO - [CONFIG] RUTA_TRADUCCIONES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242\translations -> Existe: True
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [SMTP] Config cargada — servidor: smtp.gmail.com, origen: digitalizacionemesa@gmail.com, destinatarios: 2
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:11 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:12 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:17 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:17 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:22 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:22 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:27 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:27 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:33 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:33 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:37 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:38 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:43 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:43 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:48 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:54 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:48:54 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:00 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:00 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:05 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:05 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:07 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:08 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:11 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:12 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:12 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:15 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:15 - root - WARNING - [LOGIN] Usuario no encontrado: usuario_inexistente_prueba
+2026-04-14 17:49:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:18 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:23 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:23 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:29 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:29 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:35 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:35 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:39 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:39 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:40 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-04-14 17:49:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server

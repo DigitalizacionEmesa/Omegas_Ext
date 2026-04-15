@@ -1,4 +1,4 @@
-('C:\\Users\\a.munoz\\Documents\\!Proyectos_EMESA_Alejandro\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
+('\\\\EMEBIDWH\\DIgitalizacion\\Desarrollo_Omegas\\build\\appOMEGAS\\PYZ-00.pyz',
  [('OpenSSL',
    'C:\\Users\\a.munoz\\AppData\\Local\\Programs\\Python\\Python313\\Lib\\site-packages\\OpenSSL\\__init__.py',
    'PYMODULE'),

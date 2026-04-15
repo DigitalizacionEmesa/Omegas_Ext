@@ -305,6 +305,8 @@
             { key: 'C/W', label: 'C/W', label_key: 'table_header_cw' },
             { key: 'CWT', label: 'CWT', label_key: 'table_header_cwt' },
             { key: 'DS', label: 'DS', label_key: 'table_header_ds' },
+            { key: 'EX', label: 'EX', label_key: 'table_header_ex' },
+            { key: 'TB', label: 'TB', label_key: 'table_header_tb' },
             { key: 'Ord', label: 'Ord', label_key: 'table_header_ord' },
             { key: 'Sequence', label: 'Sequence', label_key: 'table_header_sequence' },
             { key: 'OFs', label: 'OFs', label_key: 'table_header_ofs' },
@@ -326,6 +328,9 @@
                     }
                 } catch {}
             }
+            // Si llegamos aquí, limpiar cache viejo de visibilidad por si cambió la cantidad de columnas
+            localStorage.removeItem('sequenced_visible_columns');
+            localStorage.removeItem('sequenced_column_widths');
             return [...defaultColumnConfig];
         }
         function setColumnConfig(arr) {
@@ -490,6 +495,8 @@
                         case 'C/W': translateKey = 'table_header_cw'; break;
                         case 'CWT': translateKey = 'table_header_cwt'; break;
                         case 'DS': translateKey = 'table_header_ds'; break;
+                        case 'EX': translateKey = 'table_header_ex'; break;
+                        case 'TB': translateKey = 'table_header_tb'; break;
                         case 'Ord': translateKey = 'table_header_ord'; break;
                         case 'Sequence': translateKey = 'table_header_sequence'; break;
                         case 'OFs': translateKey = 'table_header_ofs'; break;
@@ -600,6 +607,8 @@
                                 case 'C/W': return wcValue;
                                 case 'CWT': return row.CWT || '';
                                 case 'DS': return row.DS || '';
+                                case 'EX': return row.EX || '';
+                                case 'TB': return row.TB || '';
                                 case 'Ord': return row.Ord || '';
                                 case 'Sequence': return sequenceValue;
                                 case 'OFs': return row.OFs || '';
@@ -691,6 +700,8 @@
                             case 'C/W': return wcValue;
                             case 'CWT': return row.CWT || '';
                             case 'DS': return row.DS || '';
+                            case 'EX': return row.EX || '';
+                            case 'TB': return row.TB || '';
                             case 'Ord': return row.Ord || '';
                             case 'Sequence': return sequenceValue;
                             case 'OFs': return row.OFs || '';
@@ -1304,11 +1315,12 @@
             const filterFaltantes = document.getElementById('filter-faltantes').checked;
 
             filteredData = summaryData
-                // Filtra filas donde Assembly y Picking NO sean ambos "NO" (insensible a mayúsculas/minúsculas y espacios)
+                // Solo ocultar filas que estén completamente entregadas (UniValMapex >= UnidadesPedidas)
+                // Mostrar siempre si el pedido aún no está completado, independientemente del estado Assembly/Picking
                 .filter(row => {
-                    const assembly = (row.Assembly || '').toString().trim().toUpperCase();
-                    const picking = (row.Picking || '').toString().trim().toUpperCase();
-                    return !(assembly === "NO" && picking === "NO");
+                    const unidadesPedidas = parseFloat(row.UnidadesPedidas) || 0;
+                    const uniValMapex = parseFloat(row.UniValMapex) || 0;
+                    return uniValMapex < unidadesPedidas;
                 })
                 .filter(row => {
                     const sequenceValue = row.SequenceValue || row.Sequence || '';

@@ -95,6 +95,7 @@
                         <th data-translate-key="table_header_if1">IF1</th>
                         <th data-translate-key="table_header_if2">IF2</th>
                         <th data-translate-key="table_header_wc">W/C</th>
+                        <th>Extender</th>
                         <th data-translate-key="table_header_delete">Eliminar</th>
                     </tr>
                     <tr id="quick-add-row">
@@ -108,8 +109,11 @@
                                 <option value="W">W</option>
                                 <option value="CWT">CWT</option>
                                 <option value="DS">DS</option>
+                                <option value="EX">EX</option>
+                                <option value="TB">TB</option>
                             </select>
                         </td>
+                        <td><input type="text" id="quick-extender" placeholder="Extender" style="width:100px;"></td>
                         <td style="text-align:center;">
                             <button id="quick-add-btn" style="background:#28a745;color:#fff;border:none;border-radius:4px;padding:0.3em 1em;cursor:pointer;font-weight:600;">+</button>
                         </td>
@@ -192,11 +196,11 @@
             const tbody = document.getElementById('omegas-tbody');
             tbody.innerHTML = '';
             if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#888;">${getTranslation('text_no_data')}</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#888;">${getTranslation('text_no_data')}</td></tr>`;
                 return;
             }
-            // Orden personalizado: C primero, luego W, luego CWT, luego DS
-            const wcOrder = { 'C': 0, 'W': 1, 'CWT': 2, 'DS': 3 };
+            // Orden personalizado: C primero, luego W, luego CWT, luego DS, luego EX, luego TB
+            const wcOrder = { 'C': 0, 'W': 1, 'CWT': 2, 'DS': 3, 'EX': 4, 'TB': 5 };
             data.sort((a, b) => {
                 const aVal = (a['W/C'] || '').toUpperCase();
                 const bVal = (b['W/C'] || '').toUpperCase();
@@ -208,7 +212,7 @@
             });
             data.forEach((row, rowIdx) => {
                 const tr = document.createElement('tr');
-                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C'];
+                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable'];
                 columns.forEach(col => {
                     const td = document.createElement('td');
                     // Mostrar '-' si el valor es null, undefined, string vacío o 'NULL' (insensible a mayúsculas)
@@ -296,11 +300,13 @@
             document.getElementById('search-assy').addEventListener('input', filterTable);
             // Quick add logic
             document.getElementById('quick-add-btn').onclick = function() {
+                console.log('🔵 Botón + clickeado');
                 const assyInput = document.getElementById('quick-assy');
                 const wcInput = document.getElementById('quick-wc');
                 const beamRaw = document.getElementById('quick-beam').value.trim();
                 const if1Raw = document.getElementById('quick-if1').value.trim();
                 const if2Raw = document.getElementById('quick-if2').value.trim();
+                const extenderRaw = document.getElementById('quick-extender').value.trim();
                 const assy = assyInput.value.trim();
                 const wc = wcInput.value;
                 const errorDiv = document.getElementById('quick-add-error');
@@ -328,18 +334,24 @@
                     }, 500);
                     return;
                 }
-                // Optional fields as null if blank
+                // Optional fields as null if blank (except ExtenderVariable which gets empty string for NOT NULL)
                 const beam = beamRaw === '' ? null : beamRaw;
                 const if1 = if1Raw === '' ? null : if1Raw;
                 const if2 = if2Raw === '' ? null : if2Raw;
-                const payload = { Assy: assy, Beam: beam, IF1: if1, IF2: if2, 'W/C': wc };
+                const extender = extenderRaw === '' ? '' : extenderRaw;
+                const payload = { Assy: assy, Beam: beam, IF1: if1, IF2: if2, 'W/C': wc, ExtenderVariable: extender };
+                console.log('📤 Payload enviado:', payload);
                 fetch('/api/omegas/bulk-insert', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify([payload])
                 })
-                .then(res => res.json())
+                .then(res => {
+                    console.log('📥 Status:', res.status);
+                    return res.json();
+                })
                 .then(resp => {
+                    console.log('✅ Respuesta:', resp);
                     if (resp.success) {
                         // Limpiar inputs
                         document.getElementById('quick-assy').value = '';
@@ -347,6 +359,7 @@
                         document.getElementById('quick-if1').value = '';
                         document.getElementById('quick-if2').value = '';
                         document.getElementById('quick-wc').value = 'C';
+                        document.getElementById('quick-extender').value = '';
                         errorDiv.textContent = '';
                         errorDiv.style.display = 'none';
                         assyInput.classList.remove('input-error','shake');
@@ -357,7 +370,11 @@
                         errorDiv.style.display = 'block';
                     }
                 })
-                .catch(() => { errorDiv.textContent = 'Error de red añadiendo Omega'; errorDiv.style.display = 'block'; });
+                .catch(err => { 
+                    console.error('❌ Error de red:', err);
+                    errorDiv.textContent = 'Error de red añadiendo Omega'; 
+                    errorDiv.style.display = 'block'; 
+                });
             };
 
             // Limpiar error al escribir en cualquier input del quick-add
@@ -429,7 +446,7 @@
 
             function showPreview(data) {
                 if (!data.length) { previewArea.innerHTML = `<div style="color:#c00;">${getTranslation('alert_no_valid_data')}</div>`; confirmImportBtn.disabled = true; return; }
-                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C'];
+                const columns = ['Assy', 'Beam', 'IF1', 'IF2', 'W/C', 'ExtenderVariable'];
                 let html = `<div class="preview-message">${getTranslation('text_preview_message').replace('{count}', data.length)}</div>`;
                 html += '<table class="preview-table"><thead><tr>';
                 columns.forEach(col => html += `<th>${col}</th>`);

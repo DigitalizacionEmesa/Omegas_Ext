@@ -1,0 +1,17 @@
+{
+  "drivers": [
+    "ODBC Driver 18 for SQL Server",
+    "ODBC Driver 17 for SQL Server",
+    "ODBC Driver 13 for SQL Server",
+    "SQL Server Native Client 11.0",
+    "SQL Server"
+  ],
+  "main_servers": [
+    "EMEBIDWH",
+    "172.16.10.10"
+  ],
+  "cz_servers": [
+    "172.16.10.10",
+    "EMEBIDWH"
+  ]
+}
