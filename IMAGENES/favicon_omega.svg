@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Fondo azul -->
+  <rect width="100" height="100" fill="#1976d2" rx="15"/>
+  <!-- Emoji Omega (Ω) -->
+  <text x="50" y="75" font-size="70" font-weight="bold" text-anchor="middle" fill="white" font-family="Arial, sans-serif">Ω</text>
+</svg>

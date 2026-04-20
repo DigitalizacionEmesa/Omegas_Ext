@@ -116,6 +116,33 @@ def configure_logging():
 
 configure_logging()
 
+# ====================================================================================
+# LOGGER ESPECÍFICO PARA DIAGNÓSTICO DE VISTAS
+# ====================================================================================
+def configure_view_diagnostics_logger():
+    """Crea un logger separado para registrar cada consulta a vistas"""
+    view_diagnostics_file = os.path.join(LOGS_DIR, 'view_diagnostics.log')
+    
+    view_logger = logging.getLogger('VIEW_DIAGNOSTICS')
+    view_logger.setLevel(logging.DEBUG)
+    
+    # Crear handler para archivo separado
+    try:
+        file_handler = logging.FileHandler(view_diagnostics_file, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        view_logger.addHandler(file_handler)
+    except Exception as e:
+        logging.error(f"No se pudo crear logger de vistas: {e}")
+    
+    return view_logger
+
+VIEW_LOGGER = configure_view_diagnostics_logger()
+
 # Rutas de recursos
 RUTA_PANTALLAS = os.path.join(BASE_DIR, 'Pantallas')
 RUTA_ASSETS = os.path.join(BASE_DIR, 'assets')
@@ -287,6 +314,131 @@ def cargar_config_smtp():
 
 # NOTA: cargar_config_smtp() se llama desde __main__ (ConexionODBCCZ se define más adelante)
 
+
+def sync_pending_orders(lookback_days=1, log_prefix='[SYNC]'):
+    """Sincroniza en DataLake los pedidos pendientes de MAPEX dentro de la ventana indicada."""
+    cutoff_time = datetime.now() - timedelta(days=lookback_days)
+    print(f"{log_prefix} Sincronizando pendientes desde: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Obtener catálogo local para derivar CWT/DS/EX/TB desde las líneas.
+    with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+        if conn_main is None:
+            raise Exception('No se pudo conectar a DataLakeSCCZ para cargar OB.Omegas')
+
+        cursor_main = conn_main.cursor()
+        cursor_main.execute("SELECT Assy, [W/C] FROM OB.Omegas")
+        omegas_map = {row.Assy: row[1] for row in cursor_main.fetchall()}
+
+    datos_externos = []
+    with ConexionODBCCZ(database='mapexbp') as conn_cz:
+        if conn_cz is None:
+            raise Exception('No se pudo conectar a MAPEXBP para sincronizar pedidos')
+
+        cursor_cz = conn_cz.cursor()
+        query = """
+            SELECT 
+                A.id_his_wam_pedido_cliente,
+                A.NumeroPedido,
+                A.FechaEntrega,
+                A.Bsark,
+                A.EstadoERP,
+                A.Id_wam_estado_pedido_cliente,
+                B.id_his_wam_linea_pedido_cliente,
+                B.Id_producto,
+                B.UnidadesPedidas,
+                B.UniValMapex,
+                C.Cod_producto,
+                A.FechaPedido
+            FROM 
+                his_wam_pedido_cliente A
+            JOIN 
+                his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
+            JOIN 
+                V_Cfg_producto C ON C.Id_producto = B.Id_producto
+            WHERE 
+                A.FechaEntrega >= ?
+                AND A.EstadoERP = 0 
+                AND A.Id_wam_estado_pedido_cliente = 1;
+        """
+        cursor_cz.execute(query, cutoff_time.strftime('%Y-%m-%d %H:%M:%S'))
+        columns = [desc[0] for desc in cursor_cz.description]
+        datos_externos = [dict(zip(columns, row)) for row in cursor_cz.fetchall()]
+
+    if not datos_externos:
+        print(f"{log_prefix} No hay datos para procesar en el período especificado")
+        return {
+            'cabeceras_procesadas': 0,
+            'lineas_procesadas': 0,
+            'periodo_desde': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+    pedidos_agrupados = defaultdict(list)
+    for linea in datos_externos:
+        pedidos_agrupados[linea['id_his_wam_pedido_cliente']].append(linea)
+
+    cabeceras_a_procesar, lineas_a_insertar = {}, []
+    for pedido_id, lineas in pedidos_agrupados.items():
+        cwt, ds, ex, tb = None, None, None, None
+        primera_linea = lineas[0]
+
+        for linea in lineas:
+            wc_type = omegas_map.get(linea['Cod_producto'])
+            if wc_type == 'CWT' and not cwt:
+                cwt = linea['Cod_producto']
+            elif wc_type == 'DS' and not ds:
+                ds = linea['Cod_producto']
+            elif wc_type == 'EX' and not ex:
+                ex = linea['Cod_producto']
+            elif wc_type == 'TB' and not tb:
+                tb = linea['Cod_producto']
+
+        cabeceras_a_procesar[pedido_id] = (
+            pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
+            primera_linea['Bsark'], primera_linea['EstadoERP'],
+            primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
+        )
+
+        for linea in lineas:
+            lineas_a_insertar.append((
+                linea['id_his_wam_linea_pedido_cliente'], linea['id_his_wam_pedido_cliente'],
+                linea['Id_producto'], linea['Cod_producto'],
+                linea['UnidadesPedidas'], linea['UniValMapex']
+            ))
+
+    lista_cabeceras = list(cabeceras_a_procesar.values())
+    ids_cabeceras_afectadas = list(cabeceras_a_procesar.keys())
+
+    with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+        if conn_main is None:
+            raise Exception('No se pudo conectar a DataLakeSCCZ para actualizar PedidosCabecera')
+
+        cursor_main = conn_main.cursor()
+        if ids_cabeceras_afectadas:
+            placeholders = ','.join(['?' for _ in ids_cabeceras_afectadas])
+            cursor_main.execute(
+                f"DELETE FROM OB.PedidosLineas WHERE ID_PedidoCabecera_Externa IN ({placeholders})",
+                ids_cabeceras_afectadas
+            )
+            cursor_main.execute(
+                f"DELETE FROM OB.PedidosCabecera WHERE ID_PedidoCabecera_Externa IN ({placeholders})",
+                ids_cabeceras_afectadas
+            )
+
+        if lista_cabeceras:
+            sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+            cursor_main.executemany(sql_cabecera, lista_cabeceras)
+
+        if lineas_a_insertar:
+            sql_lineas = "INSERT INTO OB.PedidosLineas (ID_PedidoLinea_Externa, ID_PedidoCabecera_Externa, ID_Producto_Externo, Cod_Producto_Externo, UnidadesPedidas, UniValMapex) VALUES (?, ?, ?, ?, ?, ?);"
+            cursor_main.executemany(sql_lineas, lineas_a_insertar)
+
+    print(f"{log_prefix} Procesados: {len(lista_cabeceras)} cabeceras y {len(lineas_a_insertar)} líneas")
+    return {
+        'cabeceras_procesadas': len(lista_cabeceras),
+        'lineas_procesadas': len(lineas_a_insertar),
+        'periodo_desde': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+
 # ====================================================================================
 # FUNCIÓN SCHEDULER PARA EJECUCIÓN AUTOMÁTICA DIARIA
 # ====================================================================================
@@ -298,143 +450,7 @@ def scheduled_daily_sync():
     print(f"[SCHEDULER] Inicio sincronización automática diaria - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     try:
-        # Llamar al endpoint de sincronización manual completa internamente
-        from collections import defaultdict
-        
-        # Configurar fecha de inicio (1 día atrás)
-        last_sync_time = datetime.now() - timedelta(days=1)
-        
-        print(f"[SCHEDULER] Sincronizando datos desde: {last_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        # Obtener Omegas locales
-        omegas_map = {}
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("SELECT Assy, [W/C] FROM OB.Omegas")
-                omegas_map = {row.Assy: row[1] for row in cursor_main.fetchall()}
-        except Exception as e:
-            print(f"[SCHEDULER] ERROR al obtener Omegas: {e}")
-            return
-        
-        # Obtener mapping de Extensores
-        extender_map = {}
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("SELECT ExtenderVariable, Assy FROM OB.Omegas WHERE ExtenderVariable IS NOT NULL")
-                extender_map = {row.ExtenderVariable: row.Assy for row in cursor_main.fetchall()}
-        except Exception as e:
-            print(f"[SCHEDULER] ADVERTENCIA al obtener ExtenderMap: {e}")
-            # No es error crítico, solo continuamos sin extensores
-            extender_map = {}
-        
-        # Extraer datos de MAPEXBP
-        datos_externos = []
-        try:
-            with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                cursor_cz = conn_cz.cursor()
-                
-                query = """
-                    SELECT 
-                        A.id_his_wam_pedido_cliente,
-                        A.NumeroPedido,
-                        A.FechaEntrega,
-                        A.Bsark,
-                        A.EstadoERP,
-                        A.Id_wam_estado_pedido_cliente,
-                        B.id_his_wam_linea_pedido_cliente,
-                        B.Id_producto,
-                        B.UnidadesPedidas,
-                        B.UniValMapex,
-                        C.Cod_producto
-                    FROM 
-                        his_wam_pedido_cliente A
-                    JOIN 
-                        his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
-                    JOIN 
-                        V_Cfg_producto C ON C.Id_producto = B.Id_producto
-                    WHERE 
-                        A.FechaEntrega >= ?
-                        AND A.EstadoERP = 0 
-                        AND A.Id_wam_estado_pedido_cliente = 1;
-                """
-                cursor_cz.execute(query, last_sync_time.strftime('%Y-%m-%d %H:%M:%S'))
-                
-                columns = [desc[0] for desc in cursor_cz.description]
-                datos_externos = [dict(zip(columns, row)) for row in cursor_cz.fetchall()]
-
-        except Exception as e:
-            print(f"[SCHEDULER] ERROR consultando mapexbp: {e}")
-            return
-
-        if not datos_externos:
-            print("[SCHEDULER] No hay datos para procesar en la sincronización diaria")
-            return
-        
-        # Procesar datos (misma lógica que manual_full_sync)
-        pedidos_agrupados = defaultdict(list)
-        for linea in datos_externos:
-            pedidos_agrupados[linea['id_his_wam_pedido_cliente']].append(linea)
-
-        cabeceras_a_procesar, lineas_a_insertar = {}, []
-        for pedido_id, lineas in pedidos_agrupados.items():
-            cwt, ds, ex, tb = None, None, None, None
-            
-            primera_linea = lineas[0]
-            
-            for linea in lineas:
-                # Verificar CWT/DS/EX/TB
-                wc_type = omegas_map.get(linea['Cod_producto'])
-                if wc_type == 'CWT' and not cwt: 
-                    cwt = linea['Cod_producto']
-                elif wc_type == 'DS' and not ds: 
-                    ds = linea['Cod_producto']
-                elif wc_type == 'EX' and not ex:
-                    ex = linea['Cod_producto']
-                elif wc_type == 'TB' and not tb:
-                    tb = linea['Cod_producto']
-            
-            cabeceras_a_procesar[pedido_id] = (
-                pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
-                primera_linea['Bsark'], primera_linea['EstadoERP'],
-                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
-            )
-            for linea in lineas:
-                lineas_a_insertar.append((
-                    linea['id_his_wam_linea_pedido_cliente'], linea['id_his_wam_pedido_cliente'],
-                    linea['Id_producto'], linea['Cod_producto'],
-                    linea['UnidadesPedidas'], linea['UniValMapex']
-                ))
-        
-        lista_cabeceras = list(cabeceras_a_procesar.values())
-        ids_cabeceras_afectadas = list(cabeceras_a_procesar.keys())
-
-        # Insertar en Digitalizacion
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                
-                # Limpiar registros existentes
-                if ids_cabeceras_afectadas:
-                    placeholders = ','.join(['?' for _ in ids_cabeceras_afectadas])
-                    cursor_main.execute(f"DELETE FROM OB.PedidosLineas WHERE ID_PedidoCabecera_Externa IN ({placeholders})", ids_cabeceras_afectadas)
-                    cursor_main.execute(f"DELETE FROM OB.PedidosCabecera WHERE ID_PedidoCabecera_Externa IN ({placeholders})", ids_cabeceras_afectadas)
-
-                # Insertar datos
-                if lista_cabeceras:
-                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
-                    cursor_main.executemany(sql_cabecera, lista_cabeceras)
-                
-                if lineas_a_insertar:
-                    sql_lineas = "INSERT INTO OB.PedidosLineas (ID_PedidoLinea_Externa, ID_PedidoCabecera_Externa, ID_Producto_Externo, Cod_Producto_Externo, UnidadesPedidas, UniValMapex) VALUES (?, ?, ?, ?, ?, ?);"
-                    cursor_main.executemany(sql_lineas, lineas_a_insertar)
-                
-                print(f"[SCHEDULER] Sincronización diaria completada: {len(lista_cabeceras)} cabeceras y {len(lineas_a_insertar)} líneas")
-                
-        except Exception as e:
-            print(f"[SCHEDULER] ERROR actualizando Digitalizacion: {e}")
-            return
+        sync_pending_orders(lookback_days=1, log_prefix='[SCHEDULER]')
             
     except Exception as e:
         print(f"[SCHEDULER] ERROR GENERAL en sincronización diaria: {str(e)}")
@@ -685,13 +701,24 @@ def cleanup_sequenced_orders():
                         assy = pedido[1]
 
                         cursor_cz.execute("""
-                            SELECT 
+                            WITH UltimaCabecera AS (
+                                SELECT TOP 1
+                                    A.id_his_wam_pedido_cliente,
+                                    A.EstadoERP,
+                                    A.Id_wam_estado_pedido_cliente
+                                FROM his_wam_pedido_cliente A
+                                WHERE A.NumeroPedido = ?
+                                ORDER BY A.id_his_wam_pedido_cliente DESC
+                            )
+                            SELECT TOP 1
+                                uc.EstadoERP,
+                                uc.Id_wam_estado_pedido_cliente,
                                 ISNULL(B.UniValMapex, 0) AS UniValMapex,
-                                B.UnidadesPedidas
-                            FROM his_wam_pedido_cliente A
-                            JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
+                                ISNULL(B.UnidadesPedidas, 0) AS UnidadesPedidas
+                            FROM UltimaCabecera uc
+                            JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = uc.id_his_wam_pedido_cliente
                             JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
-                            WHERE A.NumeroPedido = ? AND C.Cod_producto = ?
+                            WHERE C.Cod_producto = ?
                         """, (numero_pedido, assy))
                         row = cursor_cz.fetchone()
                         
@@ -700,8 +727,19 @@ def cleanup_sequenced_orders():
                             print(f"[CLEANUP] Pedido {numero_pedido}/{assy} no encontrado en MAPEX - Se omite (no se elimina)")
                             continue
 
-                        uni_val_mapex = row[0]
-                        unidades_pedidas_mapex = row[1] if row[1] is not None else 0
+                        estado_erp = row[0] if row[0] is not None else 0
+                        estado_wam = row[1] if row[1] is not None else 0
+                        uni_val_mapex = row[2] if row[2] is not None else 0
+                        unidades_pedidas_mapex = row[3] if row[3] is not None else 0
+
+                        # Si la última cabecera ya no está pendiente en MAPEX, debemos retirar la secuencia.
+                        if estado_erp != 0 or estado_wam in (2, 3, 4):
+                            print(
+                                f"[CLEANUP] ⚠ Pedido {numero_pedido}/{assy} con estado final en MAPEX "
+                                f"(EstadoERP={estado_erp}, WAM={estado_wam}) - Se eliminará"
+                            )
+                            pedidos_a_eliminar.append((numero_pedido, assy))
+                            continue
 
                         # ÚNICO CRITERIO DE ELIMINACIÓN: unidades ensambladas reales en MAPEX >= pedidas
                         if unidades_pedidas_mapex > 0 and uni_val_mapex >= unidades_pedidas_mapex:
@@ -1061,6 +1099,9 @@ def get_summary_sequenced():
     Devuelve la lista de pedidos secuenciados, ordenados primero por la
     prioridad manual (PriorityOrder) y luego por la secuencia original.
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/summary/sequenced ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             cursor = conn.cursor()
@@ -1068,7 +1109,7 @@ def get_summary_sequenced():
             # Usar la vista wrapper que ya incluye EX y TB
             query = """
                 SELECT * 
-                FROM OB.V_PedidosSummary_Secuenciados_Full
+                FROM OB.V_PedidosSummary_Secuenciados_Full WITH (NOLOCK)
                 ORDER BY
                     -- Las filas con prioridad manual se ordenan por su prioridad
                     CASE WHEN PriorityOrder IS NOT NULL THEN 0 ELSE 1 END,
@@ -1080,14 +1121,27 @@ def get_summary_sequenced():
             
             columns = [column[0] for column in cursor.description]
             result = [dict(zip(columns, row)) for row in cursor.fetchall()]
+            
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/summary/sequenced ===\n")
+            
             return jsonify(result)
 
     except pyodbc.Error as db_err:
-        import logging
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR SQL: {str(db_err)} | Duración: {duracion:.3f}s")
         logging.error(f"Error de base de datos en /api/summary/sequenced: {db_err}")
         return jsonify({'error': "Error de base de datos", "details": str(db_err)}), 500
     except Exception as e:
-        import logging
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR INESPERADO: {str(e)} | Duración: {duracion:.3f}s")
         logging.error(f"Error inesperado en /api/summary/sequenced: {e}")
         return jsonify({'error': "Error interno del servidor"}), 500
 
@@ -1351,9 +1405,13 @@ def get_pedidos_secuenciados_c():
     Excluye pedidos con TB para evitar solape con la tarjeta Tie Brackets.
     Ordenados por PriorityOrder primero (manual) y luego por Sequence (automático).
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_c ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
+                VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
             query = '''
@@ -1375,7 +1433,7 @@ def get_pedidos_secuenciados_c():
                         THEN ps.UnidadesPedidas - 2
                         ELSE NULL
                     END AS ExtenderQuantity
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
                 ORDER BY 
@@ -1396,8 +1454,19 @@ def get_pedidos_secuenciados_c():
                     item['IF'] = item.get('IF1','')
                 result.append(item)
             
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_c ===\n")
             return jsonify(result)
     except Exception as e:
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR: {str(e)} | Duración: {duracion:.3f}s")
         print(f"Error en /api/pedidos_secuenciados_c: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
@@ -1412,9 +1481,13 @@ def get_pedidos_secuenciados_c_trazabilidad():
     DoneQty = AssignedStockBeam (solo stock de Beam asignado)
     Incluye Extender (EX) y ExtenderQty.
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_c_trazabilidad ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
+                VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
             query = '''
@@ -1436,7 +1509,7 @@ def get_pedidos_secuenciados_c_trazabilidad():
                         THEN ps.UnidadesPedidas - 2
                         ELSE NULL
                     END AS ExtenderQuantity
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
                   AND ps.UnidadesPedidas > ISNULL(ps.AssignedStockBeam,0)
@@ -1457,8 +1530,20 @@ def get_pedidos_secuenciados_c_trazabilidad():
                 else:
                     item['IF'] = item.get('IF1','')
                 result.append(item)
+            
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_c_trazabilidad ===\n")
             return jsonify(result)
     except Exception as e:
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR: {str(e)} | Duración: {duracion:.3f}s")
         print(f"Error en /api/pedidos_secuenciados_c_trazabilidad: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
@@ -1545,15 +1630,13 @@ def obtener_extenders_pedido():
 @cross_origin()
 def obtener_material_descuento_pedido():
     """
-    Para un pedido (numero_pedido), devuelve el Assy que debe restar -2 en cantidad.
+    Para un pedido (numero_pedido), devuelve los Assy candidatos que deben restar -2 en cantidad.
     
     Lógica:
     1. Busca GRP_OMEGA_BRACKET_TYPE_HEAD en pedidos_exportados
     2. Si está vacío, usa GRP_OMEGA_BRACKET_TYPE_TRAV
     3. Busca en OB.Omegas qué Assy tiene ese valor en la columna OmegaType
-    4. Retorna ese Assy (es el material que debe restar)
-    
-    Restricción: Máximo UN material por pedido (ya validado en frontend/lógica)
+    4. Retorna todos los Assy candidatos para que el frontend compare con el Assy real de la tarjeta
     """
     try:
         numero_pedido = request.args.get('numero_pedido')
@@ -1573,12 +1656,13 @@ def obtener_material_descuento_pedido():
                     characteristic_name
                 FROM [OB].[pedidos_exportados]
                 WHERE sales_document = ?
-                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV', 'GRP_OMEGA_BRACKET_TYPE_TSD')
             """, (numero_pedido,))
             
             rows = cursor.fetchall()
             bracket_type_head = None
             bracket_type_trav = None
+            bracket_type_tsd = None
             
             for row in rows:
                 value, char_name = row[0], row[1]
@@ -1586,9 +1670,11 @@ def obtener_material_descuento_pedido():
                     bracket_type_head = value.strip()
                 elif char_name == 'GRP_OMEGA_BRACKET_TYPE_TRAV' and value:
                     bracket_type_trav = value.strip()
+                elif char_name == 'GRP_OMEGA_BRACKET_TYPE_TSD' and value:
+                    bracket_type_tsd = value.strip()
             
-            # PASO 2: Resolver con prioridad HEAD > TRAV
-            bracket_type_efectivo = bracket_type_head if bracket_type_head else bracket_type_trav
+            # PASO 2: Resolver con prioridad HEAD > TRAV > TSD
+            bracket_type_efectivo = bracket_type_head if bracket_type_head else (bracket_type_trav if bracket_type_trav else bracket_type_tsd)
             
             if not bracket_type_efectivo:
                 # No hay bracket type para buscar, retornar vacío
@@ -1596,7 +1682,9 @@ def obtener_material_descuento_pedido():
                     "numero_pedido": numero_pedido,
                     "bracket_type_head": bracket_type_head,
                     "bracket_type_trav": bracket_type_trav,
-                    "assy_descuento": None
+                    "bracket_type_tsd": bracket_type_tsd,
+                    "assy_descuento": None,
+                    "assy_descuento_list": []
                 }), 200
             
             # PASO 3: Buscar qué Assy en OB.Omegas tiene ese OmegaType
@@ -1607,14 +1695,16 @@ def obtener_material_descuento_pedido():
                   AND LTRIM(RTRIM(Assy)) != ''
             """, (bracket_type_efectivo,))
             
-            assy_resultado = cursor.fetchone()
+            assy_resultados = [row[0].strip() for row in cursor.fetchall() if row[0] and row[0].strip()]
             
             return jsonify({
                 "numero_pedido": numero_pedido,
                 "bracket_type_head": bracket_type_head,
                 "bracket_type_trav": bracket_type_trav,
+                "bracket_type_tsd": bracket_type_tsd,
                 "bracket_type_efectivo": bracket_type_efectivo,
-                "assy_descuento": assy_resultado[0] if assy_resultado else None
+                "assy_descuento": assy_resultados[0] if assy_resultados else None,
+                "assy_descuento_list": assy_resultados
             }), 200
     
     except Exception as e:
@@ -1633,9 +1723,13 @@ def get_pedidos_secuenciados_w():
     con IF1 e IF2 de OB.Omegas. Excluye pedidos con TB para evitar solape con Tie Brackets.
     Ordenados por PriorityOrder primero (manual) y luego por Sequence (automático).
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_w ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
+                VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
             query = '''
@@ -1657,7 +1751,7 @@ def get_pedidos_secuenciados_w():
                         THEN ps.UnidadesPedidas - 2
                         ELSE NULL
                     END AS ExtenderQuantity
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
                 ORDER BY 
@@ -1678,8 +1772,19 @@ def get_pedidos_secuenciados_w():
                     item['IF'] = item.get('IF1','')
                 result.append(item)
             
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_w ===\n")
             return jsonify(result)
     except Exception as e:
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR: {str(e)} | Duración: {duracion:.3f}s")
         print(f"Error en /api/pedidos_secuenciados_w: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
@@ -1696,9 +1801,13 @@ def get_pedidos_tb():
     Muestra: Sequence, SalesOrder, Qty, TieBracket, Extender, ExtenderQuantity
     Ordenados por PriorityOrder primero y luego por Sequence.
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_tb ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
+                VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
             query = '''
@@ -1716,7 +1825,7 @@ def get_pedidos_tb():
                         THEN ps.UnidadesPedidas - 2
                         ELSE NULL
                     END AS ExtenderQuantity
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                 WHERE ps.TB IS NOT NULL AND LTRIM(RTRIM(ps.TB)) != ''
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
@@ -1727,8 +1836,20 @@ def get_pedidos_tb():
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             result = [dict(zip(columns, row)) for row in rows]
+            
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/pedidos_tb ===\n")
             return jsonify(result)
     except Exception as e:
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR: {str(e)} | Duración: {duracion:.3f}s")
         print(f"Error en /api/pedidos_tb: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
@@ -1742,9 +1863,13 @@ def get_pedidos_picking():
     Devuelve los pedidos de picking (Picking = 'Yes') usando la vista OB.V_PedidosSummary_Secuenciados.
     Solo incluye los campos necesarios para la pantalla Picking.
     """
+    inicio = time.time()
+    VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_picking ===")
+    
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
             if conn is None:
+                VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
             query = '''
@@ -1757,15 +1882,27 @@ def get_pedidos_picking():
                     ps.FechaEntrega AS DeliveryDate,
                     ps.Picking,         -- <--- Añade este campo
                     ps.UniValMapex      -- <--- Y este campo
-                FROM OB.V_PedidosSummary_Secuenciados ps
+                FROM OB.V_PedidosSummary_Secuenciados ps WITH (NOLOCK)
                 WHERE UPPER(LTRIM(RTRIM(ps.Picking))) = 'YES'
             '''
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             result = [dict(zip(columns, row)) for row in rows]
+            
+            duracion = time.time() - inicio
+            cantidad = len(result)
+            
+            if cantidad == 0:
+                VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
+            else:
+                VIEW_LOGGER.info(f"✓ Vista retornó {cantidad} registros | Duración: {duracion:.3f}s")
+            
+            VIEW_LOGGER.info("=== FIN: GET /api/pedidos_picking ===\n")
             return jsonify(result)
     except Exception as e:
+        duracion = time.time() - inicio
+        VIEW_LOGGER.error(f"❌ ERROR: {str(e)} | Duración: {duracion:.3f}s")
         print(f"Error en /api/pedidos_picking: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
@@ -1802,145 +1939,13 @@ def manual_full_sync():
     print(f"[MANUAL SYNC] Inicio actualización manual completa - {datetime.now().strftime('%H:%M:%S')}")
     
     try:
-        # Configurar fecha de inicio (1 día atrás)
-        last_sync_time = datetime.now() - timedelta(days=5)
-        current_time = datetime.now()
-        print(f"[MANUAL SYNC] Sincronizando pendientes desde: {last_sync_time.strftime('%Y-%m-%d %H:%M:%S')}")
-
-        # Obtener Omegas locales
-        omegas_map = {}
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("SELECT Assy, [W/C] FROM OB.Omegas")
-                omegas_map = {row.Assy: row[1] for row in cursor_main.fetchall()}
-        except Exception as e:
-            print(f"[MANUAL SYNC] ERROR al obtener Omegas: {e}")
-            return jsonify({"error": f"Error al obtener Omegas: {str(e)}"}), 500
-
-        # Obtener mapping de Extensores
-        extender_map = {}
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("SELECT ExtenderVariable, Assy FROM OB.Omegas WHERE ExtenderVariable IS NOT NULL")
-                extender_map = {row.ExtenderVariable: row.Assy for row in cursor_main.fetchall()}
-        except Exception as e:
-            print(f"[MANUAL SYNC] ADVERTENCIA al obtener ExtenderMap: {e}")
-            # No es error crítico, solo continuamos sin extensores
-            extender_map = {}
-
-        # Extraer solo pedidos creados en el último día (usando FechaPedido)
-        datos_externos = []
-        try:
-            with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                cursor_cz = conn_cz.cursor()
-                query = """
-                    SELECT 
-                        A.id_his_wam_pedido_cliente,
-                        A.NumeroPedido,
-                        A.FechaEntrega,
-                        A.Bsark,
-                        A.EstadoERP,
-                        A.Id_wam_estado_pedido_cliente,
-                        B.id_his_wam_linea_pedido_cliente,
-                        B.Id_producto,
-                        B.UnidadesPedidas,
-                        B.UniValMapex,
-                        C.Cod_producto,
-                        A.FechaPedido
-                    FROM 
-                        his_wam_pedido_cliente A
-                    JOIN 
-                        his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
-                    JOIN 
-                        V_Cfg_producto C ON C.Id_producto = B.Id_producto
-                    WHERE 
-                        A.FechaPedido >= ?
-                        AND A.EstadoERP = 0 
-                        AND A.Id_wam_estado_pedido_cliente = 1;
-                """
-                cursor_cz.execute(query, last_sync_time.strftime('%Y-%m-%d %H:%M:%S'))
-                columns = [desc[0] for desc in cursor_cz.description]
-                datos_externos = [dict(zip(columns, row)) for row in cursor_cz.fetchall()]
-        except Exception as e:
-            print(f"[MANUAL SYNC] ERROR consultando mapexbp: {e}")
-            return jsonify({"error": f"Error consultando datos externos: {str(e)}"}), 500
-
-        if not datos_externos:
-            print("[MANUAL SYNC] No hay datos para procesar en el período especificado")
-            return jsonify({
-                "message": "Actualización completada - No hay datos nuevos para procesar",
-                "registros_procesados": 0,
-                "periodo": f"Desde {last_sync_time.strftime('%Y-%m-%d %H:%M:%S')}"
-            }), 200
-
-        # Procesar y cargar datos (igual que el scheduler diario)
-        from collections import defaultdict
-        pedidos_agrupados = defaultdict(list)
-        for linea in datos_externos:
-            pedidos_agrupados[linea['id_his_wam_pedido_cliente']].append(linea)
-
-        cabeceras_a_procesar, lineas_a_insertar = {}, []
-        for pedido_id, lineas in pedidos_agrupados.items():
-            cwt, ds, ex, tb = None, None, None, None
-            
-            primera_linea = lineas[0]
-            
-            for linea in lineas:
-                # Verificar CWT/DS/EX/TB
-                wc_type = omegas_map.get(linea['Cod_producto'])
-                if wc_type == 'CWT' and not cwt: 
-                    cwt = linea['Cod_producto']
-                elif wc_type == 'DS' and not ds: 
-                    ds = linea['Cod_producto']
-                elif wc_type == 'EX' and not ex:
-                    ex = linea['Cod_producto']
-                elif wc_type == 'TB' and not tb:
-                    tb = linea['Cod_producto']
-            
-            cabeceras_a_procesar[pedido_id] = (
-                pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
-                primera_linea['Bsark'], primera_linea['EstadoERP'],
-                primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
-            )
-            for linea in lineas:
-                lineas_a_insertar.append((
-                    linea['id_his_wam_linea_pedido_cliente'], linea['id_his_wam_pedido_cliente'],
-                    linea['Id_producto'], linea['Cod_producto'],
-                    linea['UnidadesPedidas'], linea['UniValMapex']
-                ))
-
-        lista_cabeceras = list(cabeceras_a_procesar.values())
-        ids_cabeceras_afectadas = list(cabeceras_a_procesar.keys())
-
-        # Insertar en Digitalizacion
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                # Limpiar registros existentes para los IDs afectados
-                if ids_cabeceras_afectadas:
-                    placeholders = ','.join(['?' for _ in ids_cabeceras_afectadas])
-                    cursor_main.execute(f"DELETE FROM OB.PedidosLineas WHERE ID_PedidoCabecera_Externa IN ({placeholders})", ids_cabeceras_afectadas)
-                    cursor_main.execute(f"DELETE FROM OB.PedidosCabecera WHERE ID_PedidoCabecera_Externa IN ({placeholders})", ids_cabeceras_afectadas)
-                # Insertar cabeceras
-                if lista_cabeceras:
-                    sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
-                    cursor_main.executemany(sql_cabecera, lista_cabeceras)
-                # Insertar líneas
-                if lineas_a_insertar:
-                    sql_lineas = "INSERT INTO OB.PedidosLineas (ID_PedidoLinea_Externa, ID_PedidoCabecera_Externa, ID_Producto_Externo, Cod_Producto_Externo, UnidadesPedidas, UniValMapex) VALUES (?, ?, ?, ?, ?, ?);"
-                    cursor_main.executemany(sql_lineas, lineas_a_insertar)
-                print(f"[MANUAL SYNC] Procesados: {len(lista_cabeceras)} cabeceras y {len(lineas_a_insertar)} líneas")
-        except Exception as e:
-            print(f"[MANUAL SYNC] ERROR actualizando Digitalizacion: {e}")
-            return jsonify({"error": f"Error actualizando base de datos: {str(e)}"}), 500
+        resultado_sync = sync_pending_orders(lookback_days=1, log_prefix='[MANUAL SYNC]')
 
         return jsonify({
             "message": "Actualización manual completada exitosamente",
-            "cabeceras_procesadas": len(lista_cabeceras),
-            "lineas_procesadas": len(lineas_a_insertar),
-            "periodo": f"Desde {last_sync_time.strftime('%Y-%m-%d %H:%M:%S')}"
+            "cabeceras_procesadas": resultado_sync['cabeceras_procesadas'],
+            "lineas_procesadas": resultado_sync['lineas_procesadas'],
+            "periodo": f"Desde {resultado_sync['periodo_desde']}"
         }), 200
     except Exception as e:
         print(f"[MANUAL SYNC] ERROR GENERAL: {str(e)}")
@@ -1956,6 +1961,12 @@ def incremental_sync():
     Endpoint para actualización incremental - solo pedidos modificados recientemente
     """
     try:
+        # Reponer cabeceras/líneas pendientes ausentes para evitar pedidos futuros sin importar.
+        try:
+            sync_pending_orders(lookback_days=1, log_prefix='[INCREMENTAL SYNC]')
+        except Exception as e:
+            print(f"[INCREMENTAL SYNC] ADVERTENCIA reponiendo cabeceras pendientes: {e}")
+
         # Actualizar UniValMapex de TODOS los pedidos secuenciados desde MAPEX
         try:
             with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
@@ -3308,25 +3319,6 @@ def get_summary_omegas():
                     cwt = item.get('CWT', '') or ''
                     item['Ord'] = f"{beam}_{assy}_{cwt}"
                 results.append(item)
-
-            # [POC] Agregar pedido de prueba hardcodeado para demostración del Extender
-            test_order = {
-                'NumeroPedido': '99999_POC_TEST',
-                'FechaEntrega': '2026-04-16T00:00:00',
-                'Bsark': 'ES1',
-                'UnidadesPedidas': 13,
-                'UniValMapex': 0,
-                'Assy': 'S0PF56225841',
-                'Beam': 'S01SAB973106',
-                'C/W': 'C',
-                'CWT': 'S0PF56225628',
-                'DS': 'S0PF56225650',
-                'EX': 'S0PF51975238',  # ← EX visible aquí
-                'TB': 'S0PF51975239',  # ← TB visible aquí
-                'Pendiente': 1,
-                'Ord': 'S01SAB973106_S0PF56225628_S0PF56225841'
-            }
-            results.append(test_order)
 
             return jsonify(results), 200
 
@@ -4803,6 +4795,16 @@ if __name__ == '__main__':
 
     # Cargar configuración SMTP desde BD (ahora ConexionODBCCZ ya está definida)
     cargar_config_smtp()
+
+    try:
+        print("[MAIN] Sincronizando pedidos pendientes al arranque...")
+        startup_sync = sync_pending_orders(lookback_days=1, log_prefix='[STARTUP SYNC]')
+        print(
+            f"[MAIN] -> Sync inicial completado: "
+            f"{startup_sync['cabeceras_procesadas']} cabeceras y {startup_sync['lineas_procesadas']} líneas."
+        )
+    except Exception as e:
+        print(f"[MAIN] ADVERTENCIA: no se pudo ejecutar la sync inicial de pedidos: {e}")
 
     # --- INICIAR EL SERVIDOR FLASK ---
     print("="*50)

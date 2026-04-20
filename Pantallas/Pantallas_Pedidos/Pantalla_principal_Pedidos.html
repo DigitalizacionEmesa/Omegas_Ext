@@ -2,8 +2,94 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
+  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
   <title data-translate-key="page_title_orders_menu">Menú de Pedidos - Almacén</title>
   <link rel="stylesheet" href="/assets/styles.css">
+  <style>
+    .import-template-columns {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .import-template-column {
+      background: #fff;
+      border: 1px solid #dbe5f0;
+      border-radius: 6px;
+      padding: 12px;
+    }
+
+    .import-template-column-title {
+      color: #1976d2;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+    }
+
+    .import-template-column-field {
+      color: #22324a;
+      font-size: 14px;
+      font-weight: 600;
+      word-break: break-word;
+    }
+
+    .import-template-preview {
+      background: #fff;
+      border: 1px solid #dbe5f0;
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 12px;
+    }
+
+    .import-template-preview-title {
+      background: #eef5fc;
+      color: #1b4f8a;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 10px 12px;
+      text-transform: uppercase;
+    }
+
+    .import-template-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .import-template-preview-cell {
+      border-top: 1px solid #e7edf5;
+      border-right: 1px solid #e7edf5;
+      font-size: 12px;
+      padding: 10px;
+      word-break: break-word;
+    }
+
+    .import-template-preview-grid .import-template-preview-cell:nth-child(4n) {
+      border-right: none;
+    }
+
+    .import-template-preview-header {
+      background: #f7fafd;
+      color: #33506f;
+      font-weight: 700;
+    }
+
+    @media (max-width: 760px) {
+      .import-template-columns,
+      .import-template-preview-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .import-template-preview-grid .import-template-preview-cell:nth-child(4n) {
+        border-right: 1px solid #e7edf5;
+      }
+
+      .import-template-preview-grid .import-template-preview-cell:nth-child(2n) {
+        border-right: none;
+      }
+    }
+  </style>
 </head>
 <body>
   <!-- El header global se insertará automáticamente -->
@@ -27,36 +113,65 @@
 
   <!-- MODAL DE IMPORTACIÓN DE PEDIDOS -->
   <div id="importModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 600px; width: 90%;">
+    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 760px; width: 90%;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
         <h2 style="margin: 0;" data-translate-key="import_orders_title">IMPORTAR PEDIDOS</h2>
-        <button onclick="cerrarModalImportacion()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;">×</button>
+        <button onclick="cerrarModalImportacion()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;" data-translate-key-title="button_close">×</button>
       </div>
       
       <div style="background-color: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
-        <p style="margin: 0 0 10px 0; font-weight: bold;">📋 Formato requerido:</p>
-        <ul style="margin: 0; padding-left: 20px; font-size: 13px;">
-          <li><strong>Columna A:</strong> Sales document (ej: 35850)</li>
-          <li><strong>Columna B:</strong> Material (ej: SCOS59001035)</li>
-          <li><strong>Columna C:</strong> Characteristic Name (ej: GRP_HSK_TYPE o GRP_OMEGA_BRACKET_TYPE_TSD)</li>
-          <li><strong>Columna D:</strong> Characteristic Value (ej: LH o TSD21_O_A2_1002)</li>
-        </ul>
-        <p style="margin: 12px 0 0 0; font-size: 13px; color: #444;">
+        <p style="margin: 0 0 10px 0; font-weight: bold;" data-translate-key="import_orders_required_format_label">📋 Formato requerido:</p>
+        <div class="import-template-columns">
+          <div class="import-template-column">
+            <div class="import-template-column-title" data-translate-key="import_orders_col_a_title">Columna A</div>
+            <div class="import-template-column-field" data-translate-key="import_orders_col_a_field">Sales document</div>
+          </div>
+          <div class="import-template-column">
+            <div class="import-template-column-title" data-translate-key="import_orders_col_b_title">Columna B</div>
+            <div class="import-template-column-field" data-translate-key="import_orders_col_b_field">Material</div>
+          </div>
+          <div class="import-template-column">
+            <div class="import-template-column-title" data-translate-key="import_orders_col_c_title">Columna C</div>
+            <div class="import-template-column-field" data-translate-key="import_orders_col_c_field">Characteristic Name</div>
+          </div>
+          <div class="import-template-column">
+            <div class="import-template-column-title" data-translate-key="import_orders_col_d_title">Columna D</div>
+            <div class="import-template-column-field" data-translate-key="import_orders_col_d_field">Characteristic Value</div>
+          </div>
+        </div>
+        <div class="import-template-preview">
+          <div class="import-template-preview-title" data-translate-key="import_orders_template_preview">Vista previa de la plantilla</div>
+          <div class="import-template-preview-grid">
+            <div class="import-template-preview-cell import-template-preview-header" data-translate-key="import_orders_col_a_title">Columna A</div>
+            <div class="import-template-preview-cell import-template-preview-header" data-translate-key="import_orders_col_b_title">Columna B</div>
+            <div class="import-template-preview-cell import-template-preview-header" data-translate-key="import_orders_col_c_title">Columna C</div>
+            <div class="import-template-preview-cell import-template-preview-header" data-translate-key="import_orders_col_d_title">Columna D</div>
+            <div class="import-template-preview-cell">35850</div>
+            <div class="import-template-preview-cell">SCOS59001035</div>
+            <div class="import-template-preview-cell">GRP_HSK_TYPE</div>
+            <div class="import-template-preview-cell">LH</div>
+            <div class="import-template-preview-cell">35850</div>
+            <div class="import-template-preview-cell">SCOS59001035</div>
+            <div class="import-template-preview-cell">GRP_OMEGA_BRACKET_TYPE_TSD</div>
+            <div class="import-template-preview-cell">TSD21_O_A2_1002</div>
+          </div>
+        </div>
+        <p style="margin: 12px 0 0 0; font-size: 13px; color: #444;" data-translate-key="import_orders_required_note_html">
           Si para un mismo Sales document y Material existe <strong>GRP_HSK_TYPE = LH</strong>, el sistema buscará también <strong>GRP_OMEGA_BRACKET_TYPE_TSD</strong> y guardará su Characteristic Value.
         </p>
       </div>
       
       <div style="margin-bottom: 20px;">
-        <label style="display: block; margin-bottom: 10px; font-weight: bold;">Selecciona un archivo:</label>
+        <label style="display: block; margin-bottom: 10px; font-weight: bold;" data-translate-key="import_orders_select_file">Selecciona un archivo:</label>
         <input type="file" id="archivoImportacion" accept=".xlsx,.xls,.csv" style="display: block; margin-bottom: 15px; width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
-        <small style="color: #666;">Formatos soportados: Excel (.xlsx, .xls) y CSV. La estructura de columnas debe ser exactamente la misma en ambos casos.</small>
+        <small style="color: #666;" data-translate-key="import_orders_supported_formats">Formatos soportados: Excel (.xlsx, .xls) y CSV. La estructura de columnas debe ser exactamente la misma en ambos casos.</small>
       </div>
 
       <div style="display: flex; gap: 10px; justify-content: space-between;">
-        <button onclick="descargarPlantilla()" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">⬇️ Descargar Plantilla</button>
+        <button onclick="descargarPlantilla()" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;"><span data-translate-key="button_download_template">⬇️ Descargar Plantilla</span></button>
         <div style="flex: 1; display: flex; gap: 10px;">
-          <button onclick="cerrarModalImportacion()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex: 1;">Cancelar</button>
-          <button onclick="procesarImportacion()" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;">Importar</button>
+          <button onclick="cerrarModalImportacion()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex: 1;" data-translate-key="sap_settings_cancel">Cancelar</button>
+          <button onclick="procesarImportacion()" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;" data-translate-key="button_import_data">Importar</button>
         </div>
       </div>
 
@@ -116,23 +231,19 @@
     
     // Descargar plantilla base para importar pedidos.
     function descargarPlantilla() {
-      // Encabezados exactos válidos para CSV y Excel.
       const headers = ['Sales document', 'Material', 'Characteristic Name', 'Characteristic Value'];
-      
-      // Datos de ejemplo con caso de extensor.
-      const ejemplos = [
+      const plantillaRows = [
         ['35850', 'SCOS59001035', 'GRP_HSK_TYPE', 'LH'],
         ['35850', 'SCOS59001035', 'GRP_OMEGA_BRACKET_TYPE_TSD', 'TSD21_O_A2_1002'],
         ['35850', 'SCOS59001035', 'GRP_SOURCING_ZONE', 'SC-EU'],
         ['35850', 'SCOS59001035', 'GRP_INSTALLATION_ZONE', 'EU'],
-        ['', '', '', '']  // Fila vacía para que el usuario sepa dónde agregar datos
+        ['', '', '', '']
       ];
 
-      // Crear contenido CSV
-      let csvContent = headers.join(',') + '\n';
-      ejemplos.forEach(row => {
-        csvContent += row.map(cell => `"${cell}"`).join(',') + '\n';
-      });
+      const csvLines = [headers, ...plantillaRows].map(row =>
+        row.map(cell => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(';')
+      );
+      const csvContent = `\uFEFFsep=;\r\n${csvLines.join('\r\n')}`;
 
       // Crear blob y descargar
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -203,21 +314,21 @@
         mensajeDiv.style.backgroundColor = '#fee';
         mensajeDiv.style.color = '#c33';
         mensajeDiv.style.borderLeft = '4px solid #c33';
-        mensajeDiv.innerHTML = '⚠️ Por favor, selecciona un archivo.';
+        mensajeDiv.innerHTML = `⚠️ ${getTranslation('import_orders_select_file_warning')}`;
         return;
       }
 
       try {
         const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
         if (!usuarioActual.id) {
-          throw new Error('No hay sesión activa');
+          throw new Error(getTranslation('import_orders_no_active_session'));
         }
 
         mensajeDiv.style.display = 'block';
         mensajeDiv.style.backgroundColor = '#e3f2fd';
         mensajeDiv.style.color = '#1565c0';
         mensajeDiv.style.borderLeft = '4px solid #1565c0';
-        mensajeDiv.innerHTML = '⏳ Enviando archivo al servidor...';
+        mensajeDiv.innerHTML = `⏳ ${getTranslation('import_orders_uploading')}`;
 
         const formData = new FormData();
         formData.append('archivo', archivo);
@@ -251,7 +362,7 @@
             cerrarModalImportacion();
           }, 2000);
         } else {
-          throw new Error(resultado.mensaje || 'Error en la importación');
+          throw new Error(resultado.mensaje || getTranslation('import_orders_error_default'));
         }
       } catch (error) {
         console.error('Error en importación:', error);
@@ -259,7 +370,7 @@
         mensajeDiv.style.backgroundColor = '#fee';
         mensajeDiv.style.color = '#c33';
         mensajeDiv.style.borderLeft = '4px solid #c33';
-        mensajeDiv.innerHTML = `❌ Error: ${error.message}`;
+        mensajeDiv.innerHTML = `❌ ${getTranslation('alert_import_error')} ${error.message}`;
       }
     }
 

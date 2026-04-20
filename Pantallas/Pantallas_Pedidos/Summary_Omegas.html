@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title data-translate-key="page_title_pending_orders">Pedidos Pendientes de Secuenciar</title>
+    <meta charset="UTF-8">  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">    <title data-translate-key="page_title_pending_orders">Pedidos Pendientes de Secuenciar</title>
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/loginModal.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,6 +17,7 @@
         .filters-container { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
         .filters-container label { font-weight: 500; }
         .filters-container input, .filters-container select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; }
+        .btn-filter-reset { background: #6c757d; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1em; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
         .btn-sequence { background: #28a745; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; }
         .btn-sequence:disabled { background: #aaa; cursor: not-allowed; }
         .btn-sequence .spinner { width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; margin-right: 5px; }
@@ -90,6 +90,7 @@
                     <input type="date" id="ending-date">
                     <label for="proyect-select" data-translate-key="label_project">Proyecto:</label>
                     <select id="proyect-select"></select>
+                    <button id="btn-reset-filters" class="btn-filter-reset" type="button" data-translate-key="button_reset_filters">Reset filtros</button>
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <button id="btn-edit-view" class="btn-sequence" type="button" style="background: #ff9800;">
@@ -606,19 +607,13 @@
         const btnRefresh = document.getElementById('btn-refresh-data');
         const originalText = btnRefresh.innerHTML;
         
-        // Guardar los filtros actuales antes del refresh
-        const savedSearchValue = document.getElementById('search-input').value;
-        const savedStartDate = document.getElementById('starting-date').value;
-        const savedEndDate = document.getElementById('ending-date').value;
-        const savedProyect = document.getElementById('proyect-select').value;
-        
         btnRefresh.disabled = true;
         btnRefresh.innerHTML = `<span class="spinner"></span> ${getTranslation('button_updating')}`;
         fetch('/api/sync/manual-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }})
             .then(res => res.json())
             .then(data => {
                 if (data.error) throw new Error(data.error);
-                // Cargar datos y luego restaurar filtros
+                // Cargar datos del backend
                 return fetch('/api/summary');
             })
             .then(res => {
@@ -629,13 +624,7 @@
                 summaryData = Array.isArray(data) ? data : [];
                 populateDropdowns(summaryData);
                 
-                // Restaurar los filtros guardados
-                document.getElementById('search-input').value = savedSearchValue;
-                document.getElementById('starting-date').value = savedStartDate;
-                document.getElementById('ending-date').value = savedEndDate;
-                document.getElementById('proyect-select').value = savedProyect;
-                
-                // Aplicar filtros para mostrar solo datos filtrados
+                // Aplicar los filtros que el usuario tenga en los campos
                 applyFilters();
                 
                 document.getElementById('loadingArea').style.display = 'none';
@@ -646,6 +635,15 @@
                 btnRefresh.disabled = false;
                 btnRefresh.innerHTML = originalText;
             });
+    }
+
+    function resetFilters() {
+        document.getElementById('search-input').value = '';
+        document.getElementById('starting-date').value = '';
+        document.getElementById('ending-date').value = '';
+        document.getElementById('proyect-select').value = 'Todos';
+        applyFilters();
+        updateSequenceButtonState();
     }
     
     function setupEditViewPanel() {
@@ -718,6 +716,7 @@
         document.getElementById('ending-date').addEventListener('change', function() { applyFilters(); updateSequenceButtonState(); });
         document.getElementById('proyect-select').addEventListener('change', applyFilters);
         document.getElementById('btn-refresh-data').addEventListener('click', refreshDataManually);
+        document.getElementById('btn-reset-filters').addEventListener('click', resetFilters);
         setupEditViewPanel();
         // Ordenar al hacer click en los th y permitir drag & drop
         const ths = document.querySelectorAll('.summary-table th');
