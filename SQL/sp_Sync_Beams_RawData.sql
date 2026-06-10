@@ -181,7 +181,7 @@ BEGIN
         GROUP BY Cod_producto
     ) prod ON lsb.Cod_producto = prod.Cod_producto
     WHERE lsb.Fuente = 'PROD'
-      AND prod.MaxFecha > lsb.Last_Sync_Date;
+      AND prod.MaxFecha >= lsb.Last_Sync_Date;
 
     MERGE OB.Beams_Consumos AS Target
     USING (
@@ -242,7 +242,7 @@ BEGIN
         GROUP BY Cod_producto
     ) cons ON lsb.Cod_producto = cons.Cod_producto
     WHERE lsb.Fuente = 'CONS'
-      AND cons.MaxFecha > lsb.Last_Sync_Date;
+      AND cons.MaxFecha >= lsb.Last_Sync_Date;
 
     MERGE OB.BeamSync_PostedTotals AS target
     USING (

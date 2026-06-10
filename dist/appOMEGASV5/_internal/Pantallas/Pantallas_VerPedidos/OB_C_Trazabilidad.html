@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
     <title data-translate-key="page_title_traceability_c">Trazabilidad C</title>
     <link rel="stylesheet" href="../../assets/styles.css">
     <link rel="stylesheet" href="/assets/loginModal.css">
@@ -40,7 +41,23 @@
     // ===== FIN CÓDIGO DE VALIDACIÓN =====
     
     let pedidosCache = [];
+    let lastRenderedPedidosSignature = '';
     const beamWOCache = {}; // Mantenemos la caché para evitar parpadeos si no hay cambios
+
+    function buildPedidosSignature(pedidos) {
+      return JSON.stringify((pedidos || []).map(pedido => ({
+        SalesOrder: pedido.SalesOrder || '',
+        Sequence: pedido.Sequence || pedido.SequenceValue || '',
+        Beam: pedido.Beam || '',
+        Qty: pedido.Qty || 0,
+        DoneQty: pedido.DoneQty ?? 0
+      })));
+    }
+
+    function buildBarcodeUrl(value) {
+      if (!value) return '';
+      return `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(value)}&scale=4&height=18`;
+    }
 
     async function getPedidosSecuenciadosC() {
       try {
@@ -67,25 +84,36 @@
             try {
                 const response = await fetch(`/api/beam_wo/${encodeURIComponent(beamCode)}`);
                 const woList = await response.json();
-                
-                // Guardar en caché y actualizar todos los elementos correspondientes en la página
-                beamWOCache[beamCode] = woList;
+                const normalizedWOList = Array.isArray(woList) ? woList : [];
+                const previousWOList = beamWOCache[beamCode] || [];
                 
                 const woContainers = document.querySelectorAll(`[data-wo-container-for="${beamCode}"]`);
                 const barcodeImages = document.querySelectorAll(`[data-barcode-for="${beamCode}"]`);
 
-                const recentWO = woList.slice(0, 3).join(', ') || '-';
-                const firstWO = woList.length > 0 ? woList[0] : '';
+                const recentWO = normalizedWOList.slice(0, 3).join(', ') || '-';
+                const firstWO = normalizedWOList.length > 0 ? normalizedWOList[0] : '';
+                const previousRecentWO = previousWOList.slice(0, 3).join(', ') || '-';
+                const previousFirstWO = previousWOList.length > 0 ? previousWOList[0] : '';
+
+                beamWOCache[beamCode] = normalizedWOList;
                 
-                woContainers.forEach(container => container.textContent = recentWO);
-                
-                barcodeImages.forEach(img => {
-                    if (firstWO) {
-                        img.src = `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(firstWO)}&scale=4&height=18`;
-                    } else {
-                        img.src = '';
+                if (recentWO !== previousRecentWO) {
+                  woContainers.forEach(container => {
+                    if (container.textContent !== recentWO) {
+                      container.textContent = recentWO;
                     }
-                });
+                  });
+                }
+                
+                if (firstWO !== previousFirstWO) {
+                  const barcodeUrl = buildBarcodeUrl(firstWO);
+                  barcodeImages.forEach(img => {
+                    if ((img.dataset.barcodeValue || '') !== firstWO) {
+                      img.dataset.barcodeValue = firstWO;
+                      img.src = barcodeUrl;
+                    }
+                  });
+                }
 
             } catch (error) {
                 console.error(`Error actualizando WOs para Beam ${beamCode}:`, error);
@@ -93,8 +121,16 @@
         }
     }
 
-    function renderCards(pedidos) {
+    function renderCards(pedidos, options = {}) {
+      const { force = false } = options;
       const sorted = Array.isArray(pedidos) ? [...pedidos] : [];
+      const nextSignature = buildPedidosSignature(sorted);
+
+      if (!force && nextSignature === lastRenderedPedidosSignature) {
+        return;
+      }
+
+      lastRenderedPedidosSignature = nextSignature;
       pedidosCache = sorted;
       const grid = document.getElementById('cardsGrid');
       grid.innerHTML = '';
@@ -107,6 +143,10 @@
         const card = document.createElement('div');
         card.className = 'secuenciacion-card';
         card.style = `background: #f4f8ff; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 260px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid #1976d2; margin: 0; width: 100%; max-width: 1700px;`;
+        const cachedWOList = beamWOCache[pedido.Beam || ''] || [];
+        const recentWO = cachedWOList.slice(0, 3).join(', ') || 'Cargando...';
+        const firstWO = cachedWOList.length > 0 ? cachedWOList[0] : '';
+        const barcodeUrl = buildBarcodeUrl(firstWO);
         
         // --- HTML MODIFICADO ---
         // Se añaden atributos 'data-*' para poder seleccionar y actualizar estos elementos fácilmente.
@@ -122,7 +162,7 @@
             </div>
             <div class="pedido-info-container pedido-info-top">
                 <span>${getTranslation('card_label_wo_beam')}</span>
-                <div data-wo-container-for="${pedido.Beam || ''}">Cargando...</div>
+                <div data-wo-container-for="${pedido.Beam || ''}">${recentWO}</div>
             </div>
           </div>
           <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
@@ -131,7 +171,7 @@
             <div class="pedido-info-container pedido-info-bottom" style="background:#fff;min-width:260px;max-width:320px;width:100%;height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:2px solid #1976d2;">
               <span style="font-size:1.35rem;color:#1976d2;font-weight:700;margin-bottom:8px;letter-spacing:1px;">${getTranslation('barcode_label')}</span>
               <div style="width:320px;height:90px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff;">
-                <img data-barcode-for="${pedido.Beam || ''}" style="height:90px;width:420px;object-position:center;display:block;background:#fff;padding:0 8px;" alt="barcode" src="" />
+                <img data-barcode-for="${pedido.Beam || ''}" data-barcode-value="${firstWO}" style="height:90px;width:420px;object-position:center;display:block;background:#fff;padding:0 8px;" alt="barcode" src="${barcodeUrl}" />
               </div>
             </div>
           </div>
@@ -162,7 +202,14 @@
 
   <!-- ESTILOS ADICIONALES -->
   <style>
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:160px;margin:0;display:flex;flex-direction:column;padding-left:10px;padding-right:10px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}@media (max-width:900px){.main-grid{padding:20px 0}.secuenciacion-card>div{padding-left:16px!important;padding-right:16px!important}.pedido-info-container{min-width:100px;padding:8px;font-size:.95rem}}@media (max-width:600px){.main-grid{padding:10px 0}.secuenciacion-card>div{padding-left:8px!important;padding-right:8px!important}.pedido-info-container{min-width:80px;padding:6px;font-size:.92rem}}
+    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:160px;margin:0;display:flex;flex-direction:column;padding:6px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600;flex-shrink:1}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}
+    .main-grid{display:flex;flex-direction:column;gap:clamp(16px,4vw,28px);padding:clamp(20px,5vh,40px) clamp(8px,3vw,30px);max-width:100%;margin:0 auto}
+    @media (max-width:1200px){.pedido-info-container{min-width:160px;max-width:180px;height:150px}.pedido-info-top{font-size:1.3rem}.pedido-info-bottom{font-size:1.8rem}}
+    @media (max-width:1024px){.pedido-info-container{min-width:140px;max-width:160px;height:145px;font-size:1.2rem}.pedido-info-container span{font-size:1.5rem;margin-bottom:8px}.pedido-info-container div{font-size:1.4rem}}
+    @media (max-width:768px){.main-grid{gap:18px;padding:18px 12px}.pedido-info-container{min-width:120px;max-width:140px;height:135px;font-size:1rem;padding:5px}.pedido-info-container span{font-size:1.2rem;margin-bottom:6px}.pedido-info-container div{font-size:1.1rem}.pedido-info-top{font-size:1.2rem}.pedido-info-bottom{font-size:1.5rem}}
+    @media (max-width:600px){.main-grid{gap:15px;padding:15px 10px}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1.2rem}.pedido-info-container{min-width:100px;max-width:130px;height:120px;padding:4px;font-size:0.9rem}.pedido-info-container span{font-size:1rem;margin-bottom:4px;letter-spacing:1px}.pedido-info-container div{font-size:0.95rem}}
+    @media (max-width:480px){.main-grid{gap:12px;padding:10px 8px}.pedido-info-container{min-width:90px;max-width:110px;height:110px;font-size:0.8rem;padding:3px}.pedido-info-container span{font-size:0.9rem;margin-bottom:3px}.pedido-info-container div{font-size:0.85rem}}
+    @media (max-width:360px){.pedido-info-top{font-size:0.8rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container{min-width:80px;max-width:100px;height:100px;font-size:0.75rem;padding:2px}.pedido-info-container span{font-size:0.75rem;margin-bottom:2px}.pedido-info-container div{font-size:0.7rem}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
@@ -194,7 +241,7 @@
           loadTranslations(lang).then(() => {
               // Re-renderizar las tarjetas con el nuevo idioma
               if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
-                  renderCards(pedidosCache);
+              renderCards(pedidosCache, { force: true });
               }
           });
       }

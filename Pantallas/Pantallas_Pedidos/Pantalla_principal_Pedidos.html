@@ -75,6 +75,129 @@
       font-weight: 700;
     }
 
+    .imported-orders-summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 12px 14px;
+      border: 1px solid #dbe5f0;
+      border-radius: 6px;
+      background: #f7fbff;
+      color: #26415f;
+      font-size: 14px;
+    }
+
+    .import-actions-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .import-actions-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-left: auto;
+    }
+
+    .import-action-btn {
+      min-height: 40px;
+      padding: 9px 16px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      line-height: 1.2;
+      transition: opacity 0.2s ease;
+    }
+
+    .import-action-btn:hover {
+      opacity: 0.92;
+    }
+
+    .import-action-btn.secondary {
+      background-color: #f0f0f0;
+      border: 1px solid #ddd;
+      color: #31445b;
+    }
+
+    .import-action-btn.primary {
+      background-color: #2196F3;
+      color: white;
+    }
+
+    .import-action-btn.success {
+      background-color: #4CAF50;
+      color: white;
+    }
+
+    .imported-orders-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .imported-orders-search {
+      flex: 1;
+      min-width: 240px;
+      padding: 10px 12px;
+      border: 1px solid #cdd9e6;
+      border-radius: 6px;
+      font-size: 14px;
+      color: #22324a;
+    }
+
+    .imported-orders-table-wrapper {
+      max-height: 430px;
+      overflow: auto;
+      border: 1px solid #dbe5f0;
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .imported-orders-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .imported-orders-table th,
+    .imported-orders-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e7edf5;
+      text-align: left;
+      font-size: 13px;
+      vertical-align: top;
+      word-break: break-word;
+    }
+
+    .imported-orders-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #eef5fc;
+      color: #1b4f8a;
+      font-weight: 700;
+    }
+
+    .imported-orders-table tbody tr:nth-child(even) {
+      background: #fafcff;
+    }
+
+    .imported-orders-state {
+      padding: 18px;
+      color: #4d6581;
+      font-size: 14px;
+      text-align: center;
+    }
+
     @media (max-width: 760px) {
       .import-template-columns,
       .import-template-preview-grid {
@@ -87,6 +210,19 @@
 
       .import-template-preview-grid .import-template-preview-cell:nth-child(2n) {
         border-right: none;
+      }
+
+      .imported-orders-summary {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .import-actions-group {
+        margin-left: 0;
+      }
+
+      .import-action-btn {
+        width: 100%;
       }
     }
   </style>
@@ -167,15 +303,67 @@
         <small style="color: #666;" data-translate-key="import_orders_supported_formats">Formatos soportados: Excel (.xlsx, .xls) y CSV. La estructura de columnas debe ser exactamente la misma en ambos casos.</small>
       </div>
 
-      <div style="display: flex; gap: 10px; justify-content: space-between;">
-        <button onclick="descargarPlantilla()" style="padding: 10px 20px; background-color: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;"><span data-translate-key="button_download_template">⬇️ Descargar Plantilla</span></button>
-        <div style="flex: 1; display: flex; gap: 10px;">
-          <button onclick="cerrarModalImportacion()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex: 1;" data-translate-key="sap_settings_cancel">Cancelar</button>
-          <button onclick="procesarImportacion()" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; flex: 1;" data-translate-key="button_import_data">Importar</button>
+      <div class="import-actions-row">
+        <button onclick="descargarPlantilla()" class="import-action-btn primary"><span data-translate-key="button_download_template">⬇️ Descargar Plantilla</span></button>
+        <div class="import-actions-group">
+          <button onclick="abrirModalPedidosImportados()" class="import-action-btn primary" data-translate-key="button_view_imported_orders">Ver los pedidos ya importados</button>
+          <button onclick="cerrarModalImportacion()" class="import-action-btn secondary" data-translate-key="sap_settings_cancel">Cancelar</button>
+          <button onclick="procesarImportacion()" class="import-action-btn success" data-translate-key="button_import_data">Importar</button>
         </div>
       </div>
 
       <div id="mensajeImportacion" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+    </div>
+  </div>
+
+  <div id="pedidosImportadosModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); z-index: 1100; justify-content: center; align-items: center;">
+    <div style="background-color: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-width: 1100px; width: 94%;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="margin: 0;" data-translate-key="imported_orders_title">PEDIDOS YA IMPORTADOS</h2>
+        <button onclick="cerrarModalPedidosImportados()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #666;" data-translate-key-title="button_close">×</button>
+      </div>
+
+      <div class="imported-orders-summary">
+        <div>
+          <strong data-translate-key="imported_orders_summary_label">Últimos pedidos importados guardados en la tabla</strong>
+          <div id="pedidosImportadosResumen" style="margin-top: 4px; color: #4d6581;">-</div>
+        </div>
+        <button id="refrescarPedidosImportadosBtn" onclick="cargarPedidosImportados()" class="import-action-btn primary">
+          <span data-translate-key="button_refresh_imported_orders">Actualizar lista</span>
+        </button>
+      </div>
+
+      <div class="imported-orders-toolbar">
+        <input
+          id="pedidosImportadosSearch"
+          class="imported-orders-search"
+          type="text"
+          oninput="filtrarPedidosImportados()"
+          data-translate-key-placeholder="imported_orders_search_placeholder"
+          placeholder="Buscar pedido..."
+        >
+      </div>
+
+      <div class="imported-orders-table-wrapper">
+        <table class="imported-orders-table">
+          <thead>
+            <tr>
+              <th data-translate-key="imported_orders_col_order">Orders</th>
+            </tr>
+          </thead>
+          <tbody id="pedidosImportadosTbody">
+            <tr>
+              <td colspan="1" class="imported-orders-state" data-translate-key="imported_orders_loading">Cargando pedidos importados...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="pedidosImportadosMensaje" style="margin-top: 15px; padding: 10px; border-radius: 4px; display: none;"></div>
+
+      <div style="display: flex; justify-content: flex-end; margin-top: 18px;">
+        <button onclick="cerrarModalPedidosImportados()" style="padding: 10px 20px; background-color: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; min-width: 160px;" data-translate-key="sap_settings_cancel">Cancelar</button>
+      </div>
     </div>
   </div>
 
@@ -228,6 +416,7 @@
   <!-- SCRIPT DE VALIDACIÓN DE PERMISOS (NUEVO SISTEMA) -->
   <script>
     // ===== FUNCIONES DE IMPORTACIÓN =====
+    let pedidosImportadosRows = [];
     
     // Descargar plantilla base para importar pedidos.
     function descargarPlantilla() {
@@ -271,6 +460,102 @@
       document.getElementById('archivoImportacion').value = '';
       document.getElementById('mensajeImportacion').style.display = 'none';
       document.getElementById('mensajeImportacion').innerHTML = '';
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function renderPedidosImportados(rows) {
+      const tbody = document.getElementById('pedidosImportadosTbody');
+
+      if (!rows || rows.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="1" class="imported-orders-state">${getTranslation('imported_orders_empty')}</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = rows.map(row => `
+        <tr>
+          <td>${escapeHtml(row.order)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function filtrarPedidosImportados() {
+      const searchValue = document.getElementById('pedidosImportadosSearch').value.trim().toLowerCase();
+      const filteredRows = pedidosImportadosRows.filter(row => String(row.order ?? '').toLowerCase().includes(searchValue));
+      renderPedidosImportados(filteredRows);
+    }
+
+    async function cargarPedidosImportados() {
+      const tbody = document.getElementById('pedidosImportadosTbody');
+      const resumen = document.getElementById('pedidosImportadosResumen');
+      const mensaje = document.getElementById('pedidosImportadosMensaje');
+      const refreshBtn = document.getElementById('refrescarPedidosImportadosBtn');
+      const searchInput = document.getElementById('pedidosImportadosSearch');
+      const originalText = refreshBtn.innerHTML;
+
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = getTranslation('button_updating');
+      mensaje.style.display = 'none';
+      mensaje.innerHTML = '';
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="1" class="imported-orders-state">${getTranslation('imported_orders_loading')}</td>
+        </tr>
+      `;
+      resumen.textContent = getTranslation('imported_orders_loading');
+
+      try {
+        const response = await fetch('/api/pedidos-importados');
+        const result = await response.json();
+
+        if (!response.ok || !result.success) {
+          throw new Error(result.mensaje || getTranslation('imported_orders_error_default'));
+        }
+
+        pedidosImportadosRows = result.rows || [];
+        filtrarPedidosImportados();
+        resumen.textContent = `${getTranslation('imported_orders_count_prefix')} ${result.total || 0}`;
+      } catch (error) {
+        pedidosImportadosRows = [];
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="1" class="imported-orders-state">${getTranslation('imported_orders_error_default')}</td>
+          </tr>
+        `;
+        resumen.textContent = getTranslation('imported_orders_error_default');
+        mensaje.style.display = 'block';
+        mensaje.style.backgroundColor = '#fee';
+        mensaje.style.color = '#c33';
+        mensaje.style.borderLeft = '4px solid #c33';
+        mensaje.innerHTML = `❌ ${getTranslation('imported_orders_error_default')}: ${escapeHtml(error.message)}`;
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = originalText;
+      }
+    }
+
+    function abrirModalPedidosImportados() {
+      document.getElementById('pedidosImportadosModal').style.display = 'flex';
+      document.getElementById('pedidosImportadosSearch').value = '';
+      cargarPedidosImportados();
+    }
+
+    function cerrarModalPedidosImportados() {
+      document.getElementById('pedidosImportadosModal').style.display = 'none';
+      document.getElementById('pedidosImportadosMensaje').style.display = 'none';
+      document.getElementById('pedidosImportadosMensaje').innerHTML = '';
+      document.getElementById('pedidosImportadosSearch').value = '';
     }
 
     // Función para parsear CSV
@@ -379,6 +664,12 @@
       document.getElementById('importModal').addEventListener('click', (e) => {
         if (e.target.id === 'importModal') {
           cerrarModalImportacion();
+        }
+      });
+
+      document.getElementById('pedidosImportadosModal').addEventListener('click', (e) => {
+        if (e.target.id === 'pedidosImportadosModal') {
+          cerrarModalPedidosImportados();
         }
       });
     });

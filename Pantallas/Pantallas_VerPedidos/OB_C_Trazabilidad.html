@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- Header generado por globalHeader.js -->
-  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1200px; margin: 0 auto;">
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1600px; margin: 0 auto;">
     <!-- Cards se insertan por JS -->
   </div>
 
@@ -43,12 +43,34 @@
     let pedidosCache = [];
     let lastRenderedPedidosSignature = '';
     const beamWOCache = {}; // Mantenemos la caché para evitar parpadeos si no hay cambios
+    const TRACE_REFRESH_INTERVAL_MS = 10000;
+    const TRACE_WO_REFRESH_INTERVAL_MS = 15000;
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
 
     function buildPedidosSignature(pedidos) {
       return JSON.stringify((pedidos || []).map(pedido => ({
         SalesOrder: pedido.SalesOrder || '',
         Sequence: pedido.Sequence || pedido.SequenceValue || '',
-        Beam: pedido.Beam || '',
+        SubOmega: pedido.SubOmega || pedido.Beam || '',
+        SubOmegaQty: pedido.SubOmegaQty ?? pedido.Qty ?? 0,
+        ClinchingBeam: pedido.ClinchingBeam || '',
+        ClinchingBeamQty: pedido.ClinchingBeamQty ?? 0,
+        GuideInterface: pedido.GuideInterface || '',
+        GuideInterfaceQty: pedido.GuideInterfaceQty ?? 0,
+        Assy: pedido.Assy || '',
+        DeliveryDate: pedido.DeliveryDate || '',
         Qty: pedido.Qty || 0,
         DoneQty: pedido.DoneQty ?? 0
       })));
@@ -57,6 +79,10 @@
     function buildBarcodeUrl(value) {
       if (!value) return '';
       return `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(value)}&scale=4&height=18`;
+    }
+
+    function formatComponentQuantity(value) {
+      return value === null || value === undefined || value === '' ? 0 : value;
     }
 
     async function getPedidosSecuenciadosC() {
@@ -75,49 +101,57 @@
     async function actualizarWOsDeBeamsVisibles() {
         // 1. Identificar todas las Beams únicas que se están mostrando actualmente.
         const beamElements = document.querySelectorAll('[data-beam-code]');
-        const uniqueBeams = new Set(Array.from(beamElements).map(el => el.dataset.beamCode));
+        const uniqueBeams = Array.from(new Set(Array.from(beamElements)
+          .map(el => el.dataset.beamCode)
+          .filter(Boolean)));
 
-        if (uniqueBeams.size === 0) return;
+        if (!uniqueBeams.length) return;
 
-        // 2. Para cada Beam única, buscar sus WOs actualizadas.
-        for (const beamCode of uniqueBeams) {
-            try {
-                const response = await fetch(`/api/beam_wo/${encodeURIComponent(beamCode)}`);
-                const woList = await response.json();
-                const normalizedWOList = Array.isArray(woList) ? woList : [];
-                const previousWOList = beamWOCache[beamCode] || [];
-                
-                const woContainers = document.querySelectorAll(`[data-wo-container-for="${beamCode}"]`);
-                const barcodeImages = document.querySelectorAll(`[data-barcode-for="${beamCode}"]`);
+        try {
+            const response = await fetch('/api/beam_wos', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ beamCodes: uniqueBeams })
+            });
 
-                const recentWO = normalizedWOList.slice(0, 3).join(', ') || '-';
-                const firstWO = normalizedWOList.length > 0 ? normalizedWOList[0] : '';
-                const previousRecentWO = previousWOList.slice(0, 3).join(', ') || '-';
-                const previousFirstWO = previousWOList.length > 0 ? previousWOList[0] : '';
-
-                beamWOCache[beamCode] = normalizedWOList;
-                
-                if (recentWO !== previousRecentWO) {
-                  woContainers.forEach(container => {
-                    if (container.textContent !== recentWO) {
-                      container.textContent = recentWO;
-                    }
-                  });
-                }
-                
-                if (firstWO !== previousFirstWO) {
-                  const barcodeUrl = buildBarcodeUrl(firstWO);
-                  barcodeImages.forEach(img => {
-                    if ((img.dataset.barcodeValue || '') !== firstWO) {
-                      img.dataset.barcodeValue = firstWO;
-                      img.src = barcodeUrl;
-                    }
-                  });
-                }
-
-            } catch (error) {
-                console.error(`Error actualizando WOs para Beam ${beamCode}:`, error);
+            if (!response.ok) {
+              throw new Error(`HTTP ${response.status}`);
             }
+
+            const batchData = await response.json();
+
+            uniqueBeams.forEach(beamCode => {
+              const normalizedWOList = Array.isArray(batchData[beamCode]) ? batchData[beamCode] : [];
+              const previousWOList = beamWOCache[beamCode] || [];
+              const woContainers = document.querySelectorAll(`[data-wo-container-for="${beamCode}"]`);
+              const barcodeImages = document.querySelectorAll(`[data-barcode-for="${beamCode}"]`);
+              const recentWO = normalizedWOList.slice(0, 3).join(', ') || '-';
+              const firstWO = normalizedWOList.length > 0 ? normalizedWOList[0] : '';
+              const previousRecentWO = previousWOList.slice(0, 3).join(', ') || '-';
+              const previousFirstWO = previousWOList.length > 0 ? previousWOList[0] : '';
+
+              beamWOCache[beamCode] = normalizedWOList;
+
+              if (recentWO !== previousRecentWO) {
+                woContainers.forEach(container => {
+                  if (container.textContent !== recentWO) {
+                    container.textContent = recentWO;
+                  }
+                });
+              }
+
+              if (firstWO !== previousFirstWO) {
+                const barcodeUrl = buildBarcodeUrl(firstWO);
+                barcodeImages.forEach(img => {
+                  if ((img.dataset.barcodeValue || '') !== firstWO) {
+                    img.dataset.barcodeValue = firstWO;
+                    img.src = barcodeUrl;
+                  }
+                });
+              }
+            });
+        } catch (error) {
+            console.error('Error actualizando WOs de beams visibles:', error);
         }
     }
 
@@ -142,37 +176,64 @@
       sorted.forEach((pedido, idx) => {
         const card = document.createElement('div');
         card.className = 'secuenciacion-card';
-        card.style = `background: #f4f8ff; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 260px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid #1976d2; margin: 0; width: 100%; max-width: 1700px;`;
-        const cachedWOList = beamWOCache[pedido.Beam || ''] || [];
+        card.style = `background: #f4f8ff; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid #1976d2; margin: 0; width: 100%; max-width: 1560px;`;
+        const subOmegaCode = pedido.SubOmega || pedido.Beam || '';
+        const cachedWOList = beamWOCache[subOmegaCode] || [];
         const recentWO = cachedWOList.slice(0, 3).join(', ') || 'Cargando...';
         const firstWO = cachedWOList.length > 0 ? cachedWOList[0] : '';
         const barcodeUrl = buildBarcodeUrl(firstWO);
         
-        // --- HTML MODIFICADO ---
-        // Se añaden atributos 'data-*' para poder seleccionar y actualizar estos elementos fácilmente.
         card.innerHTML = `
-          <div style="background:#1976d2;color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
-            <span style="font-size:2rem;font-weight:600;">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+          <div class="trace-card-header">
+            <span class="trace-card-meta">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+            <span class="trace-card-meta">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
           </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:28px 64px 0 64px;justify-content:center;">
-            <div class="pedido-info-container pedido-info-top">
+          <div class="trace-card-body">
+            <div class="pedido-info-container trace-card-cell trace-card-cell--code">
+                <span>${getTranslation('card_label_sub_omega')}</span>
+                <div data-beam-code="${subOmegaCode}">${subOmegaCode}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--mini">
+              <span>${getTranslation('card_label_sub_omega_qty')}</span>
+              <div>${formatComponentQuantity(pedido.SubOmegaQty ?? pedido.Qty)}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--code">
                 <span>${getTranslation('table_header_beam')}</span>
-                <div data-beam-code="${pedido.Beam || ''}">${pedido.Beam || ''}</div>
+                <div>${pedido.ClinchingBeam || '-'}</div>
             </div>
-            <div class="pedido-info-container pedido-info-top">
-                <span>${getTranslation('card_label_wo_beam')}</span>
-                <div data-wo-container-for="${pedido.Beam || ''}">${recentWO}</div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--mini">
+              <span>${getTranslation('card_label_beam_qty')}</span>
+              <div>${formatComponentQuantity(pedido.ClinchingBeamQty)}</div>
             </div>
-          </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
-            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
-            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
-            <div class="pedido-info-container pedido-info-bottom" style="background:#fff;min-width:260px;max-width:320px;width:100%;height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:2px solid #1976d2;">
-              <span style="font-size:1.35rem;color:#1976d2;font-weight:700;margin-bottom:8px;letter-spacing:1px;">${getTranslation('barcode_label')}</span>
-              <div style="width:320px;height:90px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff;">
-                <img data-barcode-for="${pedido.Beam || ''}" data-barcode-value="${firstWO}" style="height:90px;width:420px;object-position:center;display:block;background:#fff;padding:0 8px;" alt="barcode" src="${barcodeUrl}" />
+            <div class="pedido-info-container trace-card-cell trace-card-cell--code trace-card-cell--catalog">
+              <span>${getTranslation('card_label_guide_int')}</span>
+              <div>${pedido.GuideInterface || '-'}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--mini">
+              <span>${getTranslation('card_label_guide_int_qty')}</span>
+              <div>${formatComponentQuantity(pedido.GuideInterfaceQty)}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--mini">
+              <span>${getTranslation('card_label_done_qty')}</span>
+              <div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--wo">
+              <span>${getTranslation('card_label_wo_sub_omega')}</span>
+              <div data-wo-container-for="${subOmegaCode}">${recentWO}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-barcode">
+              <span>${getTranslation('barcode_label')}</span>
+              <div class="trace-card-barcode-frame">
+                <img data-barcode-for="${subOmegaCode}" data-barcode-value="${firstWO}" class="trace-card-barcode-image" alt="barcode" src="${barcodeUrl}" />
               </div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--code">
+                <span>${getTranslation('table_header_assy')}</span>
+                <div>${pedido.Assy || ''}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--date">
+              <span>${getTranslation('card_label_delivery_date')}</span>
+              <div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div>
             </div>
           </div>
         `;
@@ -192,24 +253,38 @@
     function setupPageLogic() {
         // Llama a la función que actualiza la lista de pedidos cada 5 segundos
         autoUpdatePedidosSecuenciadosC();
-        setInterval(autoUpdatePedidosSecuenciadosC, 5000);
+        setInterval(() => {
+          if (!document.hidden) {
+            autoUpdatePedidosSecuenciadosC();
+          }
+        }, TRACE_REFRESH_INTERVAL_MS);
 
         // Llama a la NUEVA función que actualiza solo las WOs de las Beams cada 5.5 segundos
         // Se usa un pequeño desfase (5.5s vs 5s) para evitar que todas las llamadas se hagan al mismo tiempo.
-        setInterval(actualizarWOsDeBeamsVisibles, 5500); 
+        setInterval(() => {
+          if (!document.hidden) {
+            actualizarWOsDeBeamsVisibles();
+          }
+        }, TRACE_WO_REFRESH_INTERVAL_MS);
+
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            autoUpdatePedidosSecuenciadosC();
+            actualizarWOsDeBeamsVisibles();
+          }
+        });
     }
   </script>
 
   <!-- ESTILOS ADICIONALES -->
   <style>
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:160px;margin:0;display:flex;flex-direction:column;padding:6px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600;flex-shrink:1}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}
-    .main-grid{display:flex;flex-direction:column;gap:clamp(16px,4vw,28px);padding:clamp(20px,5vh,40px) clamp(8px,3vw,30px);max-width:100%;margin:0 auto}
-    @media (max-width:1200px){.pedido-info-container{min-width:160px;max-width:180px;height:150px}.pedido-info-top{font-size:1.3rem}.pedido-info-bottom{font-size:1.8rem}}
-    @media (max-width:1024px){.pedido-info-container{min-width:140px;max-width:160px;height:145px;font-size:1.2rem}.pedido-info-container span{font-size:1.5rem;margin-bottom:8px}.pedido-info-container div{font-size:1.4rem}}
-    @media (max-width:768px){.main-grid{gap:18px;padding:18px 12px}.pedido-info-container{min-width:120px;max-width:140px;height:135px;font-size:1rem;padding:5px}.pedido-info-container span{font-size:1.2rem;margin-bottom:6px}.pedido-info-container div{font-size:1.1rem}.pedido-info-top{font-size:1.2rem}.pedido-info-bottom{font-size:1.5rem}}
-    @media (max-width:600px){.main-grid{gap:15px;padding:15px 10px}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1.2rem}.pedido-info-container{min-width:100px;max-width:130px;height:120px;padding:4px;font-size:0.9rem}.pedido-info-container span{font-size:1rem;margin-bottom:4px;letter-spacing:1px}.pedido-info-container div{font-size:0.95rem}}
-    @media (max-width:480px){.main-grid{gap:12px;padding:10px 8px}.pedido-info-container{min-width:90px;max-width:110px;height:110px;font-size:0.8rem;padding:3px}.pedido-info-container span{font-size:0.9rem;margin-bottom:3px}.pedido-info-container div{font-size:0.85rem}}
-    @media (max-width:360px){.pedido-info-top{font-size:0.8rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container{min-width:80px;max-width:100px;height:100px;font-size:0.75rem;padding:2px}.pedido-info-container span{font-size:0.75rem;margin-bottom:2px}.pedido-info-container div{font-size:0.7rem}}
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:10px 12px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:78px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.84rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:1rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.22;overflow-wrap:normal;word-break:normal}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}
+    .main-grid{display:flex;flex-direction:column;gap:16px;padding:14px clamp(10px,2vw,24px) 24px;max-width:1600px;margin:0 auto}
+    .trace-card-header{background:#1976d2;color:#fff;padding:11px 20px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.trace-card-meta{font-size:1.04rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-body{display:grid;grid-template-columns:minmax(148px,1.1fr) minmax(80px,.48fr) minmax(148px,1.1fr) minmax(80px,.48fr) minmax(148px,1.1fr) minmax(84px,.54fr) minmax(80px,.48fr) minmax(208px,1.22fr) minmax(220px,1.22fr) minmax(142px,1fr) minmax(124px,.82fr);gap:10px;padding:10px 16px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-cell--code div{white-space:normal;overflow-wrap:normal;word-break:normal}.trace-card-cell--catalog{padding-left:10px;padding-right:10px}.trace-card-cell--catalog div{max-width:100%;font-size:.92rem;line-height:1.16;overflow-wrap:anywhere;word-break:break-word}.trace-card-cell--wo div{white-space:normal;overflow-wrap:break-word;word-break:normal}.trace-card-barcode{padding:7px 8px}.trace-card-barcode-frame{width:100%;min-height:50px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:58px;width:100%;max-width:248px;object-fit:contain;object-position:center;display:block;background:#fff}
+    @media (max-width:1440px){.trace-card-body{grid-template-columns:repeat(6,minmax(110px,1fr));}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:70px}}
+    @media (max-width:900px){.main-grid{padding:14px 10px 20px}.trace-card-header{padding:10px 14px}.trace-card-meta{font-size:.96rem}.trace-card-body{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-barcode{grid-column:span 3}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}
+    @media (max-width:640px){.trace-card-body{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:64px;padding:7px 8px}}
+    @media (max-width:420px){.trace-card-header{padding:8px 10px}.trace-card-meta{font-size:.88rem}.trace-card-body{grid-template-columns:1fr;padding:8px}.trace-card-barcode{grid-column:auto}.pedido-info-container{min-height:60px}.trace-card-barcode-image{max-width:100%}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->

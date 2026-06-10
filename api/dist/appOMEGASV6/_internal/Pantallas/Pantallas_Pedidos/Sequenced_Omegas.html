@@ -1,0 +1,1962 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+    <title data-translate-key="page_title_sequenced_orders">Pedidos Secuenciados</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .summary-table th.sorted-asc::after { content: ' \25B2'; font-size: 0.9em; }
+        .summary-table th.sorted-desc::after { content: ' \25BC'; font-size: 0.9em; }
+        .group-header-row {
+            background: #e3eafc;
+            color: #1976d2;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+            text-align: left;
+        }
+        .group-header-row .group-toggle {
+            font-size: 1.2em;
+            margin-right: 8px;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .group-header-row.collapsed .group-toggle {
+            transform: rotate(240deg);
+        }
+        .group-drop-hover {
+            background: #d0e3ff !important;
+            border-color: #3880c7 !important;
+        }
+        /* Tus estilos originales se mantienen intactos */
+        body { font-size: 0.85em; background: #eaf3fc; margin: 0; font-family: sans-serif; }
+        .header { display: flex; align-items: center; background: #1976d2; color: white; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .home-icon { background: none; border: none; color: white; cursor: pointer; padding: 0; margin-right: 15px; }
+        .home-icon svg { width: 32px; height: 32px; }
+        .header-title { font-size: 1.5rem; font-weight: 600; flex-grow: 1; }
+        .logo { height: 40px; }
+        main { padding: 20px; }
+        .summary-table-container { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2rem; margin-top: 2rem; }
+        .summary-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 1.15em; }
+        .summary-table th, .summary-table td { word-break: break-word; padding: 0.15rem 0.25rem; border-bottom: 1px solid #e0e0e0; text-align: center; }
+        .summary-table thead th { background: #1976d2; color: #fff; position: sticky; top: 0; z-index: 2; }
+        .summary-table tr:last-child td { border-bottom: none; }
+        .summary-table tr:nth-child(even) { background-color: #f8f9fa; }
+        .summary-table th, .summary-table td {text-align: left; min-width: 40px; height: 40px; white-space: normal; word-break: break-all; overflow-wrap: break-word; }
+        .search-box { margin-bottom: 1.2rem; }
+        .search-box label { font-weight: 500; margin-right: 10px; }
+        .search-box input { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; }
+        .top-link { margin-bottom: 1em; display: inline-block; background: #1976d2; color: #fff; padding: 0.5em 1.2em; border-radius: 5px; text-decoration: none; font-weight: 500; font-size: 0.95em; }
+        #loadingArea { text-align: center; padding: 2rem; color: #1976d2; font-weight: 500; font-size: 1.2rem; }
+        .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid #1976d2; border-top: 3px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .error-message { color: #c00; font-weight: bold; }
+        .btn-sequence { background: #28a745; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; }
+        .btn-sequence:disabled { background: #aaa; cursor: not-allowed; }
+        .btn-sequence .spinner { width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; margin-right: 5px; }
+        .table-wrapper { overflow-x: auto; }
+        
+        /* Estilos para drag & drop de filas */
+        .dragging {
+            opacity: 0.5 !important;
+            transform: rotate(2deg);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            background-color: #ffd700 !important;
+        }
+
+        .drop-target-before {
+            border-top: 3px solid #ffd700 !important;
+        }
+        
+        .drop-target-after {
+            border-bottom: 3px solid #ffd700 !important;
+        }
+
+        .drag-over {
+            background-color: #e3f2fd !important;
+        }
+
+        tbody tr[draggable="true"]:hover:not(.dragging) {
+            background-color: #f0f8ff !important;
+            cursor: move !important;
+        }
+
+        /* Indicador visual para filas con orden personalizado */
+        .custom-priority-row {
+            border-left: 4px solid #ff9800 !important;
+            /* Eliminado el fondo amarillo que causaba que todas las filas se vieran amarillas */
+        }
+        
+        @media (max-width: 900px) { body { font-size: 0.75em; } .summary-table-container { padding: 0.5rem; } .summary-table { width: 100%; font-size: 0.70em; } .summary-table th, .summary-table td { padding: 0.2rem 0.2rem; } }
+    </style>
+</head>
+<body>
+    <!-- Header generado por globalHeader.js -->
+    <main>
+        <div class="summary-table-container">
+            <!-- Área de agrupación EXACTAMENTE igual a Summary_Omegas -->
+            <div id="group-drop-area" style="min-height:36px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;background:#f3f6fa;border:2px dashed #1976d2;border-radius:7px;color:#1976d2;font-weight:600;transition:background 0.2s;cursor:pointer;">
+                <span id="group-drop-label" data-translate-key="group_drop_label">Arrastra aquí una cabecera para agrupar por esa columna</span>
+                <span id="grouped-by" style="display:none;margin-left:10px;"></span>
+                <button id="clear-group-btn" style="display:none;margin-left:10px;background:#c00;color:#fff;border:none;border-radius:4px;padding:0.2em 0.7em;cursor:pointer;font-weight:600;">✕</button>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; gap: 10px; flex-wrap: wrap;">
+                <a href="/Pantallas/Pantallas_Pedidos/Summary_Omegas.html" class="top-link" data-translate-key="link_view_pending">Ver Pendientes de Secuenciar</a>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button id="btn-edit-view" class="btn-sequence" type="button" style="background: #ff9800;">
+                        <span data-translate-key="button_edit_view">🛠️ Editar Vista</span>
+                    </button>
+                    <button id="btn-refresh-sequenced" class="btn-sequence" style="background: #007bff; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; color: #fff;">
+                        <span data-translate-key="button_update_modified">🔄 Actualizar Modificados</span>
+                    </button>
+                    <button id="btn-reset-order" class="btn-sequence" style="background: #ff9800; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; color: #fff;">
+                        <span data-translate-key="button_reset_order">🔄 Resetear Orden Manual</span>
+                    </button>
+                    <button id="btn-delete-all-sequences" class="btn-sequence" style="display: none; background: #dc3545; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; color: #fff;">
+                        <span data-translate-key="button_delete_all_sequences">🗑️ Eliminar Todas las Secuencias</span>
+                    </button>
+                </div>
+            </div>
+            <!-- Panel flotante para seleccionar columnas -->
+            <div id="edit-view-panel" style="display:none; position:fixed; top:80px; left:50%; transform:translateX(-50%); background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.18); padding:1.2em 2em; z-index:1000; min-width:260px;">
+                <div style="font-weight:600; font-size:1.1em; margin-bottom:10px;" data-translate-key="panel_title_select_columns">Selecciona columnas a mostrar</div>
+                <form id="edit-view-form" style="display:flex; flex-direction:column; gap:6px;"></form>
+                <div style="margin-top:12px; text-align:right;">
+                    <button type="button" id="btn-close-edit-view" class="btn-sequence" style="background:#aaa; color:#fff; margin-right:8px;" data-translate-key="button_close">Cerrar</button>
+                    <button type="button" id="btn-reset-edit-view" class="btn-sequence" style="background:#1976d2; color:#fff;" data-translate-key="button_show_all">Mostrar Todas</button>
+                </div>
+            </div>
+            <div class="search-box">
+                <label for="search-input" data-translate-key="label_search">Buscar:</label>
+                <input type="text" id="search-input" placeholder="Buscar por Pedido, Assy, Sequence..." style="width:180px; margin-right:10px;" data-translate-key-placeholder="placeholder_search_orders">
+                <label for="date-from" data-translate-key="label_from_date">Desde:</label>
+                <input type="date" id="date-from" style="margin-right:10px;">
+                <label for="date-to" data-translate-key="label_to_date">Hasta:</label>
+                <input type="date" id="date-to" style="margin-right:15px;">
+                
+                <!-- Filtro de pedidos con material faltante -->
+                <label style="display:flex; align-items:center; margin-right:15px; font-weight:500;">
+                    <input type="checkbox" id="filter-faltantes" style="margin-right:6px;">
+                    <span data-translate-key="filter_missing_materials">Solo Pedidos con Material Faltante</span>
+                </label>
+                
+                <!-- Indicador visual de colores -->
+                <div style="display:flex; align-items:center; font-size:0.9em; color:#666;">
+                    <div style="width:16px; height:16px; background:#ffd6d6; border:1px solid #ccc; border-radius:3px; margin-right:6px;"></div>
+                    <span data-translate-key="legend_missing_products">Pedidos con Productos Faltantes</span>
+                </div>
+            </div>
+            <div id="loadingArea">
+                <span class="spinner"></span> <span data-translate-key="text_loading_data">Cargando datos...</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="summary-table" style="display:none;">
+                <thead>
+                    <tr>
+                        <th data-translate-key="table_header_order_number" style="width: 130px;">Numero Pedido</th>
+                        <th data-translate-key="table_header_delivery_date" style="width: 110px;">Fecha Entrega</th>
+                        <th data-translate-key="table_header_bsark" style="width: 90px;">Bsark</th>
+                        <th data-translate-key="table_header_units_ordered" style="width: 140px;">Unidades Pedidas</th>
+                        <th data-translate-key="table_header_univalmapex" style="width: 140px;">UniValMapex</th>
+                        <th data-translate-key="table_header_assy" style="width: 115px;">Assy</th>
+                        <th data-translate-key="table_header_beam" style="width: 115px;">Beam</th>
+                        <th data-translate-key="table_header_cw" style="width: 70px;">C/W</th>
+                        <th data-translate-key="table_header_cwt" style="width: 115px;">CWT</th>
+                        <th data-translate-key="table_header_ds" style="width: 115px;">DS</th>
+                        <th data-translate-key="table_header_ord" style="width: 320px;">Ord</th>
+                        <th data-translate-key="table_header_sequence" style="width: 100px;">Sequence</th>
+                        <th data-translate-key="table_header_ofs" style="width: 120px;">OFs</th>
+                        <th data-translate-key="table_header_assigned_stock" style="width: 130px;">AssignedStock</th>
+                        <th data-translate-key="table_header_assembly" style="width: 100px;">Assembly</th>
+                        <th data-translate-key="table_header_picking" style="width: 100px;">Picking</th>
+                    </tr>
+                </thead>
+                <tbody id="summary-tbody">
+                    <!-- Filas generadas por JS -->
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- SCRIPTS DE LA LÓGICA DE LA PÁGINA -->
+    <script>
+        // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA'));
+            
+            if (!usuarioSGA) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            const nivelRequerido = 5; // Nivel requerido para pantallas de pedidos
+            
+            if (nivelUsuario < nivelRequerido) {
+                alert('No tienes permisos para acceder a esta pantalla');
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+            // Mostrar botón de eliminar todas las secuencias solo para nivel > 10
+            if (nivelUsuario >= 10) {
+                const btnDeleteAll = document.getElementById('btn-delete-all-sequences');
+                if (btnDeleteAll) {
+                    btnDeleteAll.style.display = 'inline-block';
+                }
+            }
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+        let summaryData = [];
+        let filteredData = [];
+        let autoRefreshInterval;
+        // isResizing debe estar declarada aquí antes de cualquier función o uso
+        window.isResizing = false;
+
+        // Cache para recordar qué pedidos tienen faltantes (persistente entre refrescos)
+        window.pedidosConFaltantes = window.pedidosConFaltantes || new Set();
+        
+        // Cache para evitar múltiples consultas del mismo pedido
+        let faltantesCache = new Map();
+        let faltantesPendingRequests = new Set();
+
+        // Detección global de Ctrl (como en PRUEBA_CTRL.html)
+        window.isCtrlPressed = false;
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Control') {
+                window.isCtrlPressed = true;
+                updateHeaderUIForCtrl();
+            }
+        });
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'Control') {
+                window.isCtrlPressed = false;
+                updateHeaderUIForCtrl();
+            }
+        });
+        window.addEventListener('blur', function() {
+            window.isCtrlPressed = false;
+            updateHeaderUIForCtrl();
+        });
+
+        function updateHeaderUIForCtrl() {
+            const headers = document.querySelectorAll('.summary-table thead th');
+            headers.forEach(th => {
+                const dragLabel = th.querySelector('.col-drag-label');
+                const resizer = th.querySelector('.col-resizer');
+                const groupIcon = th.querySelector('.grouped-col-icon');
+                
+                if (window.isCtrlPressed || window.isResizing) {
+                    // Ocultar resize y agrupación cuando Ctrl está presionado o estamos redimensionando
+                    if (resizer) resizer.style.visibility = window.isResizing ? '' : 'hidden';
+                    if (groupIcon) groupIcon.style.visibility = 'hidden';
+                    // Deshabilitar drag pero mantener texto visible
+                    if (dragLabel) {
+                        dragLabel.style.cursor = window.isResizing ? 'default' : 'pointer';
+                        dragLabel.setAttribute('draggable', 'false');
+                    }
+                    th.style.cursor = window.isResizing ? 'default' : 'pointer';
+                    th.setAttribute('draggable', 'false');
+                } else {
+                    // Restaurar todo
+                    if (resizer) resizer.style.visibility = '';
+                    if (groupIcon) groupIcon.style.visibility = '';
+                    if (dragLabel) {
+                        dragLabel.style.cursor = 'grab';
+                        dragLabel.setAttribute('draggable', 'true');
+                    }
+                    th.style.cursor = '';
+                    th.setAttribute('draggable', 'true');
+                }
+            });
+        }
+
+        function getFieldValue(row, fieldName) {
+            return row[fieldName] || row[fieldName.replace('/', '_')] || row[fieldName.replace('/', '')] || '';
+        }
+
+        // Variables para ordenación
+        let currentSort = { column: null, asc: true };
+
+        // Columnas configurables para Edit View y reordenables
+        const defaultColumnConfig = [
+            { key: 'NumeroPedido', label: 'Numero Pedido', label_key: 'table_header_order_number' },
+            { key: 'FechaEntrega', label: 'Fecha Entrega', label_key: 'table_header_delivery_date' },
+            { key: 'Bsark', label: 'Bsark', label_key: 'table_header_bsark' },
+            { key: 'UnidadesPedidas', label: 'Unidades Pedidas', label_key: 'table_header_units_ordered' },
+            { key: 'UniValMapex', label: 'UniValMapex', label_key: 'table_header_univalmapex' },
+            { key: 'Assy', label: 'Assy', label_key: 'table_header_assy' },
+            { key: 'Beam', label: 'Beam', label_key: 'table_header_beam' },
+            { key: 'C/W', label: 'C/W', label_key: 'table_header_cw' },
+            { key: 'CWT', label: 'CWT', label_key: 'table_header_cwt' },
+            { key: 'DS', label: 'DS', label_key: 'table_header_ds' },
+            { key: 'EX', label: 'EX', label_key: 'table_header_ex' },
+            { key: 'TB', label: 'TB', label_key: 'table_header_tb' },
+            { key: 'Ord', label: 'Ord', label_key: 'table_header_ord' },
+            { key: 'Sequence', label: 'Sequence', label_key: 'table_header_sequence' },
+            { key: 'OFs', label: 'OFs', label_key: 'table_header_ofs' },
+            { key: 'AssignedStock', label: 'AssignedStock', label_key: 'table_header_assigned_stock' },
+            { key: 'AssignedStockBeam', label: 'AssignedStockBeam', label_key: 'table_header_assigned_stock_beam' },
+            { key: 'Assembly', label: 'Assembly', label_key: 'table_header_assembly' },
+            { key: 'Picking', label: 'Picking', label_key: 'table_header_picking' },
+            { key: 'Delete', label: 'Eliminar', label_key: 'table_header_delete' }
+        ];
+
+        function getColumnConfig() {
+            const saved = localStorage.getItem('sequenced_column_order');
+            if (saved) {
+                try {
+                    const arr = JSON.parse(saved);
+                    if (Array.isArray(arr) && arr.length === defaultColumnConfig.length) {
+                        // Map saved keys to config objects
+                        return arr.map(key => defaultColumnConfig.find(c => c.key === key)).filter(Boolean);
+                    }
+                } catch {}
+            }
+            // Si llegamos aquí, limpiar cache viejo de visibilidad por si cambió la cantidad de columnas
+            localStorage.removeItem('sequenced_visible_columns');
+            localStorage.removeItem('sequenced_column_widths');
+            return [...defaultColumnConfig];
+        }
+        function setColumnConfig(arr) {
+            localStorage.setItem('sequenced_column_order', JSON.stringify(arr.map(c => c.key)));
+        }
+        let columnConfig = getColumnConfig();
+
+        // Visibilidad de columnas, mapeada por key para robustez ante reordenación
+        function getVisibleColumns() {
+            const saved = localStorage.getItem('sequenced_visible_columns');
+            if (saved) {
+                try {
+                    const obj = JSON.parse(saved);
+                    if (obj && typeof obj === 'object') {
+                        // Devuelve array de bools en el orden de columnConfig
+                        return columnConfig.map(col => obj[col.key] !== false);
+                    }
+                } catch {}
+            }
+            return columnConfig.map(() => true); // Todas visibles por defecto
+        }
+        function setVisibleColumns(arr) {
+            // arr: array de bools en el orden de columnConfig
+            const obj = {};
+            columnConfig.forEach((col, idx) => { obj[col.key] = arr[idx]; });
+            localStorage.setItem('sequenced_visible_columns', JSON.stringify(obj));
+        }
+
+        // Column resizing helpers
+        function getColumnWidths() {
+            const saved = localStorage.getItem('sequenced_column_widths');
+            if (saved) {
+                try {
+                    const obj = JSON.parse(saved);
+                    if (obj && typeof obj === 'object') {
+                        return columnConfig.map(col => obj[col.key] || null);
+                    }
+                } catch {}
+            }
+            return columnConfig.map(() => null);
+        }
+        function setColumnWidths(widths) {
+            const obj = {};
+            columnConfig.forEach((col, idx) => {
+                if (widths[idx]) obj[col.key] = widths[idx];
+            });
+            localStorage.setItem('sequenced_column_widths', JSON.stringify(obj));
+        }
+
+        // Función optimizada para verificar faltantes con cache y debounce
+        async function checkFaltantesOptimized(numeroPedido, tr) {
+            // Si ya tenemos el resultado en cache, usarlo inmediatamente
+            if (faltantesCache.has(numeroPedido)) {
+                const hasFaltantes = faltantesCache.get(numeroPedido);
+                applyFaltantesStyle(tr, numeroPedido, hasFaltantes);
+                return;
+            }
+
+            // Si ya hay una petición pendiente para este pedido, no hacer otra
+            if (faltantesPendingRequests.has(numeroPedido)) {
+                return;
+            }
+
+            // Si está en el set de faltantes, aplicar estilo inmediatamente
+            if (window.pedidosConFaltantes.has(numeroPedido)) {
+                applyFaltantesStyle(tr, numeroPedido, true);
+            }
+
+            // Marcar como pendiente y hacer la consulta
+            faltantesPendingRequests.add(numeroPedido);
+            
+            try {
+                const res = await fetch(`/api/pedido/${encodeURIComponent(numeroPedido)}/faltantes`);
+                const result = await res.json();
+                const hasFaltantes = result.hay_faltantes;
+                
+                // Guardar en cache (válido por 6 segundos)
+                faltantesCache.set(numeroPedido, hasFaltantes);
+                setTimeout(() => faltantesCache.delete(numeroPedido), 6000);
+                
+                // Aplicar estilo
+                applyFaltantesStyle(tr, numeroPedido, hasFaltantes);
+                
+            } catch (error) {
+                console.warn(`Error verificando faltantes para pedido ${numeroPedido}:`, error);
+            } finally {
+                faltantesPendingRequests.delete(numeroPedido);
+            }
+        }
+
+        // Función batch para consultar múltiples pedidos de una vez
+        async function checkFaltantesBatch(pedidos) {
+            const pedidosToCheck = pedidos.filter(p => !faltantesCache.has(p) && !faltantesPendingRequests.has(p));
+            
+            if (pedidosToCheck.length === 0) return;
+
+            pedidosToCheck.forEach(p => faltantesPendingRequests.add(p));
+
+            try {
+                const res = await fetch('/api/pedidos/faltantes/batch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({pedidos: pedidosToCheck})
+                });
+                const results = await res.json();
+                
+                // Procesar resultados y actualizar cache
+                for (const [numeroPedido, data] of Object.entries(results)) {
+                    faltantesCache.set(numeroPedido, data.hay_faltantes);
+                    setTimeout(() => faltantesCache.delete(numeroPedido), 6000);
+                    
+                    // Aplicar estilo a todas las filas correspondientes
+                    const trs = document.querySelectorAll(`tr[data-pedido="${numeroPedido}"]`);
+                    trs.forEach(tr => applyFaltantesStyle(tr, numeroPedido, data.hay_faltantes));
+                }
+                
+            } catch (error) {
+                console.warn('Error en consulta batch de faltantes:', error);
+            } finally {
+                pedidosToCheck.forEach(p => faltantesPendingRequests.delete(p));
+            }
+        }
+
+        function applyFaltantesStyle(tr, numeroPedido, hasFaltantes) {
+            if (hasFaltantes) {
+                tr.style.background = '#ffd6d6';
+                tr.title = 'Este pedido tiene productos faltantes';
+                window.pedidosConFaltantes.add(numeroPedido);
+            } else {
+                tr.style.background = '';
+                tr.title = '';
+                window.pedidosConFaltantes.delete(numeroPedido);
+            }
+        }
+
+        // Agrupación múltiple EXACTAMENTE IGUAL QUE Summary_Omegas
+        let groupedBy = [];
+        let groupCollapsedState = {};
+
+        function renderSummaryTable(data) {
+            const visibleCols = getVisibleColumns();
+            const table = document.querySelector('.summary-table');
+            const thead = table.querySelector('thead');
+            const tbody = document.getElementById('summary-tbody');
+            
+            // Regenerar thead según columnConfig
+            if (thead) {
+                const savedWidths = getColumnWidths(); // Obtener anchos guardados ANTES de regenerar
+                
+                let thRow = document.createElement('tr');
+                columnConfig.forEach((col, idx) => {
+                    let th = document.createElement('th');
+                    let translateKey = '';
+                    switch (col.key) {
+                        case 'NumeroPedido': translateKey = 'table_header_order_number'; break;
+                        case 'FechaEntrega': translateKey = 'table_header_delivery_date'; break;
+                        case 'Bsark': translateKey = 'table_header_bsark'; break;
+                        case 'UnidadesPedidas': translateKey = 'table_header_units_ordered'; break;
+                        case 'UniValMapex': translateKey = 'table_header_univalmapex'; break;
+                        case 'Assy': translateKey = 'table_header_assy'; break;
+                        case 'Beam': translateKey = 'table_header_beam'; break;
+                        case 'C/W': translateKey = 'table_header_cw'; break;
+                        case 'CWT': translateKey = 'table_header_cwt'; break;
+                        case 'DS': translateKey = 'table_header_ds'; break;
+                        case 'EX': translateKey = 'table_header_ex'; break;
+                        case 'TB': translateKey = 'table_header_tb'; break;
+                        case 'Ord': translateKey = 'table_header_ord'; break;
+                        case 'Sequence': translateKey = 'table_header_sequence'; break;
+                        case 'OFs': translateKey = 'table_header_ofs'; break;
+                        case 'AssignedStock': translateKey = 'table_header_assigned_stock'; break;
+                        case 'AssignedStockBeam': translateKey = 'table_header_assigned_stock_beam'; break;
+                        case 'Assembly': translateKey = 'table_header_assembly'; break;
+                        case 'Picking': translateKey = 'table_header_picking'; break;
+                        case 'Delete': translateKey = 'table_header_delete'; break;
+                    }
+                    if (translateKey) th.setAttribute('data-translate-key', translateKey);
+                    th.style.display = visibleCols[idx] ? '' : 'none';
+                    th.style.position = 'relative';
+                    
+                    // Aplicar ancho guardado inmediatamente
+                    if (savedWidths[idx]) {
+                        th.style.width = savedWidths[idx];
+                        th.style.minWidth = savedWidths[idx];
+                    } else {
+                        // Si no hay ancho guardado, usar comportamiento responsive
+                        th.style.width = '';
+                        th.style.minWidth = '40px';
+                    }
+                    
+                    th.innerHTML = `<div style='display:flex;align-items:center;height:100%;width:100%;position:relative;'><span class='col-drag-label' draggable='true' data-idx='${idx}' style='flex:1;user-select:none;cursor:grab;padding-right:0px;'>${getTranslation(translateKey)}</span><div class='col-resizer' data-idx='${idx}' style='position:absolute;right:0;top:10%;width:16px;height:80%;background:rgba(0,0,0,0.08);border-radius:3px;cursor:col-resize;z-index:50;transition:background 0.2s;'></div></div>`;
+                    thRow.appendChild(th);
+                });
+                thead.innerHTML = '';
+                thead.appendChild(thRow);
+            }
+            
+            tbody.innerHTML = '';
+            if (data.length === 0) {
+                let colCount = visibleCols.filter(Boolean).length || 1;
+                tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#888;">${getTranslation('text_no_sequenced_data')}</td></tr>`;
+                return;
+            }
+            
+            // Mostrar agrupaciones activas y controles EXACTAMENTE IGUAL QUE Summary_Omegas
+            const groupedByLabel = document.getElementById('grouped-by');
+            const clearGroupBtn = document.getElementById('clear-group-btn');
+            groupedByLabel.innerHTML = '';
+            if (groupedBy.length > 0) {
+                groupedByLabel.style.display = 'inline';
+                clearGroupBtn.style.display = 'inline-block';
+                groupedBy.forEach((key, i) => {
+                    const col = columnConfig.find(c => c.key === key);
+                    const span = document.createElement('span');
+                    span.style.background = '#e3eafc';
+                    span.style.color = '#1976d2';
+                    span.style.borderRadius = '4px';
+                    span.style.padding = '2px 8px';
+                    span.style.marginRight = '6px';
+                    span.style.display = 'inline-flex';
+                    span.style.alignItems = 'center';
+                    span.style.fontWeight = '600';
+                    span.innerHTML = `${col ? col.label : key} <button data-idx="${i}" style="margin-left:4px;background:none;border:none;color:#c00;font-weight:bold;cursor:pointer;font-size:1em;line-height:1;">✕</button>`;
+                    span.querySelector('button').onclick = function(e) {
+                        e.stopPropagation();
+                        groupedBy.splice(i, 1);
+                        groupCollapsedState = {};
+                        renderSummaryTable(filteredData);
+                    };
+                    groupedByLabel.appendChild(span);
+                });
+            } else {
+                groupedByLabel.style.display = 'none';
+                clearGroupBtn.style.display = 'none';
+            }
+
+            // Agrupación múltiple anidada
+            const selfData = data;
+            function renderGroups(rows, groupKeys, level, parentKey) {
+                if (groupKeys.length === 0) {
+                    rows.forEach((row) => {
+                        const tr = document.createElement('tr');
+                        
+                        // Añadir atributos para drag & drop
+                        tr.setAttribute('draggable', 'true');
+                        tr.setAttribute('data-pedido-id', row.NumeroPedido || '');
+                        
+                        // Añadir clase para filas con prioridad personalizada
+                        if (row.PriorityOrder && row.PriorityOrder > 0) {
+                            tr.classList.add('custom-priority-row');
+                        }
+                        
+                        let fecha = '';
+                        if (row.FechaEntrega) {
+                            try {
+                                const dateObj = new Date(row.FechaEntrega);
+                                if (!isNaN(dateObj.getTime())) fecha = dateObj.toLocaleDateString('es-ES');
+                            } catch (e) {}
+                        }
+                        const wcValue = getFieldValue(row, 'C/W');
+                        const sequenceValue = row.SequenceValue || row.Sequence || '';
+                        const assignedStockValue = (row.AssignedStock === 0 || row.AssignedStock === null || row.AssignedStock === undefined) ? 0 : row.AssignedStock;
+                        const assignedStockBeamValue = (row.AssignedStockBeam === 0 || row.AssignedStockBeam === null || row.AssignedStockBeam === undefined) ? 0 : row.AssignedStockBeam;
+                        const cellValues = columnConfig.map(col => {
+                            switch (col.key) {
+                                case 'Delete':
+                                    return `<button class="delete-row-btn" title="${getTranslation('tooltip_delete_row')}" data-pedido="${row.NumeroPedido}" data-assy="${row.Assy}" style="background:none;border:none;color:#c00;font-size:1.2em;cursor:pointer;font-weight:bold;">&times;</button>`;
+                                case 'NumeroPedido': return row.NumeroPedido || '';
+                                case 'FechaEntrega': return fecha;
+                                case 'Bsark': return row.Bsark || '';
+                                case 'UnidadesPedidas': return row.UnidadesPedidas || 0;
+                                case 'UniValMapex': return (row.UniValMapex === 0) ? 0 : (row.UniValMapex || '');
+                                case 'Assy': return row.Assy || '';
+                                case 'Beam': return row.Beam || '';
+                                case 'C/W': return wcValue;
+                                case 'CWT': return row.CWT || '';
+                                case 'DS': return row.DS || '';
+                                case 'EX': return row.EX || '';
+                                case 'TB': return row.TB || '';
+                                case 'Ord': return row.Ord || '';
+                                case 'Sequence': return sequenceValue;
+                                case 'OFs': return row.OFs || '';
+                                case 'AssignedStock': return assignedStockValue;
+                                case 'AssignedStockBeam': return assignedStockBeamValue;
+                                case 'Assembly': return row.Assembly || '';
+                                case 'Picking': return row.Picking || '';
+                                default: return '';
+                            }
+                        });
+                        
+                        // Crear celdas con data-field para identificación
+                        const cellsHTML = cellValues.map((val, idx) => {
+                            const fieldName = columnConfig[idx]?.key || '';
+                            return `<td style="display:${visibleCols[idx] ? '' : 'none'}" data-field="${fieldName}">${val}</td>`;
+                        }).join('');
+                        
+                        tr.innerHTML = cellsHTML;
+                        tbody.appendChild(tr);
+                    });
+                    return;
+                }
+                const key = groupKeys[0];
+                const groups = {};
+                rows.forEach(row => {
+                    let val = row[key] || '';
+                    if (!groups[val]) groups[val] = [];
+                    groups[val].push(row);
+                });
+                Object.keys(groups).sort().forEach(groupVal => {
+                    const groupId = `${parentKey || ''}__${key}__${groupVal}`;
+                    const collapsed = groupCollapsedState[groupId] || false;
+                    const arrow = collapsed ? '▶' : '▼';
+                    const groupRow = document.createElement('tr');
+                    groupRow.className = 'group-header-row' + (collapsed ? ' collapsed' : '');
+                    groupRow.innerHTML = `<td colspan="${visibleCols.filter(Boolean).length}" style="padding-left:${level * 24}px"><span class="group-toggle">${arrow}</span> <span style="font-weight:700;">${(columnConfig.find(c => c.key === key)?.label || key)}: ${groupVal || '(vacío)'}</span> <span style="color:#888;font-weight:400;margin-left:8px;">(${groups[groupVal].length})</span></td>`;
+                    groupRow.onclick = function() {
+                        groupCollapsedState[groupId] = !groupCollapsedState[groupId];
+                        renderSummaryTable(selfData);
+                    };
+                    tbody.appendChild(groupRow);
+                    if (!collapsed) {
+                        renderGroups(groups[groupVal], groupKeys.slice(1), level + 1, groupId);
+                    }
+                });
+            }
+
+            if (groupedBy.length > 0) {
+                renderGroups(data, groupedBy, 0, '');
+            } else {
+                // Recopilar todos los números de pedido para consulta batch
+                const pedidosVisibles = data.map(row => row.NumeroPedido).filter(Boolean);
+                
+                data.forEach((row) => {
+                    const tr = document.createElement('tr');
+                    
+                    // Añadir atributos para drag & drop
+                    tr.setAttribute('draggable', 'true');
+                    tr.setAttribute('data-pedido-id', row.NumeroPedido || '');
+                    tr.setAttribute('data-pedido', row.NumeroPedido);
+                    
+                    // Añadir clase para filas con prioridad personalizada
+                    if (row.PriorityOrder && row.PriorityOrder > 0) {
+                        tr.classList.add('custom-priority-row');
+                    }
+                    
+                    let fecha = '';
+                    if (row.FechaEntrega) {
+                        try {
+                            const dateObj = new Date(row.FechaEntrega);
+                            if (!isNaN(dateObj.getTime())) fecha = dateObj.toLocaleDateString('es-ES');
+                        } catch (e) {}
+                    }
+                    const wcValue = getFieldValue(row, 'C/W');
+                    const sequenceValue = row.SequenceValue || row.Sequence || '';
+                    const assignedStockValue = (row.AssignedStock === 0 || row.AssignedStock === null || row.AssignedStock === undefined) ? 0 : row.AssignedStock;
+                    const assignedStockBeamValue = (row.AssignedStockBeam === 0 || row.AssignedStockBeam === null || row.AssignedStockBeam === undefined) ? 0 : row.AssignedStockBeam;
+                    const cellValues = columnConfig.map(col => {
+                        switch (col.key) {
+                            case 'Delete':
+                                return `<button class="delete-row-btn" title="Eliminar" data-pedido="${row.NumeroPedido}" data-assy="${row.Assy}" style="background:none;border:none;color:#c00;font-size:1.2em;cursor:pointer;font-weight:bold;">&#10006;</button>`;
+                            case 'NumeroPedido': return row.NumeroPedido || '';
+                            case 'FechaEntrega': return fecha;
+                            case 'Bsark': return row.Bsark || '';
+                            case 'UnidadesPedidas': return row.UnidadesPedidas || 0;
+                            case 'UniValMapex': return (row.UniValMapex === 0) ? 0 : (row.UniValMapex || '');
+                            case 'Assy': return row.Assy || '';
+                            case 'Beam': return row.Beam || '';
+                            case 'C/W': return wcValue;
+                            case 'CWT': return row.CWT || '';
+                            case 'DS': return row.DS || '';
+                            case 'EX': return row.EX || '';
+                            case 'TB': return row.TB || '';
+                            case 'Ord': return row.Ord || '';
+                            case 'Sequence': return sequenceValue;
+                            case 'OFs': return row.OFs || '';
+                            case 'AssignedStock': return assignedStockValue;
+                            case 'AssignedStockBeam': return assignedStockBeamValue;
+                            case 'Assembly': return row.Assembly || '';
+                            case 'Picking': return row.Picking || '';
+                            default: return '';
+                        }
+                    });
+                    
+                    // Crear celdas con data-field para identificación
+                    const cellsHTML = cellValues.map((val, idx) => {
+                        const fieldName = columnConfig[idx]?.key || '';
+                        return `<td style="display:${visibleCols[idx] ? '' : 'none'}" data-field="${fieldName}">${val}</td>`;
+                    }).join('');
+                    
+                    tr.innerHTML = cellsHTML;
+                    
+                    // Aplicar color inmediatamente si ya está en el set de faltantes
+                    if (window.pedidosConFaltantes.has(row.NumeroPedido)) {
+                        tr.style.background = '#ffd6d6';
+                        tr.title = 'Este pedido tiene productos faltantes';
+                    }
+                    
+                    tbody.appendChild(tr);
+                });
+                
+                // Usar consulta batch para todos los pedidos visibles (más eficiente)
+                if (pedidosVisibles.length > 0) {
+                    checkFaltantesBatch(pedidosVisibles);
+                }
+            }
+            
+            // Eventos de borrado para los botones
+            tbody.querySelectorAll('.delete-row-btn').forEach(btn => {
+                btn.addEventListener('click', async function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const numeroPedido = this.getAttribute('data-pedido');
+                    const assy = this.getAttribute('data-assy');
+                    if (!numeroPedido || !assy) {
+                        alert(getTranslation('alert_error_missing_order_data'));
+                        return;
+                    }
+                    const confirmMsg = getTranslation('alert_confirm_delete_sequence')
+                        .replace('{order}', numeroPedido)
+                        .replace('{assy}', assy);
+                    if (!confirm(confirmMsg)) {
+                        return;
+                    }
+                    const payload = {
+                        NumeroPedido: numeroPedido,
+                        Assy: assy
+                    };
+                    try {
+                        const res = await fetch(`/api/sequenced-orders`, {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        const result = await res.json();
+                        if (!res.ok) {
+                            alert(getTranslation('alert_error_deleting') + ' ' + (result.error || 'Error desconocido'));
+                            return;
+                        }
+                        // Eliminación exitosa - solo quitar la fila sin mostrar segundo popup
+                        this.closest('tr').remove();
+                        summaryData = summaryData.filter(r => !(r.NumeroPedido === numeroPedido && r.Assy === assy));
+                    } catch (err) {
+                        alert('Error de red al conectar con el servidor: ' + err.message);
+                        return;
+                    }
+                });
+            });
+            
+            // Marcar la columna ordenada y asignar event listeners de click
+            const ths = table.querySelectorAll('th');
+            ths.forEach((th, idx) => {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+                if (currentSort.column === idx && currentSort.asc !== null) {
+                    th.classList.add(currentSort.asc ? 'sorted-asc' : 'sorted-desc');
+                }
+                
+                // Asignar event listener de click para ordenación
+                if (columnConfig[idx] && columnConfig[idx].key !== 'Delete') {
+                    th.addEventListener('click', function(e) {
+                        // Bloquear ordenación si estamos redimensionando
+                        if (window.isResizing) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            return;
+                        }
+                        
+                        // Evitar ordenar si se hace click en resizer o iconos
+                        if (e.target.classList.contains('col-resizer') || 
+                            e.target.classList.contains('grouped-col-icon')) {
+                            return;
+                        }
+                        
+                        e.preventDefault();
+                        e.stopPropagation();
+                        
+                        // Con Ctrl: siempre ascendente
+                        if (window.isCtrlPressed) {
+                            currentSort.column = idx;
+                            currentSort.asc = true;
+                        } else {
+                            // Sin Ctrl: ciclo de tres estados: ascendente → descendente → sin orden → ascendente...
+                            if (currentSort.column === idx) {
+                                if (currentSort.asc === true) {
+                                    // De ascendente a descendente
+                                    currentSort.asc = false;
+                                } else if (currentSort.asc === false) {
+                                    // De descendente a sin orden
+                                    currentSort.column = null;
+                                    currentSort.asc = null;
+                                } else {
+                                    // Esto no debería pasar, pero por seguridad
+                                    currentSort.column = idx;
+                                    currentSort.asc = true;
+                                }
+                            } else {
+                                // Nueva columna: empezar con ascendente
+                                currentSort.column = idx;
+                                currentSort.asc = true;
+                            }
+                        }
+                        
+                        // Aplicar ordenación solo si hay una columna seleccionada
+                        let sorted = [...filteredData];
+                        if (currentSort.column !== null && currentSort.asc !== null) {
+                            let field = columnConfig[idx].key;
+                            sorted.sort((a, b) => {
+                                let va = a[field];
+                                let vb = b[field];
+                                if (field === 'FechaEntrega') {
+                                    va = va ? new Date(va) : new Date(0);
+                                    vb = vb ? new Date(vb) : new Date(0);
+                                    return currentSort.asc ? va - vb : vb - va;
+                                }
+                                if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb))) {
+                                    return currentSort.asc ? (parseFloat(va) - parseFloat(vb)) : (parseFloat(vb) - parseFloat(va));
+                                }
+                                va = (va || '').toString().toLowerCase();
+                                vb = (vb || '').toString().toLowerCase();
+                                if (va < vb) return currentSort.asc ? -1 : 1;
+                                if (va > vb) return currentSort.asc ? 1 : -1;
+                                return 0;
+                            });
+                        }
+                        renderSummaryTable(sorted);
+                    });
+                }
+            });
+            
+            // Aplicar anchos de columna guardados
+            const savedWidths = getColumnWidths();
+            ths.forEach((th, idx) => {
+                if (savedWidths[idx]) {
+                    th.style.width = savedWidths[idx];
+                    th.style.minWidth = savedWidths[idx];
+                    // También aplicar a todas las celdas de esa columna
+                    document.querySelectorAll('.summary-table tbody tr').forEach(tr => {
+                        const tds = tr.querySelectorAll('td');
+                        if (tds[idx]) {
+                            tds[idx].style.width = savedWidths[idx];
+                            tds[idx].style.minWidth = savedWidths[idx];
+                            tds[idx].style.maxWidth = savedWidths[idx];
+                        }
+                    });
+                } else {
+                    // Si no hay ancho guardado, permitir comportamiento responsive
+                    th.style.width = '';
+                    th.style.minWidth = '40px';
+                    th.style.maxWidth = '';
+                    // Limpiar estilos de las celdas para que sean responsive
+                    document.querySelectorAll('.summary-table tbody tr').forEach(tr => {
+                        const tds = tr.querySelectorAll('td');
+                        if (tds[idx]) {
+                            tds[idx].style.width = '';
+                            tds[idx].style.minWidth = '40px';
+                            tds[idx].style.maxWidth = '';
+                        }
+                    });
+                }
+            });
+            
+            // Drag & drop y resize listeners
+            setupColumnDragAndDropAndResize();
+            
+            // Inicializar drag & drop para reordenamiento de filas
+            initializeDragAndDrop();
+            
+            // Aplicar estado visual de Ctrl después de regenerar la tabla
+            updateHeaderUIForCtrl();
+        }
+        // Drag & drop y resize: EXACTAMENTE IGUAL QUE Summary_Omegas
+        function setupColumnDragAndDropAndResize() {
+            const ths = document.querySelectorAll('.summary-table th');
+            const dragLabels = document.querySelectorAll('.col-drag-label');
+            const resizers = document.querySelectorAll('.col-resizer');
+            let dragIdx = null;
+            // isResizing ahora es global, no se redeclara aquí
+            
+            dragLabels.forEach((label, idx) => {
+                label.addEventListener('dragstart', (e) => {
+                    if (window.isResizing || e.ctrlKey) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.dataTransfer.setData('text/plain', columnConfig[idx].key);
+                    e.dataTransfer.effectAllowed = 'copy';
+                    dragIdx = idx;
+                    label.classList.add('dragging');
+                    // Si se arrastra fuera de la tabla, permitir soltar en el área de agrupación
+                    const groupDrop = document.getElementById('group-drop-area');
+                    groupDrop.classList.add('group-drop-hover');
+                    groupDrop.ondragover = function(ev) { ev.preventDefault(); };
+                    groupDrop.ondrop = function(ev) {
+                        ev.preventDefault();
+                        groupDrop.classList.remove('group-drop-hover');
+                        const key = columnConfig[idx].key;
+                        if (!groupedBy.includes(key)) {
+                            groupedBy.push(key);
+                            groupCollapsedState = {};
+                            renderSummaryTable(filteredData);
+                        }
+                    };
+                    groupDrop.ondragleave = function() { groupDrop.classList.remove('group-drop-hover'); };
+                });
+                label.addEventListener('dragend', (e) => {
+                    dragIdx = null;
+                    label.classList.remove('dragging');
+                    const groupDrop = document.getElementById('group-drop-area');
+                    groupDrop.classList.remove('group-drop-hover');
+                    groupDrop.ondragover = null;
+                    groupDrop.ondrop = null;
+                    groupDrop.ondragleave = null;
+                });
+            });
+            
+            ths.forEach((th, idx) => {
+                th.addEventListener('dragover', (e) => { e.preventDefault(); });
+                th.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    if (dragIdx === null || dragIdx === idx) return;
+                    const newConfig = [...columnConfig];
+                    const [moved] = newConfig.splice(dragIdx, 1);
+                    newConfig.splice(idx, 0, moved);
+                    // Mantener la visibilidad por key, no por posición
+                    const oldVisible = getVisibleColumns();
+                    const oldKeys = columnConfig.map(c => c.key);
+                    const visibleByKey = {};
+                    oldKeys.forEach((key, i) => { visibleByKey[key] = oldVisible[i]; });
+                    columnConfig = newConfig;
+                    setColumnConfig(columnConfig);
+                    const newVisible = columnConfig.map(col => visibleByKey[col.key] !== undefined ? visibleByKey[col.key] : true);
+                    setVisibleColumns(newVisible);
+                    renderSummaryTable(filteredData);
+                });
+            });
+            
+            // Resize
+            let startX, startWidth, colIdx;
+            let colWidths = getColumnWidths();
+            const MIN_COL_WIDTH = 80; // px
+            resizers.forEach(resizer => {
+                resizer.onmousedown = function(e) {
+                    e.stopPropagation();
+                    window.isResizing = true;
+                    colIdx = parseInt(resizer.getAttribute('data-idx'));
+                    startX = e.clientX;
+                    startWidth = ths[colIdx].offsetWidth;
+                    document.body.style.cursor = 'col-resize';
+                    document.onmousemove = onMouseMove;
+                    document.onmouseup = onMouseUp;
+                    // Actualizar UI para bloquear interacciones durante resize
+                    updateHeaderUIForCtrl();
+                };
+            });
+            function onMouseMove(e) {
+                if (colIdx == null) return;
+                let newWidth = Math.max(MIN_COL_WIDTH, startWidth + (e.clientX - startX));
+                ths[colIdx].style.width = newWidth + 'px';
+                ths[colIdx].style.minWidth = newWidth + 'px';
+                
+                // También ajustar los td de esa columna con max-width para evitar overflow
+                document.querySelectorAll('.summary-table tbody tr').forEach(tr => {
+                    const tds = tr.querySelectorAll('td');
+                    if (tds[colIdx]) {
+                        tds[colIdx].style.width = newWidth + 'px';
+                        tds[colIdx].style.minWidth = newWidth + 'px';
+                        tds[colIdx].style.maxWidth = newWidth + 'px';
+                    }
+                });
+            }
+            function onMouseUp(e) {
+                if (colIdx == null) return;
+                let finalWidth = ths[colIdx].offsetWidth;
+                if (finalWidth < MIN_COL_WIDTH) finalWidth = MIN_COL_WIDTH;
+                colWidths[colIdx] = finalWidth + 'px';
+                setColumnWidths(colWidths);
+                colIdx = null;
+                document.body.style.cursor = '';
+                document.onmousemove = null;
+                document.onmouseup = null;
+                window.isResizing = false;
+                // Restaurar UI después de terminar el resize
+                updateHeaderUIForCtrl();
+            }
+            // Feedback visual del resizer
+            document.addEventListener('mouseover', function(e) {
+                if (e.target.classList && e.target.classList.contains('col-resizer')) {
+                    e.target.style.background = 'rgba(25,118,210,0.25)';
+                }
+            });
+            document.addEventListener('mouseout', function(e) {
+                if (e.target.classList && e.target.classList.contains('col-resizer')) {
+                    e.target.style.background = 'rgba(0,0,0,0.08)';
+                }
+            });
+        }
+        function getColumnLabel(key) {
+            const col = columnConfig.find(c => c.key === key);
+            return col ? col.label : key;
+        }
+            if (groupedBy.length > 0) {
+                renderGroups(data, groupedBy, 0, '');
+                // Asignar eventos de borrado a los botones dentro de grupos
+                tbody.querySelectorAll('.delete-row-btn').forEach(btn => {
+                    btn.addEventListener('click', async function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const numeroPedido = this.getAttribute('data-pedido');
+                        const assy = this.getAttribute('data-assy');
+                        if (!numeroPedido || !assy) {
+                            alert(getTranslation('alert_error_missing_order_data'));
+                            return;
+                        }
+                        const confirmMsg = getTranslation('alert_confirm_delete_sequence')
+                            .replace('{order}', numeroPedido)
+                            .replace('{assy}', assy);
+                        if (!confirm(confirmMsg)) {
+                            return;
+                        }
+                        const payload = {
+                            NumeroPedido: numeroPedido,
+                            Assy: assy
+                        };
+                        try {
+                            const res = await fetch(`/api/sequenced-orders`, {
+                                method: 'DELETE',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(payload)
+                            });
+                            const result = await res.json();
+                            if (!res.ok) {
+                                alert(`Error al eliminar el pedido: ${result.error || 'Error desconocido'}`);
+                                return;
+                            }
+                            alert(result.message);
+                            this.closest('tr').remove();
+                            summaryData = summaryData.filter(r => !(r.NumeroPedido === numeroPedido && r.Assy === assy));
+                        } catch (err) {
+                            alert('Error de red al conectar con el servidor: ' + err.message);
+                            return;
+                        }
+                    });
+                });
+            }
+        
+
+        // Traducciones para agrupación
+        const groupingTranslations = {
+            group_by: 'Agrupado por',
+            group_collapse_hint: 'Haz clic para expandir/colapsar',
+            group_drag_hint: 'Arrastra aquí una columna para agrupar',
+            group_remove_hint: 'Quitar agrupación',
+        };
+        function getTranslation(key) {
+            return (currentTranslations && currentTranslations[key]) || groupingTranslations[key] || key;
+        }
+
+        // Handler global para ordenación visual
+        window.handleSort = function(idx) {
+            // La lógica de ordenación ya se maneja en el event listener
+            // Solo aplicar ordenación si hay una columna activa seleccionada
+            if (currentSort.column !== null && currentSort.asc !== null) {
+                let field = columnConfig[idx].key;
+                let sorted = [...filteredData];
+                sorted.sort((a, b) => {
+                    let va = a[field];
+                    let vb = b[field];
+                    if (field === 'FechaEntrega') {
+                        va = va ? new Date(va) : new Date(0);
+                        vb = vb ? new Date(vb) : new Date(0);
+                        return currentSort.asc ? va - vb : vb - va;
+                    }
+                    if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb))) {
+                        return currentSort.asc ? (parseFloat(va) - parseFloat(vb)) : (parseFloat(vb) - parseFloat(va));
+                    }
+                    va = (va || '').toString().toLowerCase();
+                    vb = (vb || '').toString().toLowerCase();
+                    if (va < vb) return currentSort.asc ? -1 : 1;
+                    if (va > vb) return currentSort.asc ? 1 : -1;
+                    return 0;
+                });
+                renderSummaryTable(sorted);
+            } else {
+                // Sin ordenación activa, solo renderizar
+                renderSummaryTable(filteredData);
+            }
+        }
+        // Redimensionar columnas con el mouse
+        // --- Auto-refresh pause/resume helpers ---
+        // isResizing debe ser global y única (solo window.isResizing)
+        function pauseAutoRefresh() {
+            // Pausar ambos intervalos: el local y el global
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+            if (window.autoRefreshInterval) {
+                clearInterval(window.autoRefreshInterval);
+                window.autoRefreshInterval = null;
+            }
+        }
+        function resumeAutoRefresh() {
+            // Reanudar solo el intervalo global (es el principal)
+            if (!window.autoRefreshInterval) {
+                window.autoRefreshInterval = setInterval(() => {
+                    // No ejecutar auto-refresh durante drag & drop o resize
+                    if (typeof window.isResizing !== 'undefined' && window.isResizing) return;
+                    if (typeof isDragging !== 'undefined' && isDragging) return;
+                    if (typeof autoUpdateSequencedPedidos === 'function') autoUpdateSequencedPedidos(true);
+                }, 5000);
+            }
+        }
+        function setupColumnResizeListeners() {
+            const ths = document.querySelectorAll('.summary-table thead th');
+            const resizers = document.querySelectorAll('.col-resizer');
+            let startX, startWidth, colIdx;
+            let colWidths = getColumnWidths();
+            const MIN_COL_WIDTH = 80; // px
+            resizers.forEach(resizer => {
+                resizer.onmousedown = function(e) {
+                    e.stopPropagation();
+                    colIdx = parseInt(resizer.getAttribute('data-idx'));
+                    startX = e.clientX;
+                    startWidth = ths[colIdx].offsetWidth;
+                    document.body.style.cursor = 'col-resize';
+                    document.onmousemove = onMouseMove;
+                    document.onmouseup = onMouseUp;
+                    window.isResizing = true;
+                    pauseAutoRefresh();
+                };
+            });
+            function onMouseMove(e) {
+                if (colIdx == null) return;
+                let newWidth = Math.max(MIN_COL_WIDTH, startWidth + (e.clientX - startX));
+                ths[colIdx].style.width = newWidth + 'px';
+                ths[colIdx].style.minWidth = newWidth + 'px';
+                
+                // También ajustar los td de esa columna con max-width para evitar overflow
+                document.querySelectorAll('.summary-table tbody tr').forEach(tr => {
+                    const tds = tr.querySelectorAll('td');
+                    if (tds[colIdx]) {
+                        tds[colIdx].style.width = newWidth + 'px';
+                        tds[colIdx].style.minWidth = newWidth + 'px';
+                        tds[colIdx].style.maxWidth = newWidth + 'px';
+                    }
+                });
+            }
+            function onMouseUp(e) {
+                if (colIdx == null) return;
+                let finalWidth = ths[colIdx].offsetWidth;
+                if (finalWidth < MIN_COL_WIDTH) finalWidth = MIN_COL_WIDTH;
+                colWidths[colIdx] = finalWidth + 'px';
+                setColumnWidths(colWidths);
+                colIdx = null;
+                document.body.style.cursor = '';
+                document.onmousemove = null;
+                document.onmouseup = null;
+                window.isResizing = false;
+                resumeAutoRefresh();
+            }
+        }
+        function setupEditViewPanel() {
+            const btnEditView = document.getElementById('btn-edit-view');
+            const panel = document.getElementById('edit-view-panel');
+            const form = document.getElementById('edit-view-form');
+            const btnClose = document.getElementById('btn-close-edit-view');
+            const btnReset = document.getElementById('btn-reset-edit-view');
+            function updateForm() {
+                const visibleCols = getVisibleColumns();
+                form.innerHTML = '';
+                columnConfig.forEach((col, idx) => {
+                    const label = document.createElement('label');
+                    label.style.display = 'flex';
+                    label.style.alignItems = 'center';
+                    label.style.gap = '6px';
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = visibleCols[idx];
+                    checkbox.addEventListener('change', () => {
+                        const arr = getVisibleColumns();
+                        arr[idx] = checkbox.checked;
+                        // Al menos una columna debe quedar visible
+                        if (arr.filter(Boolean).length === 0) {
+                            checkbox.checked = true;
+                            return;
+                        }
+                        setVisibleColumns(arr);
+                        renderSummaryTable(filteredData);
+                    });
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(getTranslation(col.label_key)));
+                    form.appendChild(label);
+                });
+            }
+            btnEditView.addEventListener('click', () => {
+                updateForm();
+                panel.style.display = 'block';
+            });
+            btnClose.addEventListener('click', () => { panel.style.display = 'none'; });
+            btnReset.addEventListener('click', () => {
+                setVisibleColumns(columnConfig.map(() => true));
+                updateForm();
+                renderSummaryTable(filteredData);
+            });
+            // Cerrar al hacer click fuera del panel
+            window.addEventListener('mousedown', (e) => {
+                if (panel.style.display === 'block' && !panel.contains(e.target) && e.target !== btnEditView) {
+                    panel.style.display = 'none';
+                }
+            });
+        }
+
+        // Drag-and-drop de columnas
+        function setupColumnDragAndDrop() {
+            const ths = document.querySelectorAll('.summary-table thead th');
+            const dragLabels = document.querySelectorAll('.col-drag-label');
+            let dragIdx = null;
+            // Permitir drag desde th y desde label
+            ths.forEach((th, idx) => {
+                th.setAttribute('draggable', 'true');
+                th.addEventListener('dragstart', (e) => {
+                    if (window.isResizing || window.isCtrlPressed) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.dataTransfer.setData('text/plain', columnConfig[idx].key);
+                    e.dataTransfer.effectAllowed = 'copy';
+                    dragIdx = idx;
+                    th.classList.add('dragging');
+                });
+                th.addEventListener('dragend', (e) => {
+                    dragIdx = null;
+                    th.classList.remove('dragging');
+                });
+            });
+            dragLabels.forEach((label, idx) => {
+                label.setAttribute('draggable', 'true');
+                label.addEventListener('dragstart', (e) => {
+                    if (window.isResizing || e.ctrlKey || window.isCtrlPressed) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.dataTransfer.setData('text/plain', columnConfig[idx].key);
+                    e.dataTransfer.effectAllowed = 'copy';
+                    dragIdx = idx;
+                    label.classList.add('dragging');
+                });
+                label.addEventListener('dragend', (e) => {
+                    dragIdx = null;
+                    label.classList.remove('dragging');
+                });
+            });
+            // El drop/reorder de columnas sigue funcionando igual en ths
+            ths.forEach((th, idx) => {
+                th.addEventListener('dragover', (e) => {
+                    if (isResizing) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.preventDefault();
+                });
+                th.addEventListener('drop', (e) => {
+                    if (isResizing) {
+                        e.preventDefault();
+                        return false;
+                    }
+                    e.preventDefault();
+                    if (dragIdx === null || dragIdx === idx) return;
+                    // Reordenar columnConfig
+                    const newConfig = [...columnConfig];
+                    const [moved] = newConfig.splice(dragIdx, 1);
+                    newConfig.splice(idx, 0, moved);
+                    columnConfig = newConfig;
+                    setColumnConfig(columnConfig);
+                    renderSummaryTable(filteredData);
+                });
+            });
+        }
+
+        function filterSummaryTable() {
+            const value = document.getElementById('search-input').value.trim().toLowerCase();
+            const dateFrom = document.getElementById('date-from').value;
+            const dateTo = document.getElementById('date-to').value;
+            const filterFaltantes = document.getElementById('filter-faltantes').checked;
+
+            filteredData = summaryData
+                // Solo ocultar filas que estén completamente entregadas (UniValMapex >= UnidadesPedidas)
+                // Mostrar siempre si el pedido aún no está completado, independientemente del estado Assembly/Picking
+                .filter(row => {
+                    const unidadesPedidas = parseFloat(row.UnidadesPedidas) || 0;
+                    const uniValMapex = parseFloat(row.UniValMapex) || 0;
+                    return uniValMapex < unidadesPedidas;
+                })
+                .filter(row => {
+                    const sequenceValue = row.SequenceValue || row.Sequence || '';
+                    const matchesText = !value || (row.NumeroPedido || '').toString().toLowerCase().includes(value) || (row.Assy || '').toLowerCase().includes(value) || sequenceValue.toLowerCase().includes(value);
+                    let matchesDate = true;
+                    if (dateFrom || dateTo) {
+                        let fechaEntrega = '';
+                        if (row.FechaEntrega) {
+                            try {
+                                const dateObj = new Date(row.FechaEntrega);
+                                if (!isNaN(dateObj.getTime())) fechaEntrega = dateObj.toISOString().slice(0, 10);
+                            } catch (e) {}
+                        }
+                        if (dateFrom && (!fechaEntrega || fechaEntrega < dateFrom)) matchesDate = false;
+                        if (dateTo && (!fechaEntrega || fechaEntrega > dateTo)) matchesDate = false;
+                    }
+                    // Filtro de faltantes: si está activado, solo mostrar pedidos con faltantes
+                    let matchesFaltantes = true;
+                    if (filterFaltantes) {
+                        matchesFaltantes = window.pedidosConFaltantes.has(row.NumeroPedido);
+                    }
+                    return matchesText && matchesDate && matchesFaltantes;
+                });
+            // Aplicar ordenación si hay columna seleccionada
+            if (currentSort.column !== null && currentSort.asc !== null) {
+                let field = columnConfig[currentSort.column].key;
+                filteredData.sort((a, b) => {
+                    let va = a[field];
+                    let vb = b[field];
+                    // Especial para fecha
+                    if (field === 'FechaEntrega') {
+                        va = va ? new Date(va) : new Date(0);
+                        vb = vb ? new Date(vb) : new Date(0);
+                        return currentSort.asc ? va - vb : vb - va;
+                    }
+                    // Números
+                    if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb))) {
+                        return currentSort.asc ? (parseFloat(va) - parseFloat(vb)) : (parseFloat(vb) - parseFloat(va));
+                    }
+                    // Texto
+                    va = (va || '').toString().toLowerCase();
+                    vb = (vb || '').toString().toLowerCase();
+                    if (va < vb) return currentSort.asc ? -1 : 1;
+                    if (va > vb) return currentSort.asc ? 1 : -1;
+                    return 0;
+                });
+            }
+            renderSummaryTable(filteredData);
+        }
+        
+        async function autoUpdateSequencedPedidos(isAutoRefresh = false) {
+            const loadingArea = document.getElementById('loadingArea');
+            const summaryTable = document.querySelector('.summary-table');
+            if (!isAutoRefresh) {
+                // MODIFICADO: Usa la clave de traducción
+                loadingArea.innerHTML = `<span class="spinner"></span> ${getTranslation('text_loading_data')}`;
+                loadingArea.style.display = 'block';
+                summaryTable.style.display = 'none';
+            }
+            try {
+            const res = await fetch('/api/summary/sequenced');
+            if (!res.ok) { /* ... error handling ... */ }
+            const data = await res.json();
+            // Mantener el filtro de texto y fechas, el orden actual Y LAS AGRUPACIONES
+            const prevSort = { ...currentSort };
+            const prevGroupedBy = [...groupedBy]; // Preservar agrupaciones
+            const prevGroupCollapsedState = {...groupCollapsedState}; // Preservar estado de colapso
+            const prevValue = document.getElementById('search-input').value;
+            const prevDateFrom = document.getElementById('date-from').value;
+            const prevDateTo = document.getElementById('date-to').value;
+            
+            summaryData = Array.isArray(data) ? data : [];
+            // Si el backend indica prioridades manuales, respetar ese orden
+            // desactivando cualquier ordenación de cabecera
+            if (summaryData.some(r => typeof r.PriorityOrder === 'number' && r.PriorityOrder > 0)) {
+                currentSort = { column: null, asc: null };
+            }
+            if (!isAutoRefresh) loadingArea.style.display = 'none';
+            summaryTable.style.display = '';
+            // Restaurar filtros, orden Y AGRUPACIONES
+            document.getElementById('search-input').value = prevValue;
+            document.getElementById('date-from').value = prevDateFrom;
+            document.getElementById('date-to').value = prevDateTo;
+            currentSort = { ...prevSort };
+            groupedBy = [...prevGroupedBy]; // Restaurar agrupaciones
+            groupCollapsedState = {...prevGroupCollapsedState}; // Restaurar estado de colapso
+            filterSummaryTable();
+            // Si hay orden activo, volver a aplicar el orden
+            if (currentSort.column !== null && currentSort.asc !== null) {
+                const ths = document.querySelectorAll('.summary-table th');
+                ths.forEach((th, idx) => {
+                    th.classList.remove('sorted-asc', 'sorted-desc');
+                    if (currentSort.column === idx) {
+                        th.classList.add(currentSort.asc ? 'sorted-asc' : 'sorted-desc');
+                    }
+                });
+            }
+            } catch (error) {
+                // MODIFICADO: Usa la clave de traducción
+                loadingArea.innerHTML = `<div class="error-message">${getTranslation('text_error_loading_data')} ${error.message}</div>`;
+                loadingArea.style.display = 'block';
+            }
+        }
+        
+        function refreshModifiedOrders() {
+            const btnRefresh = document.getElementById('btn-refresh-sequenced');
+            const originalText = btnRefresh.innerHTML;
+            btnRefresh.disabled = true;
+            // MODIFICADO: Usa la clave de traducción
+            btnRefresh.innerHTML = `<span class="spinner"></span> ${getTranslation('button_updating')}`;
+            fetch('/api/sync/incremental', { method: 'POST', headers: { 'Content-Type': 'application/json' }})
+                .then(res => res.json())
+                .then(data => {
+                    if (data.error) throw new Error(data.error);
+                    autoUpdateSequencedPedidos();
+                })
+                .catch(error => {
+                    // MODIFICADO: Usa la clave de traducción
+                    alert(`${getTranslation('alert_error_updating_modified')} ${error.message}`);
+                })
+                .finally(() => {
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = originalText;
+                });
+        }
+        
+        function setupPageLogic() {
+            document.getElementById('search-input').addEventListener('input', filterSummaryTable);
+            document.getElementById('date-from').addEventListener('change', filterSummaryTable);
+            document.getElementById('date-to').addEventListener('change', filterSummaryTable);
+            document.getElementById('filter-faltantes').addEventListener('change', filterSummaryTable);
+            document.getElementById('btn-refresh-sequenced').addEventListener('click', refreshModifiedOrders);
+            setupEditViewPanel();
+            
+            // Configurar el botón de resetear orden manual
+            const resetOrderBtn = document.getElementById('btn-reset-order');
+            if (resetOrderBtn) {
+                resetOrderBtn.addEventListener('click', resetSequenceOrder);
+            }
+            
+            // Configurar el botón de eliminar todas las secuencias (solo visible para nivel >= 10)
+            const deleteAllBtn = document.getElementById('btn-delete-all-sequences');
+            if (deleteAllBtn) {
+                deleteAllBtn.addEventListener('click', deleteAllSequences);
+            }
+            
+            // Configurar el botón de limpiar agrupación
+            const clearGroupBtn = document.getElementById('clear-group-btn');
+            if (clearGroupBtn) {
+                clearGroupBtn.onclick = function() {
+                    groupedBy = [];
+                    groupCollapsedState = {};
+                    renderSummaryTable(filteredData);
+                };
+            }
+            
+            // Ordenar por Sequence al cargar (columna 11, key 'Sequence') descendente
+            // Buscar el índice de la columna 'Sequence' en columnConfig
+            let seqIdx = columnConfig.findIndex(c => c.key === 'Sequence');
+            currentSort = { column: seqIdx !== -1 ? seqIdx : 11, asc: true };
+            autoUpdateSequencedPedidos();
+            // Refresco automático cada 5 segundos que PRESERVA las agrupaciones activas
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(() => {
+                if (!window.isResizing) autoUpdateSequencedPedidos(true);
+            }, 5000);
+        }
+    </script>
+
+    <!-- SCRIPT DE TRADUCCIÓN -->
+    <script>
+        
+        let currentTranslations = {};
+
+        function getTranslation(key) { return currentTranslations[key] || key; }
+
+        function applyTranslations(translations) {
+            currentTranslations = translations;
+            document.querySelectorAll('[data-translate-key]').forEach(el => {
+                const key = el.getAttribute('data-translate-key');
+                if (translations[key]) el.innerHTML = translations[key];
+            });
+            document.querySelectorAll('[data-translate-key-title]').forEach(el => {
+                const key = el.getAttribute('data-translate-key-title');
+                if (translations[key]) el.setAttribute('title', translations[key]);
+            });
+            document.querySelectorAll('[data-translate-key-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-translate-key-placeholder');
+                if (translations[key]) el.setAttribute('placeholder', translations[key]);
+            });
+        }
+
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`/translations/translation_${lang}.json`);
+                if (!response.ok) {
+                    if (lang !== 'es') await loadTranslations('es');
+                    return;
+                }
+                const translations = await response.json();
+                applyTranslations(translations);
+                document.documentElement.lang = lang;
+                localStorage.setItem('language', lang);
+                // Sincronizar ambos selectores
+                const selector = document.getElementById('language-selector');
+                const headerSelector = document.getElementById('header-language-selector');
+                if (selector) selector.value = lang;
+                if (headerSelector) headerSelector.value = lang;
+            } catch (error) { console.error("Error al cargar traducciones:", error); }
+        }
+
+        function changeLanguage(lang) { loadTranslations(lang); }
+
+        // ===========================================
+        // FUNCIONES DRAG & DROP PARA REORDENAMIENTO DE FILAS
+        // ===========================================
+        
+        let draggedRow = null;
+        let draggedIndex = null;
+        let dropIndicator = null;
+        let isDragging = false; // Variable de estado para indicar si se está arrastrando
+        
+        function initializeDragAndDrop() {
+            console.log('[INIT] Inicializando drag & drop');
+            
+            const tbody = document.querySelector('.summary-table tbody');
+            if (!tbody) {
+                console.error('[INIT] No se encontró tbody de la tabla');
+                return;
+            }
+            
+            console.log('[INIT] Tbody encontrado, configurando event listeners');
+            
+            // Remover event listeners anteriores para evitar duplicados
+            tbody.removeEventListener('dragstart', handleDragStart);
+            tbody.removeEventListener('dragend', handleDragEnd);
+            tbody.removeEventListener('dragover', handleDragOver);
+            tbody.removeEventListener('drop', handleDrop);
+            tbody.removeEventListener('dragleave', handleDragLeave);
+            
+            // Añadir event listeners usando delegación de eventos
+            tbody.addEventListener('dragstart', handleDragStart);
+            tbody.addEventListener('dragend', handleDragEnd);
+            tbody.addEventListener('dragover', handleDragOver);
+            tbody.addEventListener('drop', handleDrop);
+            tbody.addEventListener('dragleave', handleDragLeave);
+            
+            // Verificar cuántas filas son draggable
+            const draggableRows = tbody.querySelectorAll('tr[draggable="true"]');
+            console.log(`[INIT] Encontradas ${draggableRows.length} filas draggable`);
+            
+            draggableRows.forEach((row, index) => {
+                const pedidoId = row.getAttribute('data-pedido-id');
+                console.log(`[INIT] Fila ${index}: pedidoId=${pedidoId}, draggable=${row.getAttribute('draggable')}`);
+            });
+            
+            console.log('[INIT] Drag & drop configurado correctamente');
+        }
+        
+        function handleDragStart(e) {
+            console.log('[DRAG] handleDragStart iniciado');
+            
+            if (!e.target.closest('tr[draggable="true"]')) {
+                console.log('[DRAG] No se encontró tr draggable, saliendo');
+                return;
+            }
+            
+            draggedRow = e.target.closest('tr');
+            draggedIndex = Array.from(draggedRow.parentNode.children).indexOf(draggedRow);
+            isDragging = true;
+            
+            const pedidoId = draggedRow.getAttribute('data-pedido-id');
+            console.log(`[DRAG] Iniciando drag de fila con pedidoId: ${pedidoId}, índice: ${draggedIndex}`);
+            
+            draggedRow.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', draggedRow.outerHTML);
+            
+            // Pausar el auto-refresh durante el drag & drop
+            pauseAutoRefresh();
+            console.log('[DRAG] Auto-refresh pausado, drag iniciado correctamente');
+        }
+        
+        function handleDragEnd(e) {
+            console.log('[DRAG] handleDragEnd iniciado');
+            
+            if (!draggedRow) {
+                console.log('[DRAG] No hay draggedRow, saliendo de handleDragEnd');
+                return;
+            }
+            
+            const pedidoId = draggedRow.getAttribute('data-pedido-id');
+            console.log(`[DRAG] Finalizando drag de pedido: ${pedidoId}`);
+            
+            draggedRow.classList.remove('dragging');
+            document.querySelectorAll('.drag-over, .drop-target-before, .drop-target-after').forEach(el => {
+                el.classList.remove('drag-over', 'drop-target-before', 'drop-target-after');
+            });
+            
+            draggedRow = null;
+            draggedIndex = null;
+            isDragging = false;
+            
+            // Reanudar el auto-refresh después del drag & drop
+            resumeAutoRefresh();
+            console.log('[DRAG] Auto-refresh reanudado, drag finalizado');
+        }
+        
+        function handleDragOver(e) {
+            if (!draggedRow) {
+                console.log('[DRAG] handleDragOver: No hay draggedRow');
+                return;
+            }
+            
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            const targetRow = e.target.closest('tr');
+            if (!targetRow || targetRow === draggedRow) {
+                console.log('[DRAG] handleDragOver: Target inválido o es la misma fila');
+                return;
+            }
+            
+            const targetPedidoId = targetRow.getAttribute('data-pedido-id');
+            console.log(`[DRAG] handleDragOver sobre fila: ${targetPedidoId}`);
+            
+            // Limpiar estados anteriores
+            document.querySelectorAll('.drag-over, .drop-target-before, .drop-target-after').forEach(el => {
+                el.classList.remove('drag-over', 'drop-target-before', 'drop-target-after');
+            });
+            
+            // Solo aplicar el feedback visual de inserción, sin drag-over
+            const rect = targetRow.getBoundingClientRect();
+            const mouseY = e.clientY;
+            const rowMiddle = rect.top + rect.height / 2;
+            
+            if (mouseY < rowMiddle) {
+                // Insertar antes - borde superior
+                targetRow.classList.add('drop-target-before');
+                console.log(`[DRAG] Mostrando indicador ANTES de fila: ${targetPedidoId}`);
+            } else {
+                // Insertar después - borde inferior
+                targetRow.classList.add('drop-target-after');
+                console.log(`[DRAG] Mostrando indicador DESPUÉS de fila: ${targetPedidoId}`);
+            }
+        }
+        
+        function handleDragLeave(e) {
+            // Solo remover clases si realmente salimos del tbody
+            if (!e.currentTarget.contains(e.relatedTarget)) {
+                document.querySelectorAll('.drag-over, .drop-target-before, .drop-target-after').forEach(el => {
+                    el.classList.remove('drag-over', 'drop-target-before', 'drop-target-after');
+                });
+            }
+        }
+        
+        function handleDrop(e) {
+            console.log('[DRAG] handleDrop iniciado');
+            
+            if (!draggedRow) {
+                console.log('[DRAG] No hay draggedRow en handleDrop');
+                return;
+            }
+            
+            e.preventDefault();
+            
+            const targetRow = e.target.closest('tr');
+            if (!targetRow || targetRow === draggedRow) {
+                console.log('[DRAG] Target inválido o es la misma fila en handleDrop');
+                return;
+            }
+            
+            // Verificar que draggedRow aún existe en el DOM
+            if (!draggedRow.parentNode) {
+                console.warn('[DRAG] La fila arrastrada ya no existe en el DOM, cancelando drop');
+                return;
+            }
+            
+            const draggedPedidoId = draggedRow.getAttribute('data-pedido-id');
+            const targetPedidoId = targetRow.getAttribute('data-pedido-id');
+            console.log(`[DRAG] Drop de pedido ${draggedPedidoId} sobre pedido ${targetPedidoId}`);
+            
+            // Determinar nueva posición
+            const rect = targetRow.getBoundingClientRect();
+            const mouseY = e.clientY;
+            const rowMiddle = rect.top + rect.height / 2;
+            
+            const targetIndex = Array.from(targetRow.parentNode.children).indexOf(targetRow);
+            let newIndex;
+            
+            if (mouseY < rowMiddle) {
+                newIndex = targetIndex;
+                console.log(`[DRAG] Insertando ANTES del índice ${targetIndex}, nuevo índice: ${newIndex}`);
+            } else {
+                newIndex = targetIndex + 1;
+                console.log(`[DRAG] Insertando DESPUÉS del índice ${targetIndex}, nuevo índice: ${newIndex}`);
+            }
+            
+            // Ajustar índice si movemos hacia abajo
+            if (draggedIndex < newIndex) {
+                newIndex--;
+                console.log(`[DRAG] Ajustando índice para movimiento hacia abajo: ${newIndex}`);
+            }
+            
+            console.log(`[DRAG] Índices finales - Desde: ${draggedIndex}, Hacia: ${newIndex}`);
+            
+            if (newIndex !== draggedIndex) {
+                console.log(`[DRAG] Moviendo fila físicamente en el DOM antes de enviar al servidor`);
+                
+                // Mover físicamente la fila en el DOM
+                const tbody = draggedRow.parentNode;
+                const allRows = Array.from(tbody.children);
+                
+                // Remover la fila arrastrada
+                draggedRow.remove();
+                
+                // Insertarla en la nueva posición
+                if (newIndex >= allRows.length - 1) {
+                    // Insertar al final
+                    tbody.appendChild(draggedRow);
+                    console.log(`[DRAG] Fila insertada al final del tbody`);
+                } else {
+                    // Insertar antes de la fila en newIndex
+                    const referenceRow = tbody.children[newIndex];
+                    tbody.insertBefore(draggedRow, referenceRow);
+                    console.log(`[DRAG] Fila insertada antes del nuevo índice ${newIndex}`);
+                }
+                
+                console.log(`[DRAG] Llamando a saveNewOrder(${draggedIndex}, ${newIndex})`);
+                saveNewOrder(draggedIndex, newIndex);
+            } else {
+                console.log('[DRAG] No hay cambio de posición, no se llama a saveNewOrder');
+            }
+        }
+        
+        async function saveNewOrder(fromIndex, toIndex) {
+            console.log(`[API] saveNewOrder iniciado - Desde índice ${fromIndex} hacia índice ${toIndex}`);
+            
+            try {
+                // Verificar que draggedRow aún existe en el DOM
+                if (!draggedRow || !draggedRow.parentNode) {
+                    console.error('[API] La fila arrastrada ya no existe en el DOM');
+                    throw new Error('La fila arrastrada ya no existe en el DOM');
+                }
+                
+                // Obtener el pedido ID de la fila que se movió
+                let pedidoId = draggedRow.getAttribute('data-pedido-id');
+                console.log(`[API] PedidoId obtenido del atributo: ${pedidoId}`);
+                
+                if (!pedidoId) {
+                    console.log('[API] No se encontró pedidoId en atributo, buscando en celda');
+                    const pedidoCell = draggedRow.querySelector('td[data-field="NumeroPedido"]');
+                    if (pedidoCell) {
+                        pedidoId = pedidoCell.textContent.trim();
+                        console.log(`[API] PedidoId obtenido de celda: ${pedidoId}`);
+                    }
+                }
+                
+                if (!pedidoId) {
+                    console.error('[API] No se pudo obtener el ID del pedido');
+                    throw new Error('No se pudo obtener el ID del pedido');
+                }
+                
+                // Obtener todas las filas visibles y crear el nuevo orden completo
+                const allRows = Array.from(draggedRow.parentNode.children).filter(row => row.tagName === 'TR');
+                console.log(`[API] Total de filas visibles: ${allRows.length}`);
+                
+                // Crear el nuevo orden con todas las filas
+                const newOrder = [];
+                allRows.forEach((row, index) => {
+                    let rowPedidoId = row.getAttribute('data-pedido-id');
+                    if (!rowPedidoId) {
+                        const pedidoCell = row.querySelector('td[data-field="NumeroPedido"]');
+                        if (pedidoCell) {
+                            rowPedidoId = pedidoCell.textContent.trim();
+                        }
+                    }
+                    
+                    if (rowPedidoId) {
+                        newOrder.push({
+                            pedidoId: rowPedidoId,
+                            priority: index + 1  // Prioridad basada en posición visual (1-based)
+                        });
+                        console.log(`[API] Fila ${index}: pedido ${rowPedidoId} -> prioridad ${index + 1}`);
+                    }
+                });
+                
+                console.log(`[API] Enviando orden completo de ${newOrder.length} pedidos`);
+                
+                const requestBody = {
+                    orders: newOrder
+                };
+                
+                console.log('[API] Request body (primeros 3):', JSON.stringify(requestBody.orders.slice(0, 3), null, 2));
+                
+                const response = await fetch('/api/sequence/reorder-batch', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+                
+                console.log(`[API] Response status: ${response.status}`);
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('[API] Error response:', errorData);
+                    throw new Error(errorData.error || 'Error al reordenar');
+                }
+                
+                const result = await response.json();
+                console.log('[API] Response exitosa:', result);
+                
+                // Actualizar la vista
+                console.log('[API] Actualizando vista...');
+                // Al reordenar manualmente, desactivar cualquier ordenación de cabecera
+                // para respetar el orden de prioridad que devuelve el backend
+                currentSort = { column: null, asc: null };
+                await autoUpdateSequencedPedidos(false);
+                console.log('[API] Vista actualizada correctamente');
+                
+            } catch (error) {
+                console.error('[API] Error en saveNewOrder:', error);
+                alert(`${getTranslation('alert_reorder_error')} ${error.message}`);
+                
+                // Revertir visualmente el cambio
+                console.log('[API] Revirtiendo cambios visuales...');
+                await autoUpdateSequencedPedidos(false);
+            }
+        }
+        
+        async function resetSequenceOrder() {
+            if (!confirm(getTranslation('confirm_reset_order'))) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/sequence/reset-order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Error al resetear orden');
+                }
+                
+                const result = await response.json();
+                console.log('Reset exitoso:', result);
+                alert(getTranslation('alert_reset_order_success'));
+                
+                // Actualizar la vista
+                await autoUpdateSequencedPedidos(false);
+                
+            } catch (error) {
+                console.error('Error al resetear orden:', error);
+                alert(`${getTranslation('alert_reset_order_error')} ${error.message}`);
+            }
+        }
+
+        async function deleteAllSequences() {
+            // Obtener el número de pedidos secuenciados actuales
+            const count = summaryData.length;
+            
+            if (count === 0) {
+                alert(getTranslation('text_no_sequenced_data'));
+                return;
+            }
+            
+            // Primera confirmación
+            const confirmMsg = getTranslation('confirm_delete_all_sequences').replace('{count}', count);
+            if (!confirm(confirmMsg)) {
+                alert(getTranslation('alert_delete_all_cancelled'));
+                return;
+            }
+            
+            // Segunda confirmación con texto
+            const finalConfirm = prompt(getTranslation('confirm_delete_all_sequences_final'));
+            const expectedText = navigator.language.startsWith('es') ? 'ELIMINAR' : 
+                                 navigator.language.startsWith('cz') ? 'SMAZAT' : 'DELETE';
+            
+            if (!finalConfirm || finalConfirm.toUpperCase() !== expectedText) {
+                alert(getTranslation('alert_delete_all_cancelled'));
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/sequence/delete-all', {
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.error || 'Error al eliminar secuencias');
+                }
+                
+                const successMsg = getTranslation('alert_delete_all_success').replace('{count}', result.deleted_count || count);
+                alert(successMsg);
+                
+                // Limpiar datos locales y actualizar vista
+                summaryData = [];
+                filteredData = [];
+                renderSummaryTable([]);
+                
+                // Refrescar desde el servidor
+                await autoUpdateSequencedPedidos(false);
+                
+            } catch (error) {
+                console.error('Error al eliminar todas las secuencias:', error);
+                alert(`${getTranslation('alert_delete_all_error')} ${error.message}`);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+            loadTranslations(lang).then(() => {
+                setupPageLogic(); // Inicia la lógica de la página después de traducir
+                // Refresco automático cada 5 segundos
+                if (window.autoRefreshInterval) clearInterval(window.autoRefreshInterval);
+                window.autoRefreshInterval = setInterval(() => {
+                    // No ejecutar auto-refresh durante drag & drop o resize
+                    if (typeof window.isResizing !== 'undefined' && window.isResizing) return;
+                    if (typeof isDragging !== 'undefined' && isDragging) return;
+                    if (typeof autoUpdateSequencedPedidos === 'function') autoUpdateSequencedPedidos(true);
+                }, 5000);
+            });
+        });
+    </script>
+    <script src="/assets/globalHeader.js" data-title="Pedidos Secuenciados" data-title-key="header_sequenced_orders"></script>
+</body>
+</html>

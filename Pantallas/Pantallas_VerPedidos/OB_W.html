@@ -9,7 +9,7 @@
 </head>
 <body>
   <!-- Header generado por globalHeader.js -->
-  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1200px; margin: 0 auto;">
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1840px; margin: 0 auto;">
     <!-- Cards se insertan por JS -->
   </div>
 
@@ -53,114 +53,77 @@
     window.addEventListener('userLoggedIn', verificarPermisos);
     
     let pedidosCache = [];
-    let extendersCache = {};
-    let descuentoCache = {};
+    let lastRenderedPedidosSignature = '';
+    const VIEW_REFRESH_INTERVAL_MS = 10000;
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function formatComponentQuantity(value) {
+      return value === null || value === undefined || value === '' ? 0 : value;
+    }
+
+    function formatOptionalQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
 
     async function getPedidosSecuenciadosW() {
-      const res = await fetch('/api/pedidos_secuenciados_w');
-      if (!res.ok) return [];
-      return await res.json();
-    }
-
-    async function obtenerExtendersDelPedido(numeroPedido) {
-      if (extendersCache[numeroPedido]) {
-        return extendersCache[numeroPedido];
-      }
-
       try {
-        const res = await fetch(`/api/obtener-extenders-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
-        if (!res.ok) {
-          return { assy_extensores: [] };
-        }
-        const data = await res.json();
-        extendersCache[numeroPedido] = data;
-        return data;
+        const res = await fetch('/api/pedidos_secuenciados_w');
+        if (!res.ok) return [];
+        return await res.json();
       } catch (error) {
-        console.error(`Error obteniendo extensores: ${error}`);
-        return { assy_extensores: [] };
+        console.error('Error fetching W orders:', error);
+        return [];
       }
     }
 
-    // Nueva función: obtener info del material de descuento para un pedido
-    async function obtenerMaterialDescuentoPedido(numeroPedido) {
-      // Si ya está en caché, devolver
-      if (descuentoCache.hasOwnProperty(numeroPedido)) {
-        return descuentoCache[numeroPedido];
-      }
-      
-      try {
-        const res = await fetch(`/api/obtener-material-descuento-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
-        if (!res.ok) {
-          console.warn(`No se pudo obtener material de descuento para pedido ${numeroPedido}`);
-          return { assy_descuento: null };
-        }
-        const data = await res.json();
-        descuentoCache[numeroPedido] = data;
-        return data;
-      } catch (error) {
-        console.error(`Error obteniendo material de descuento: ${error}`);
-        return { assy_descuento: null };
-      }
+    function buildPedidosSignature(pedidos) {
+      return JSON.stringify((pedidos || []).map(pedido => ({
+        SalesOrder: pedido.SalesOrder || '',
+        Sequence: pedido.Sequence || '',
+        Assy: pedido.Assy || '',
+        Qty: pedido.Qty ?? 0,
+        DoneQty: pedido.DoneQty ?? 0,
+        Beam: pedido.Beam || '',
+        BeamQty: pedido.BeamQty ?? 0,
+        IF1: pedido.IF1 || '',
+        IF2: pedido.IF2 || '',
+        IFQty: pedido.IFQty ?? 0,
+        Extender: pedido.Extender || '',
+        ExtenderQuantity: pedido.ExtenderQuantity ?? null,
+        TieBracket: pedido.TieBracket || '',
+        TieBracketQty: pedido.TieBracketQty ?? null,
+        TieExtenderQty: pedido.TieExtenderQty ?? null,
+        DeliveryDate: pedido.DeliveryDate || '',
+        WO: pedido.WO || ''
+      })));
     }
 
-    function esAssynExtensor(assy, extendersData) {
-      if (!extendersData || !extendersData.assy_extensores) return false;
-      return extendersData.assy_extensores.some(ext => ext.toUpperCase() === (assy || '').toUpperCase());
-    }
+    async function renderCards(pedidos, options = {}) {
+      const { force = false } = options;
+      const sorted = Array.isArray(pedidos) ? [...pedidos] : [];
+      const nextSignature = buildPedidosSignature(sorted);
 
-    // Nueva función: verificar si un Assy es el material de descuento
-    function esAssynDescuento(assy, descuentoData) {
-      if (!descuentoData) return false;
-      const assyActual = (assy || '').toUpperCase();
-      const assyDescuentoList = Array.isArray(descuentoData.assy_descuento_list)
-        ? descuentoData.assy_descuento_list.map(item => String(item || '').toUpperCase())
-        : [];
-
-      if (assyDescuentoList.length > 0) {
-        return assyDescuentoList.includes(assyActual);
+      if (!force && nextSignature === lastRenderedPedidosSignature) {
+        return;
       }
 
-      if (!descuentoData.assy_descuento) return false;
-      return assyActual === descuentoData.assy_descuento.toUpperCase();
-    }
-
-    async function actualizarCantidadesExtender() {
-      const extenderQtyNodes = Array.from(document.querySelectorAll('.extender-qty-value'));
-      const pedidos = [...new Set(extenderQtyNodes.map(node => node.dataset.salesOrder).filter(Boolean))];
-
-      // Obtener datos del material de descuento (OmegaType) para cada pedido
-      await Promise.all(pedidos.map(obtenerMaterialDescuentoPedido));
-
-      extenderQtyNodes.forEach(node => {
-        const salesOrder = node.dataset.salesOrder || '';
-        const assy = (node.dataset.assy || '').toUpperCase();
-        const qty = Number(node.dataset.qty || 0);
-        const descuentoData = descuentoCache[salesOrder] || { assy_descuento: null, assy_descuento_list: [] };
-        
-        // Comparar el Assy de la tarjeta contra todos los Assy asociados al mismo OmegaType.
-        const esOmegaType = esAssynDescuento(assy, descuentoData);
-        node.textContent = esOmegaType ? Math.max(0, qty - 2) : '-';
-      });
-    }
-
-    async function renderCards(pedidos) {
-      // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
-      function parseSeq(val) {
-        if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
-        const m = String(val).match(/\d+/g);
-        if (!m || m.length === 0) return Number.POSITIVE_INFINITY;
-        return parseInt(m[m.length - 1], 10);
-      }
-      function compareOrders(a, b) {
-        const pa = (typeof a.PriorityOrder === 'number') ? a.PriorityOrder : null;
-        const pb = (typeof b.PriorityOrder === 'number') ? b.PriorityOrder : null;
-        if (pa !== null && pb !== null) return pa - pb;
-        const sa = parseSeq(a.Sequence || a.SequenceValue);
-        const sb = parseSeq(b.Sequence || b.SequenceValue);
-        if (sa !== sb) return sa - sb;
-        return 0;
-      }
-      const sorted = Array.isArray(pedidos) ? [...pedidos].sort(compareOrders) : [];
+      lastRenderedPedidosSignature = nextSignature;
       pedidosCache = sorted;
       const grid = document.getElementById('cardsGrid');
       grid.innerHTML = '';
@@ -173,45 +136,60 @@
         grid.appendChild(vacio);
         return;
       }
-      // Los pedidos ya vienen ordenados correctamente del backend con PriorityOrder
-      // No necesitamos ordenarlos aquí
       sorted.forEach((pedido, idx) => {
         const card = document.createElement('div');
         card.className = 'secuenciacion-card';
-        card.style = `background: #f4f8ff; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 260px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid #1976d2; margin: 0; width: 100%; max-width: 1700px;`;
+        card.style = `background: #f4f8ff; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid #1976d2; margin: 0; width: 100%; max-width: 1800px;`;
 
-        // Nuevo: contenedor para el código de barras online usando bwip-js
         const barcodeImgId = `barcodeimg_${idx}_${pedido.SalesOrder}`;
+        const ifValue = pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2
+          ? `${pedido.IF1} / ${pedido.IF2}`
+          : (pedido.IF1 || pedido.IF2 || '');
+        const tieBracket = String(pedido.TieBracket || '').trim();
+        const hasTieRowData = !!(
+          tieBracket
+          || pedido.TieBracketQty !== null && pedido.TieBracketQty !== undefined
+          || pedido.TieExtenderQty !== null && pedido.TieExtenderQty !== undefined
+        );
+        const tieRowHtml = hasTieRowData ? `
+          <div class="trace-card-secondary">
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_tie_bracket')}</span><div>${tieBracket || '-'}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_qty')}</span><div>${formatOptionalQuantity(pedido.TieBracketQty)}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatOptionalQuantity(pedido.TieExtenderQty)}</div></div>
+          </div>
+        ` : '';
         card.innerHTML = `
-          <div style="background:#1976d2;color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
-            <span style="font-size:2rem;font-weight:600;">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+          <div class="trace-card-header">
+            <span class="trace-card-meta">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+            <span class="trace-card-meta">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
           </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:28px 64px 0 64px;justify-content:center;">
-            <div class="pedido-info-container pedido-info-top"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
-            <div class="pedido-info-container pedido-info-top"><span>${getTranslation('table_header_beam')}</span><div>${pedido.Beam || ''}</div></div>
-            <div class="pedido-info-container pedido-info-top">
-              <span style="${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_if')}</span>
-              <div style="font-size: 1.35rem;">${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? `${pedido.IF1} ${pedido.IF2}` : (pedido.IF1 || pedido.IF2 || '')}</div>
+          <div class="trace-card-body">
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_sub_omega')}</span><div>${pedido.Beam || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_sub_omega_qty')}</span><div>${formatComponentQuantity(pedido.BeamQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow">
+              <span>${getTranslation('card_label_wall_int')}</span>
+              <div>${ifValue}</div>
             </div>
-            <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
-            <div class="pedido-info-container pedido-info-top" style="${pedido.WO && String(pedido.WO).split(',').length === 3 ? 'height:135px;' : ''}">
-              <span style="${pedido.WO && String(pedido.WO).includes(',') ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_wo')}</span>
-              <div style="font-size: 1.4rem !important;">${(pedido.WO || '').replace(/,/g, ', ')}</div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_wall_int_qty')}</span><div>${formatComponentQuantity(pedido.IFQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--date"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--wide">
+              <span>${getTranslation('card_label_wo')}</span>
+              <div>${(pedido.WO || '').replace(/,/g, ', ')}</div>
             </div>
-          </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
-            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
-            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
-            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_extender_qty')}</span><div class="extender-qty-value" data-assy="${pedido.Assy}" data-sales-order="${pedido.SalesOrder}" data-qty="${pedido.Qty}">-</div></div>
-            <!-- Nuevo contenedor para el código de barras online usando bwip-js -->
-            <div class="pedido-info-container pedido-info-bottom" style="background:#f9f9f9;min-width:240px;max-width:360px;width:100%;height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:auto;">
-              <span style="font-size:1.3rem;color:#1976d2;font-weight:700;margin-bottom:6px;">${getTranslation('barcode_label')}</span>
-              <div style="width:320px;height:100px;overflow:hidden;display:flex;align-items:center;justify-content:center;">
-                <img id="${barcodeImgId}" style="height:90px;width:420px;object-position:center;display:block;padding: 0 8px;" alt="barcode" src="" />
+            <div class="pedido-info-container trace-card-cell trace-card-barcode">
+              <span>${getTranslation('barcode_label')}</span>
+              <div class="trace-card-barcode-frame">
+                <img id="${barcodeImgId}" class="trace-card-barcode-image" alt="barcode" src="" />
               </div>
             </div>
           </div>
+          ${tieRowHtml}
         `;
         grid.appendChild(card);
         // Generar el código de barras online usando la API de bwip-js con la primera WO
@@ -230,30 +208,35 @@
         }
       });
 
-      await actualizarCantidadesExtender();
     }
 
     function setupPageLogic() {
         async function autoUpdate() {
+            if (document.hidden) {
+              return;
+            }
             const pedidos = await getPedidosSecuenciadosW();
             await renderCards(pedidos);
         }
         autoUpdate();
-        setInterval(autoUpdate, 5000);
+        setInterval(autoUpdate, VIEW_REFRESH_INTERVAL_MS);
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            autoUpdate();
+          }
+        });
     }
   </script>
 
   <!-- ESTILOS ADICIONALES -->
   <style>
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding:6px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600;flex-shrink:1}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}
-    .main-grid{display:flex;flex-direction:column;gap:clamp(16px,4vw,28px);padding:clamp(20px,5vh,40px) clamp(8px,3vw,30px);max-width:100%;margin:0 auto}
-    /* Responsive adjustments */
-    @media (max-width:1200px){.pedido-info-container{min-width:160px;max-width:180px;height:95px}.pedido-info-top{font-size:1.3rem}.pedido-info-bottom{font-size:1.8rem}}
-    @media (max-width:1024px){.pedido-info-container{min-width:140px;max-width:160px;height:90px;font-size:1.2rem}.pedido-info-container span{font-size:1.5rem;margin-bottom:8px}.pedido-info-container div{font-size:1.4rem}}
-    @media (max-width:768px){.main-grid{gap:18px;padding:18px 12px}.pedido-info-container{min-width:120px;max-width:140px;height:85px;font-size:1rem;padding:5px}.pedido-info-container span{font-size:1.2rem;margin-bottom:6px}.pedido-info-container div{font-size:1.1rem}.pedido-info-top{font-size:1.2rem}.pedido-info-bottom{font-size:1.5rem}}
-    @media (max-width:600px){.main-grid{gap:15px;padding:15px 10px}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1.2rem}.pedido-info-container{min-width:100px;max-width:130px;height:80px;padding:4px;font-size:0.9rem}.pedido-info-container span{font-size:1rem;margin-bottom:4px;letter-spacing:1px}.pedido-info-container div{font-size:0.95rem}}
-    @media (max-width:480px){.main-grid{gap:12px;padding:10px 8px}.pedido-info-container{min-width:90px;max-width:110px;height:75px;font-size:0.8rem;padding:3px}.pedido-info-container span{font-size:0.9rem;margin-bottom:3px}.pedido-info-container div{font-size:0.85rem}}
-    @media (max-width:360px){.pedido-info-top{font-size:0.8rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container{min-width:80px;max-width:100px;height:70px;font-size:0.75rem;padding:2px}.pedido-info-container span{font-size:0.75rem;margin-bottom:2px}.pedido-info-container div{font-size:0.7rem}}
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:72px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.2;overflow-wrap:anywhere}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}
+    .main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}
+    .trace-card-header{background:#1976d2;color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.trace-card-meta{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-body{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}.trace-card-secondary{display:grid;grid-template-columns:minmax(180px,1.15fr) minmax(180px,1.15fr) minmax(90px,.55fr) minmax(120px,.7fr);gap:10px;padding:0 14px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--micro{min-width:0;padding:6px 6px}.trace-card-cell--micro span{font-size:.74rem;letter-spacing:.02em}.trace-card-cell--micro div{font-size:.94rem}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-secondary-cell--wide{min-width:0}.trace-card-secondary-cell--compact{min-width:0}.trace-card-barcode{padding:6px 8px}.trace-card-barcode-frame{width:100%;min-height:46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:54px;width:100%;max-width:240px;object-fit:contain;object-position:center;display:block;background:#fff}
+    @media (max-width:1440px){.trace-card-body{grid-template-columns:repeat(6,minmax(100px,1fr));}.trace-card-barcode{grid-column:span 2}.trace-card-secondary{grid-template-columns:repeat(4,minmax(120px,1fr));}.pedido-info-container{min-height:68px}}
+    @media (max-width:900px){.main-grid{padding:14px 10px 20px}.trace-card-header{padding:10px 14px}.trace-card-meta{font-size:.96rem}.trace-card-body{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr));padding:0 10px 10px}.trace-card-barcode{grid-column:span 3}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}
+    @media (max-width:640px){.trace-card-body{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:64px;padding:7px 8px}}
+    @media (max-width:420px){.trace-card-header{padding:8px 10px}.trace-card-meta{font-size:.88rem}.trace-card-body{grid-template-columns:1fr;padding:8px}.trace-card-barcode{grid-column:auto}.pedido-info-container{min-height:60px}.trace-card-barcode-image{max-width:100%}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
@@ -285,7 +268,7 @@
           loadTranslations(lang).then(async () => {
               // Re-renderizar las tarjetas con el nuevo idioma usando la caché de datos
               if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
-                  await renderCards(pedidosCache);
+                  await renderCards(pedidosCache, { force: true });
               }
           });
       }

@@ -2,6 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
     <title data-translate-key="page_title_sequenced_c">Pedidos Secuenciados C</title>
     <link rel="stylesheet" href="../../assets/styles.css">
     <link rel="stylesheet" href="/assets/loginModal.css">
@@ -51,6 +52,33 @@
     window.addEventListener('userLoggedIn', verificarPermisos);
     
     let pedidosCache = [];
+    let lastRenderedPedidosSignature = '';
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function buildPedidosSignature(pedidos) {
+      return JSON.stringify((pedidos || []).map(pedido => ({
+        SalesOrder: pedido.SalesOrder || '',
+        Sequence: pedido.Sequence || pedido.SequenceValue || '',
+        Assy: pedido.Assy || '',
+        Beam: pedido.Beam || '',
+        IF1: pedido.IF1 || '',
+        IF2: pedido.IF2 || '',
+        Extender: pedido.Extender || '',
+        ExtenderQuantity: pedido.ExtenderQuantity ?? null,
+        WO: pedido.WO || '',
+        Qty: pedido.Qty || 0,
+        DoneQty: pedido.DoneQty ?? 0,
+        PriorityOrder: pedido.PriorityOrder ?? null
+      })));
+    }
+
+    function buildBarcodeUrl(value) {
+      if (!value) return '';
+      return `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(value)}&scale=4&height=18`;
+    }
 
     async function getPedidosSecuenciadosC() {
       const res = await fetch('/api/pedidos_secuenciados_c');
@@ -58,7 +86,8 @@
       return await res.json();
     }
 
-    function renderCards(pedidos) {
+    async function renderCards(pedidos, options = {}) {
+      const { force = false } = options;
       // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
       function parseSeq(val) {
         if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
@@ -77,6 +106,13 @@
         return 0;
       }
       const sorted = Array.isArray(pedidos) ? [...pedidos].sort(compareOrders) : [];
+      const nextSignature = buildPedidosSignature(sorted);
+
+      if (!force && nextSignature === lastRenderedPedidosSignature) {
+        return;
+      }
+
+      lastRenderedPedidosSignature = nextSignature;
       pedidosCache = sorted;
       const grid = document.getElementById('cardsGrid');
       grid.innerHTML = '';
@@ -110,6 +146,7 @@
               <span style="${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_if')}</span>
               <div style="font-size: 1.35rem;">${pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2 ? `${pedido.IF1} ${pedido.IF2}` : (pedido.IF1 || pedido.IF2 || '')}</div>
             </div>
+            <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
             <div class="pedido-info-container pedido-info-top" style="${pedido.WO && String(pedido.WO).split(',').length === 3 ? 'height:135px;' : ''}">
               <span style="${pedido.WO && String(pedido.WO).includes(',') ? 'margin-bottom:0px !important;' : ''}">${getTranslation('card_label_wo')}</span>
               <div style="font-size: 1.4rem !important;">${(pedido.WO || '').replace(/,/g, ', ')}</div>
@@ -118,6 +155,7 @@
           <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
             <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
             <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+            <div class="pedido-info-container pedido-info-bottom"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
             <!-- Mejorado: contenedor para el código de barras online, tamaño y contraste óptimos -->
             <div class="pedido-info-container pedido-info-bottom" style="background:#fff;min-width:260px;max-width:320px;width:100%;height:140px;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow-x:auto;box-shadow:0 2px 8px rgba(0,0,0,0.08);border:2px solid #1976d2;">
               <span style="font-size:1.35rem;color:#1976d2;font-weight:700;margin-bottom:8px;letter-spacing:1px;">${getTranslation('barcode_label')}</span>
@@ -135,21 +173,27 @@
           if (woArr.length > 0) firstWO = woArr[0];
         }
         if (firstWO) {
-          // Código de barras con mayor escala y altura para mejor legibilidad
-          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(firstWO)}&scale=4&height=18`; // includetext muestra el valor debajo
+          const barcodeUrl = buildBarcodeUrl(firstWO);
           const img = card.querySelector(`#${barcodeImgId}`);
-          if (img) img.src = barcodeUrl;
+          if (img) {
+            img.dataset.barcodeValue = firstWO;
+            img.src = barcodeUrl;
+          }
         } else {
           const img = card.querySelector(`#${barcodeImgId}`);
-          if (img) img.src = '';
+          if (img) {
+            img.dataset.barcodeValue = '';
+            img.src = '';
+          }
         }
       });
+
     }
 
     function setupPageLogic() {
         async function autoUpdate() {
             const pedidos = await getPedidosSecuenciadosC();
-            renderCards(pedidos);
+            await renderCards(pedidos);
         }
         autoUpdate();
         setInterval(autoUpdate, 5000);
@@ -158,7 +202,14 @@
 
   <!-- ESTILOS ADICIONALES -->
   <style>
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding-left:10px;padding-right:10px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}@media (max-width:900px){.main-grid{padding:20px 0}.secuenciacion-card>div{padding-left:16px!important;padding-right:16px!important}.pedido-info-container{min-width:100px;padding:8px;font-size:.95rem}}@media (max-width:600px){.main-grid{padding:10px 0}.secuenciacion-card>div{padding-left:8px!important;padding-right:8px!important}.pedido-info-container{min-width:80px;padding:6px;font-size:.92rem}}
+    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding:6px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600;flex-shrink:1}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}
+    .main-grid{display:flex;flex-direction:column;gap:clamp(16px,4vw,28px);padding:clamp(20px,5vh,40px) clamp(8px,3vw,30px);max-width:100%;margin:0 auto}
+    @media (max-width:1200px){.pedido-info-container{min-width:160px;max-width:180px;height:95px}.pedido-info-top{font-size:1.3rem}.pedido-info-bottom{font-size:1.8rem}}
+    @media (max-width:1024px){.pedido-info-container{min-width:140px;max-width:160px;height:90px;font-size:1.2rem}.pedido-info-container span{font-size:1.5rem;margin-bottom:8px}.pedido-info-container div{font-size:1.4rem}}
+    @media (max-width:768px){.main-grid{gap:18px;padding:18px 12px}.pedido-info-container{min-width:120px;max-width:140px;height:85px;font-size:1rem;padding:5px}.pedido-info-container span{font-size:1.2rem;margin-bottom:6px}.pedido-info-container div{font-size:1.1rem}.pedido-info-top{font-size:1.2rem}.pedido-info-bottom{font-size:1.5rem}}
+    @media (max-width:600px){.main-grid{gap:15px;padding:15px 10px}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1.2rem}.pedido-info-container{min-width:100px;max-width:130px;height:80px;padding:4px;font-size:0.9rem}.pedido-info-container span{font-size:1rem;margin-bottom:4px;letter-spacing:1px}.pedido-info-container div{font-size:0.95rem}}
+    @media (max-width:480px){.main-grid{gap:12px;padding:10px 8px}.pedido-info-container{min-width:90px;max-width:110px;height:75px;font-size:0.8rem;padding:3px}.pedido-info-container span{font-size:0.9rem;margin-bottom:3px}.pedido-info-container div{font-size:0.85rem}}
+    @media (max-width:360px){.pedido-info-top{font-size:0.8rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container{min-width:80px;max-width:100px;height:70px;font-size:0.75rem;padding:2px}.pedido-info-container span{font-size:0.75rem;margin-bottom:2px}.pedido-info-container div{font-size:0.7rem}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
@@ -187,10 +238,10 @@
           } catch (error) { console.error("Error al cargar traducciones:", error); }
       }
       function changeLanguage(lang) {
-          loadTranslations(lang).then(() => {
+          loadTranslations(lang).then(async () => {
               // Re-renderizar las tarjetas con el nuevo idioma usando la caché de datos
               if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
-                  renderCards(pedidosCache);
+                  await renderCards(pedidosCache, { force: true });
               }
           });
       }

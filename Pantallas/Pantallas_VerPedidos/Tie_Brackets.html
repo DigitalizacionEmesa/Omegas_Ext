@@ -57,10 +57,25 @@
     window.addEventListener('userLoggedIn', verificarPermisos);
     
     let pedidosCache = [];
-    let extendersCache = {};
-    let descuentoCache = {};
     let filtroFabricadoActual = localStorage.getItem('tieBracketsFiltroFabricado') || 'no_fabricados';
     let busquedaActual = localStorage.getItem('tieBracketsBusqueda') || '';
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
 
     function getFabricadoStorageKey(pedido) {
       const salesOrder = pedido?.SalesOrder || '';
@@ -144,78 +159,24 @@
       return await res.json();
     }
 
-    async function obtenerExtendersDelPedido(numeroPedido) {
-      if (extendersCache[numeroPedido]) {
-        return extendersCache[numeroPedido];
-      }
+    let lastRenderedPedidosSignature = '';
+    const VIEW_REFRESH_INTERVAL_MS = 10000;
 
-      try {
-        const res = await fetch(`/api/obtener-extenders-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
-        if (!res.ok) {
-          return { assy_extensores: [] };
-        }
-        const data = await res.json();
-        extendersCache[numeroPedido] = data;
-        return data;
-      } catch (error) {
-        console.error(`Error obteniendo extensores: ${error}`);
-        return { assy_extensores: [] };
-      }
+    function buildPedidosSignature(pedidos) {
+      return JSON.stringify((pedidos || []).map(pedido => ({
+        SalesOrder: pedido.SalesOrder || '',
+        Sequence: pedido.Sequence || '',
+        Assy: pedido.Assy || '',
+        TieBracket: pedido.TieBracket || '',
+        Extender: pedido.Extender || '',
+        Qty: pedido.Qty ?? 0,
+        ExtenderQuantity: pedido.ExtenderQuantity ?? null,
+        DeliveryDate: pedido.DeliveryDate || ''
+      })));
     }
 
-    // Nueva función: obtener info del material de descuento para un pedido
-    async function obtenerMaterialDescuentoPedido(numeroPedido) {
-      // Si ya está en caché, devolver
-      if (descuentoCache.hasOwnProperty(numeroPedido)) {
-        return descuentoCache[numeroPedido];
-      }
-      
-      try {
-        const res = await fetch(`/api/obtener-material-descuento-pedido?numero_pedido=${encodeURIComponent(numeroPedido)}`);
-        if (!res.ok) {
-          console.warn(`No se pudo obtener material de descuento para pedido ${numeroPedido}`);
-          return { assy_descuento: null };
-        }
-        const data = await res.json();
-        descuentoCache[numeroPedido] = data;
-        return data;
-      } catch (error) {
-        console.error(`Error obteniendo material de descuento: ${error}`);
-        return { assy_descuento: null };
-      }
-    }
-
-    function esAssynExtensor(assy, extendersData) {
-      if (!extendersData || !extendersData.assy_extensores) return false;
-      return extendersData.assy_extensores.some(ext => ext.toUpperCase() === (assy || '').toUpperCase());
-    }
-
-    // Nueva función: verificar si un Assy es el material de descuento
-    function esAssynDescuento(assy, descuentoData) {
-      if (!descuentoData || !descuentoData.assy_descuento) return false;
-      return (assy || '').toUpperCase() === descuentoData.assy_descuento.toUpperCase();
-    }
-
-    async function actualizarCantidadesExtender() {
-      const extenderQtyNodes = Array.from(document.querySelectorAll('.extender-qty-value'));
-      const pedidos = [...new Set(extenderQtyNodes.map(node => node.dataset.salesOrder).filter(Boolean))];
-
-      // Obtener datos del material de descuento (OmegaType)
-      await Promise.all(pedidos.map(obtenerMaterialDescuentoPedido));
-
-      extenderQtyNodes.forEach(node => {
-        const salesOrder = node.dataset.salesOrder || '';
-        const assy = (node.dataset.assy || '').toUpperCase();
-        const qty = Number(node.dataset.qty || 0);
-        const descuentoData = descuentoCache[salesOrder] || { assy_descuento: null };
-        
-        // Comparar si este Assy es el material de descuento (OmegaType)
-        const esAssynDescuento = descuentoData.assy_descuento && assy === descuentoData.assy_descuento.toUpperCase();
-        node.textContent = esAssynDescuento ? Math.max(0, qty - 2) : '-';
-      });
-    }
-
-    function renderCards(pedidos) {
+    function renderCards(pedidos, options = {}) {
+      const { force = false } = options;
       // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
       function parseSeq(val) {
         if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
@@ -234,6 +195,15 @@
         return 0;
       }
       const sorted = Array.isArray(pedidos) ? [...pedidos].sort(compareOrders) : [];
+      const nextSignature = buildPedidosSignature(sorted);
+
+      if (!force && nextSignature === lastRenderedPedidosSignature) {
+        pedidosCache = sorted;
+        actualizarToggleFiltro();
+        return;
+      }
+
+      lastRenderedPedidosSignature = nextSignature;
       pedidosCache = sorted;
       actualizarToggleFiltro();
       const grid = document.getElementById('cardsGrid');
@@ -267,11 +237,11 @@
         const fabricadoEstadoTexto = fabricado ? getTranslation('status_mark_not_fabricated_help') : getTranslation('status_mark_fabricated_help');
         const card = document.createElement('div');
         card.className = 'secuenciacion-card';
-        card.style = `background: ${fondoCard}; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 260px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid ${colorPrincipal}; margin: 0; width: 100%; max-width: 1700px;`;
+        card.style = `background: ${fondoCard}; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid ${colorPrincipal}; margin: 0; width: 100%; max-width: 1400px;`;
 
         card.innerHTML = `
-          <div style="background:${colorPrincipal};color:white;padding:22px 34px 16px 34px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;gap:20px;">
-            <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+          <div style="background:${colorPrincipal};color:white;padding:11px 20px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:1.04rem;font-weight:700;letter-spacing:.02em;line-height:1.2;">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
             <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
               <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:126px;">
                 <button
@@ -284,42 +254,48 @@
                 >
                   ${fabricadoLabel}
                 </button>
-                <span style="font-size:.64rem;font-weight:700;letter-spacing:.3px;color:#f4fbff;opacity:.95;margin-left:12px;">
+                <span style="font-size:.62rem;font-weight:700;letter-spacing:.25px;color:#f4fbff;opacity:.95;margin-left:12px;line-height:1.1;">
                   ${fabricadoEstadoTexto}
                 </span>
               </div>
-              <span style="font-size:1.9rem;font-weight:600;white-space:nowrap;">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+              <span style="font-size:1.04rem;font-weight:700;white-space:nowrap;line-height:1.2;">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
             </div>
           </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:28px 64px 0 64px;justify-content:center;">
+          <div class="tb-card-row tb-card-row--single">
             <div class="pedido-info-container pedido-info-top" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_tie_bracket')}</span><div style="color:${colorSecundario};">${pedido.TieBracket || '-'}</div></div>
             <div class="pedido-info-container pedido-info-top" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_extender')}</span><div style="color:${colorSecundario};">${pedido.Extender || '-'}</div></div>
-          </div>
-          <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:18px 64px 38px 64px;justify-content:center;align-items:center;">
             <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_qty')}</span><div style="color:${colorSecundario};">${pedido.Qty || ''}</div></div>
-            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_extender_qty')}</span><div class="extender-qty-value" style="color:${colorSecundario};" data-assy="${pedido.Assy || ''}" data-sales-order="${pedido.SalesOrder}" data-qty="${pedido.Qty}">-</div></div>
+            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_extender_qty')}</span><div style="color:${colorSecundario};">${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_delivery_date')}</span><div style="color:${colorSecundario};">${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
           </div>
         `;
         grid.appendChild(card);
       });
 
-      actualizarCantidadesExtender();
     }
 
     function setupPageLogic() {
         async function autoUpdate() {
+            if (document.hidden) {
+              return;
+            }
             const pedidos = await getPedidosTieBrackets();
             renderCards(pedidos);
         }
         autoUpdate();
-        setInterval(autoUpdate, 5000);
+        setInterval(autoUpdate, VIEW_REFRESH_INTERVAL_MS);
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            autoUpdate();
+          }
+        });
     }
   </script>
 
   <!-- ESTILOS ADICIONALES -->
   <style>
     .status-action-button{--status-color:#27ae60;--status-color-dark:#14532d;background:linear-gradient(135deg,color-mix(in srgb,var(--status-color) 92%,#fff 8%),var(--status-color));color:#fff;border:2px solid color-mix(in srgb,var(--status-color-dark) 60%,#fff 40%);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:800;font-size:.8rem;line-height:1.1;transition:transform .18s,filter .18s,box-shadow .18s,background .18s;min-width:128px;text-align:center;box-shadow:0 6px 14px rgba(0,0,0,.16);text-transform:uppercase;letter-spacing:.35px}.status-action-button:hover{filter:brightness(1.06);transform:translateY(-1px) scale(1.02);box-shadow:0 10px 18px rgba(0,0,0,.2)}
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding-left:10px;padding-right:10px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600}.pedido-info-top{font-size:1.5rem}.pedido-info-bottom{font-size:2rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}@media (max-width:900px){.main-grid{padding:20px 0}.secuenciacion-card>div{padding-left:16px!important;padding-right:16px!important}.pedido-info-container{min-width:100px;padding:8px;font-size:.95rem}}@media (max-width:600px){.main-grid{padding:10px 0}.secuenciacion-card>div{padding-left:8px!important;padding-right:8px!important}.pedido-info-container{min-width:80px;padding:6px;font-size:.92rem}}
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;min-width:0;max-width:none;min-height:72px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;line-height:1.2;text-align:center;overflow-wrap:anywhere}.tb-card-row{display:grid;gap:12px;justify-content:center;padding-left:16px;padding-right:16px}.tb-card-row--single{grid-template-columns:minmax(150px,1.05fr) minmax(150px,1.05fr) minmax(90px,.55fr) minmax(110px,.68fr) minmax(120px,.78fr);padding-top:14px;padding-bottom:14px;align-items:stretch}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}.main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}@media (max-width:900px){.main-grid{padding:14px 10px 20px}.tb-card-row--single{grid-template-columns:repeat(2,minmax(110px,1fr));gap:10px}.pedido-info-container{min-height:64px;padding:7px 8px}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}@media (max-width:520px){.tb-card-row--single{grid-template-columns:1fr}.pedido-info-container{min-height:60px}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->

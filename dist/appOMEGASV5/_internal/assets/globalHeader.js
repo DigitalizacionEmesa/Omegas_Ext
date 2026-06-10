@@ -50,7 +50,7 @@
         <div class="header-main-row">
           <div class="header-left-section">
             <a href="${HEADER_CONFIG.homeUrl}" class="logo-link" title="Ir a Inicio">
-              <img class="emesa-logo" src="${HEADER_CONFIG.logoSrc}" alt="${HEADER_CONFIG.logoAlt}">
+              <img class="EMESA-logo" src="${HEADER_CONFIG.logoSrc}" alt="${HEADER_CONFIG.logoAlt}">
             </a>
           </div>
           <span class="header-title" ${titleAttr}>${titleText}</span>
@@ -105,7 +105,7 @@
         opacity: 0.9;
       }
 
-      .global-header .emesa-logo {
+      .global-header .EMESA-logo {
         height: 45px;
         width: auto;
         cursor: pointer;
@@ -141,7 +141,7 @@
           letter-spacing: 0.5px;
         }
 
-        .global-header .emesa-logo {
+        .global-header .EMESA-logo {
           height: 35px;
         }
 

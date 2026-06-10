@@ -1,0 +1,71 @@
+('C:\\Proyectos\\Desarrollo_Omegas - '
+ 'copia\\api\\build\\appOMEGAS\\appOMEGASV5.pkg',
+ {'BINARY': True,
+  'DATA': True,
+  'EXECUTABLE': True,
+  'EXTENSION': True,
+  'PYMODULE': True,
+  'PYSOURCE': True,
+  'PYZ': False,
+  'SPLASH': True,
+  'SYMLINK': False},
+ [('pyi-contents-directory _internal', '', 'OPTION'),
+  ('PYZ-00.pyz',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\PYZ-00.pyz',
+   'PYZ'),
+  ('struct',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\localpycs\\struct.pyc',
+   'PYMODULE'),
+  ('pyimod01_archive',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\localpycs\\pyimod01_archive.pyc',
+   'PYMODULE'),
+  ('pyimod02_importers',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\localpycs\\pyimod02_importers.pyc',
+   'PYMODULE'),
+  ('pyimod03_ctypes',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\localpycs\\pyimod03_ctypes.pyc',
+   'PYMODULE'),
+  ('pyimod04_pywin32',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\api\\build\\appOMEGAS\\localpycs\\pyimod04_pywin32.pyc',
+   'PYMODULE'),
+  ('pyiboot01_bootstrap',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\loader\\pyiboot01_bootstrap.py',
+   'PYSOURCE'),
+  ('pyi_rth_inspect',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_inspect.py',
+   'PYSOURCE'),
+  ('pyi_rth_cryptography_openssl',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks\\pyi_rth_cryptography_openssl.py',
+   'PYSOURCE'),
+  ('pyi_rth_setuptools',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_setuptools.py',
+   'PYSOURCE'),
+  ('pyi_rth_pkgutil',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_pkgutil.py',
+   'PYSOURCE'),
+  ('pyi_rth_multiprocessing',
+   'C:\\Proyectos\\Desarrollo_Omegas - '
+   'copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks\\pyi_rth_multiprocessing.py',
+   'PYSOURCE'),
+  ('appOMEGAS',
+   'C:\\Proyectos\\Desarrollo_Omegas - copia\\api\\appOMEGAS.py',
+   'PYSOURCE')],
+ 'python312.dll',
+ True,
+ False,
+ False,
+ [],
+ None,
+ None,
+ None)

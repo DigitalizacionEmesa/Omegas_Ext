@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+    <title data-translate-key="page_title_sequenced_w">Pedidos Secuenciados W</title>
+    <link rel="stylesheet" href="../../assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+</head>
+<body>
+  <!-- Header generado por globalHeader.js -->
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1840px; margin: 0 auto;">
+    <!-- Cards se insertan por JS -->
+  </div>
+
+  <!-- SCRIPT DE LÓGICA DE LA PÁGINA (MODIFICADO) -->
+  <script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            // Obtener datos del usuario desde localStorage
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+            
+            if (!usuarioSGA.id || !usuarioSGA.nivel) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            
+            console.log(`🔍 Verificando permisos - Usuario: ${usuarioSGA.nombre}, Nivel: ${nivelUsuario}`);
+            
+            // Esta pantalla requiere nivel 1 (acceso básico)
+            if (nivelUsuario < 1) {
+                alert(`❌ Acceso denegado.\n\nNecesitas nivel 1 o superior para acceder a esta sección.\nTu nivel actual: ${nivelUsuario}`);
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+            console.log(`✅ Acceso permitido - OB W`);
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            alert('Error al verificar permisos. Redirigiendo al inicio...');
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+    let pedidosCache = [];
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function formatComponentQuantity(value) {
+      return value === null || value === undefined || value === '' ? 0 : value;
+    }
+
+    function formatOptionalQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    async function getPedidosSecuenciadosW() {
+      const res = await fetch('/api/pedidos_secuenciados_w');
+      if (!res.ok) return [];
+      return await res.json();
+    }
+
+    async function renderCards(pedidos) {
+      // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
+      function parseSeq(val) {
+        if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
+        const m = String(val).match(/\d+/g);
+        if (!m || m.length === 0) return Number.POSITIVE_INFINITY;
+        return parseInt(m[m.length - 1], 10);
+      }
+      function compareOrders(a, b) {
+        const pa = (typeof a.PriorityOrder === 'number') ? a.PriorityOrder : null;
+        const pb = (typeof b.PriorityOrder === 'number') ? b.PriorityOrder : null;
+        if (pa !== null && pb !== null) return pa - pb;
+        const sa = parseSeq(a.Sequence || a.SequenceValue);
+        const sb = parseSeq(b.Sequence || b.SequenceValue);
+        if (sa !== sb) return sa - sb;
+        return 0;
+      }
+      const sorted = Array.isArray(pedidos) ? [...pedidos].sort(compareOrders) : [];
+      pedidosCache = sorted;
+      const grid = document.getElementById('cardsGrid');
+      grid.innerHTML = '';
+      if (!sorted.length) {
+        const vacio = document.createElement('div');
+        vacio.textContent = getTranslation('text_no_w_orders');
+        vacio.style.textAlign = 'center';
+        vacio.style.color = '#3456a1';
+        vacio.style.marginTop = '40px';
+        grid.appendChild(vacio);
+        return;
+      }
+      // Los pedidos ya vienen ordenados correctamente del backend con PriorityOrder
+      // No necesitamos ordenarlos aquí
+      sorted.forEach((pedido, idx) => {
+        const card = document.createElement('div');
+        card.className = 'secuenciacion-card';
+        card.style = `background: #f4f8ff; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid #1976d2; margin: 0; width: 100%; max-width: 1800px;`;
+
+        const barcodeImgId = `barcodeimg_${idx}_${pedido.SalesOrder}`;
+        const ifValue = pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2
+          ? `${pedido.IF1} / ${pedido.IF2}`
+          : (pedido.IF1 || pedido.IF2 || '');
+        const tieBracket = String(pedido.TieBracket || '').trim();
+        const tieExtender = String(pedido.Extender || '').trim();
+        const hasTieRowData = !!(tieBracket || tieExtender);
+        const tieRowHtml = hasTieRowData ? `
+          <div class="trace-card-secondary">
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_tie_bracket')}</span><div>${tieBracket || '-'}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_qty')}</span><div>${formatOptionalQuantity(pedido.TieBracketQty)}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatOptionalQuantity(pedido.TieExtenderQty)}</div></div>
+          </div>
+        ` : '';
+        card.innerHTML = `
+          <div class="trace-card-header">
+            <span class="trace-card-meta">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+            <span class="trace-card-meta">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+          </div>
+          <div class="trace-card-body">
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_sub_omega')}</span><div>${pedido.Beam || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_sub_omega_qty')}</span><div>${formatComponentQuantity(pedido.BeamQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow">
+              <span>${getTranslation('card_label_wall_int')}</span>
+              <div>${ifValue}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_wall_int_qty')}</span><div>${formatComponentQuantity(pedido.IFQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--date"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--wide">
+              <span>${getTranslation('card_label_wo')}</span>
+              <div>${(pedido.WO || '').replace(/,/g, ', ')}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-barcode">
+              <span>${getTranslation('barcode_label')}</span>
+              <div class="trace-card-barcode-frame">
+                <img id="${barcodeImgId}" class="trace-card-barcode-image" alt="barcode" src="" />
+              </div>
+            </div>
+          </div>
+          ${tieRowHtml}
+        `;
+        grid.appendChild(card);
+        // Generar el código de barras online usando la API de bwip-js con la primera WO
+        let firstWO = '';
+        if (pedido.WO) {
+          const woArr = String(pedido.WO).split(',').map(w => w.trim()).filter(w => w);
+          if (woArr.length > 0) firstWO = woArr[0];
+        }
+        if (firstWO) {
+          const barcodeUrl = `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(firstWO)}&scale=4&height=18`;
+          const img = card.querySelector(`#${barcodeImgId}`);
+          if (img) img.src = barcodeUrl;
+        } else {
+          const img = card.querySelector(`#${barcodeImgId}`);
+          if (img) img.src = '';
+        }
+      });
+
+    }
+
+    function setupPageLogic() {
+        async function autoUpdate() {
+            const pedidos = await getPedidosSecuenciadosW();
+            await renderCards(pedidos);
+        }
+        autoUpdate();
+        setInterval(autoUpdate, 5000);
+    }
+  </script>
+
+  <!-- ESTILOS ADICIONALES -->
+  <style>
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:72px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.2;overflow-wrap:anywhere}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}
+    .main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}
+    .trace-card-header{background:#1976d2;color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.trace-card-meta{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-body{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}.trace-card-secondary{display:grid;grid-template-columns:minmax(180px,1.15fr) minmax(180px,1.15fr) minmax(90px,.55fr) minmax(120px,.7fr);gap:10px;padding:0 14px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--micro{min-width:0;padding:6px 6px}.trace-card-cell--micro span{font-size:.74rem;letter-spacing:.02em}.trace-card-cell--micro div{font-size:.94rem}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-secondary-cell--wide{min-width:0}.trace-card-secondary-cell--compact{min-width:0}.trace-card-barcode{padding:6px 8px}.trace-card-barcode-frame{width:100%;min-height:46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:54px;width:100%;max-width:240px;object-fit:contain;object-position:center;display:block;background:#fff}
+    @media (max-width:1440px){.trace-card-body{grid-template-columns:repeat(6,minmax(100px,1fr));}.trace-card-barcode{grid-column:span 2}.trace-card-secondary{grid-template-columns:repeat(4,minmax(120px,1fr));}.pedido-info-container{min-height:68px}}
+    @media (max-width:900px){.main-grid{padding:14px 10px 20px}.trace-card-header{padding:10px 14px}.trace-card-meta{font-size:.96rem}.trace-card-body{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr));padding:0 10px 10px}.trace-card-barcode{grid-column:span 3}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}
+    @media (max-width:640px){.trace-card-body{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:64px;padding:7px 8px}}
+    @media (max-width:420px){.trace-card-header{padding:8px 10px}.trace-card-meta{font-size:.88rem}.trace-card-body{grid-template-columns:1fr;padding:8px}.trace-card-barcode{grid-column:auto}.pedido-info-container{min-height:60px}.trace-card-barcode-image{max-width:100%}}
+  </style>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+      
+      let currentTranslations = {};
+      function getTranslation(key) { return currentTranslations[key] || key; }
+      function applyTranslations(translations) {
+          currentTranslations = translations;
+          document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+          document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+      }
+      async function loadTranslations(lang) {
+          try {
+              const response = await fetch(`/translations/translation_${lang}.json`);
+              if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+              const translations = await response.json();
+              applyTranslations(translations);
+              document.documentElement.lang = lang;
+              localStorage.setItem('language', lang);
+              // Sincronizar ambos selectores
+              const selector = document.getElementById('language-selector');
+              const headerSelector = document.getElementById('header-language-selector');
+              if (selector) selector.value = lang;
+              if (headerSelector) headerSelector.value = lang;
+          } catch (error) { console.error("Error al cargar traducciones:", error); }
+      }
+      function changeLanguage(lang) {
+          loadTranslations(lang).then(async () => {
+              // Re-renderizar las tarjetas con el nuevo idioma usando la caché de datos
+              if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
+                  await renderCards(pedidosCache);
+              }
+          });
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+          const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+          loadTranslations(lang).then(() => {
+              if (typeof setupPageLogic === 'function') {
+                  setupPageLogic();
+              }
+          });
+      });
+  </script>
+  <script src="/assets/globalHeader.js" data-title="PEDIDOS SECUENCIADOS W" data-title-key="header_sequenced_w"></script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

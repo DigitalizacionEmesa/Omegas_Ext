@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+    <title data-translate-key="page_title_sequencing_summary">Resumen de Secuenciación</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Tus estilos originales se mantienen intactos */
+        .summary-table th.sorted-asc::after { content: ' \25B2'; font-size: 0.9em; }
+        .summary-table th.sorted-desc::after { content: ' \25BC'; font-size: 0.9em; }
+        body { background: #eaf3fc; margin: 0; font-family: sans-serif; }
+        .header { display: flex; align-items: center; background: #1976d2; color: white; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .home-icon { background: none; border: none; color: white; cursor: pointer; padding: 0; margin-right: 15px; }
+        .home-icon svg { width: 32px; height: 32px; }
+        .header-title { font-size: 1.5rem; font-weight: 600; flex-grow: 1; }
+        .logo { height: 40px; }
+        main { padding: 20px; }
+        .summary-table-container { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 2rem; margin-top: 2rem; }
+        .summary-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 1.15em; }
+        .summary-table th, .summary-table td { word-break: break-word; padding: 0.5rem 0.7rem; border-bottom: 1px solid #e0e0e0; text-align: center; }
+        .summary-table th { background: #1976d2; color: #fff; position: sticky; top: 0; }
+        .summary-table tr:last-child td { border-bottom: none; }
+        .summary-table tr:nth-child(even) { background-color: #f8f9fa; }
+        .summary-table td { white-space: normal; }
+        .summary-table td.obc, .summary-table td.obw { white-space: normal; word-break: break-word; }
+        #loadingArea { text-align: center; padding: 2rem; color: #1976d2; font-weight: 500; font-size: 1.2rem; }
+        .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid #1976d2; border-top: 3px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        .error-message { color: #c00; font-weight: bold; }
+        @media (max-width: 900px) { body { font-size: 0.75em; } .summary-table-container { padding: 0.5rem; } .summary-table { font-size: 0.95em; } .summary-table th, .summary-table td { padding: 0.2rem 0.2rem; } }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="home-icon" onclick="window.location.href='/Pantallas/Pantallas_VerPedidos/VerPedidos.html'" title="Inicio" data-translate-key-title="home_tooltip">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        </button>
+        <span class="header-title" data-translate-key="header_sequencing_summary">Resumen de Secuenciación</span>
+        <select id="language-selector" onchange="changeLanguage(this.value)" style="margin: 0 20px; padding: 5px; border-radius: 4px; border: 1px solid #ccc; cursor: pointer; align-self: center; background: #1976d2; color: white; border-color: white;">
+            <option value="es" style="background: white; color: black;">ES</option>
+            <option value="en" style="background: white; color: black;">EN</option>
+            <option value="cz" style="background: white; color: black;">CZ</option>
+        </select>
+        <img class="logo" src="/IMAGENES/Logo_EMESA.png" alt="Logo EMESA">
+    </div>
+    <main>
+        <div class="summary-table-container">
+            <div style="margin-bottom: 1rem; display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+                <input type="text" id="search-sequence" placeholder="Buscar Sequence..." style="padding:6px 12px; border-radius:6px; border:1px solid #ccc; font-size:1em;" data-translate-key-placeholder="placeholder_search_sequence" />
+                <input type="text" id="search-salesorder" placeholder="Buscar Sales Order..." style="padding:6px 12px; border-radius:6px; border:1px solid #ccc; font-size:1em;" data-translate-key-placeholder="placeholder_search_sales_order" />
+                <!-- Filtros de fecha -->
+                <input type="date" id="search-date-from" style="padding:6px 12px; border-radius:6px; border:1px solid #ccc; font-size:1em;" data-translate-key-placeholder="placeholder_search_date_from" />
+                <input type="date" id="search-date-to" style="padding:6px 12px; border-radius:6px; border:1px solid #ccc; font-size:1em;" data-translate-key-placeholder="placeholder_search_date_to" />
+            </div>
+            <div id="loadingArea">
+                <span class="spinner"></span> <span data-translate-key="text_loading_data">Cargando datos...</span>
+            </div>
+            <div class="table-wrapper" style="overflow-x:auto;">
+                <table class="summary-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th data-translate-key="table_header_sequence">Sequence</th>
+                            <th data-translate-key="table_header_sales_order">Sales Order</th>
+                            <th data-translate-key="table_header_cwt">CWT</th>
+                            <th data-translate-key="table_header_ds">DS</th>
+                            <th data-translate-key="table_header_obc_qty">OBC + Qty</th>
+                            <th data-translate-key="table_header_obw_qty">OBW + Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+    
+    <script>
+        // Código a agregar en cada pantalla HTML
+    async function verificarPermisos() {
+        try {
+            const usuarioActual = JSON.parse(localStorage.getItem('usuarioSGA'));
+            
+            if (!usuarioActual) {
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
+                return;
+            }
+            
+            const nivelUsuario = usuarioActual.nivel;
+            const nivelRequerido = 5; // Nivel requerido para pantallas de ver pedidos
+            
+            if (nivelUsuario < nivelRequerido) {
+                alert('No tienes permisos para acceder a esta pantalla');
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_login.html';
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+        let previousDataHash = '';
+        let summaryData = [];
+        let filteredData = [];
+        let currentSort = { column: null, asc: true };
+
+        function hashData(data) { return JSON.stringify(data); }
+
+        function renderSummaryTable(data) {
+            const table = document.querySelector('.summary-table');
+            const tbody = table.querySelector('tbody');
+            tbody.innerHTML = '';
+            if (Array.isArray(data) && data.length > 0) {
+                data.forEach(row => {
+                    const unitsAbbr = getTranslation('text_units_abbreviation');
+                    let obc = row['OBC + Qty'];
+                    if (obc && typeof obc === 'string') obc = obc.replace(/\((\d+)\)/g, `($1 ${unitsAbbr})`);
+                    else obc = '-';
+                    let obw = row['OBW + Qty'];
+                    if (obw && typeof obw === 'string') obw = obw.replace(/\((\d+)\)/g, `($1 ${unitsAbbr})`);
+                    else obw = '-';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `<td>${row['Sequence'] ?? '-'}</td><td>${row['Sales Order'] ?? '-'}</td><td>${row['CWT'] ?? '-'}</td><td>${row['DS'] ?? '-'}</td><td class="obc">${obc}</td><td class="obw">${obw}</td>`;
+                    tbody.appendChild(tr);
+                });
+                document.getElementById('loadingArea').style.display = 'none';
+                table.style.display = '';
+            } else {
+                document.getElementById('loadingArea').innerHTML = getTranslation('text_no_data_to_show');
+                document.getElementById('loadingArea').style.display = 'block';
+                table.style.display = 'none';
+            }
+            const ths = document.querySelectorAll('.summary-table th');
+            ths.forEach((th, idx) => {
+                th.classList.remove('sorted-asc', 'sorted-desc');
+                if (currentSort.column === idx) th.classList.add(currentSort.asc ? 'sorted-asc' : 'sorted-desc');
+            });
+        }
+
+        function applyFiltersAndSort() {
+            const seqValue = document.getElementById('search-sequence').value.trim().toLowerCase();
+            const soValue = document.getElementById('search-salesorder').value.trim().toLowerCase();
+            const dateFrom = document.getElementById('search-date-from').value;
+            const dateTo = document.getElementById('search-date-to').value;
+            filteredData = summaryData.filter(row => {
+                let match = true;
+                if (seqValue && !(row['Sequence'] || '').toString().toLowerCase().includes(seqValue)) match = false;
+                if (soValue && !(row['Sales Order'] || '').toString().toLowerCase().includes(soValue)) match = false;
+                // Filtrado por fecha usando DeliveryDate (DD/MM/YYYY convertido a YYYY-MM-DD)
+                let deliveryDate = '';
+                if (row['DeliveryDate']) {
+                    const parts = row['DeliveryDate'].split('/');
+                    if (parts.length === 3) {
+                        deliveryDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+                    }
+                }
+                if (dateFrom && (!deliveryDate || deliveryDate < dateFrom)) match = false;
+                if (dateTo && (!deliveryDate || deliveryDate > dateTo)) match = false;
+                return match;
+            });
+            if (currentSort.column !== null) {
+                const fieldMap = ['Sequence', 'Sales Order', 'CWT', 'DS', 'OBC + Qty', 'OBW + Qty'];
+                let field = fieldMap[currentSort.column];
+                filteredData.sort((a, b) => {
+                    let va = a[field], vb = b[field];
+                    if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb))) return currentSort.asc ? (parseFloat(va) - parseFloat(vb)) : (parseFloat(vb) - parseFloat(va));
+                    va = (va || '').toString().toLowerCase();
+                    vb = (vb || '').toString().toLowerCase();
+                    if (va < vb) return currentSort.asc ? -1 : 1;
+                    if (va > vb) return currentSort.asc ? 1 : -1;
+                    return 0;
+                });
+            }
+            renderSummaryTable(filteredData);
+        }
+
+        function autoUpdateSummary(isAutoRefresh = false) {
+            const loadingArea = document.getElementById('loadingArea');
+            const table = document.querySelector('.summary-table');
+            if (!isAutoRefresh) {
+                loadingArea.innerHTML = `<span class="spinner"></span> ${getTranslation('text_loading_data')}`;
+                loadingArea.style.display = 'block';
+                table.style.display = 'none';
+            }
+            fetch('/api/summary/beams')
+                .then(res => res.json())
+                .then (data => {
+                    if (Array.isArray(data) && data.length > 0) {
+                        console.log('Primera fila recibida de /api/summary/beams:', data[0]);
+                    } else {
+                        console.log('No se recibieron filas de /api/summary/beams');
+                    }
+                    const currentHash = hashData(data);
+                    if (currentHash === previousDataHash && isAutoRefresh) return;
+                    previousDataHash = currentHash;
+                    summaryData = Array.isArray(data) ? data : [];
+                    applyFiltersAndSort();
+                })
+                .catch(error => {
+                    loadingArea.innerHTML = `<div class="error-message">${getTranslation('text_error_loading_data')} ${error.message}</div>`;
+                    loadingArea.style.display = 'block';
+                    table.style.display = 'none';
+                });
+        }
+        
+        function setupPageLogic() {
+            autoUpdateSummary(false);
+            setInterval(() => autoUpdateSummary(true), 5000);
+            document.getElementById('search-sequence').addEventListener('input', applyFiltersAndSort);
+            document.getElementById('search-salesorder').addEventListener('input', applyFiltersAndSort);
+            document.getElementById('search-date-from').addEventListener('change', applyFiltersAndSort);
+            document.getElementById('search-date-to').addEventListener('change', applyFiltersAndSort);
+            const ths = document.querySelectorAll('.summary-table th');
+            ths.forEach((th, idx) => {
+                th.style.cursor = 'pointer';
+                th.title = getTranslation('tooltip_sort'); // Traducir tooltip
+                th.addEventListener('click', () => {
+                    if (currentSort.column === idx) currentSort.asc = !currentSort.asc;
+                    else { currentSort.column = idx; currentSort.asc = true; }
+                    applyFiltersAndSort();
+                });
+            });
+        }
+    </script>
+
+    <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+    <script>
+        
+        let currentTranslations = {};
+        function getTranslation(key) { return currentTranslations[key] || key; }
+        function applyTranslations(translations) {
+            currentTranslations = translations;
+            document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+            document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+            document.querySelectorAll('[data-translate-key-placeholder]').forEach(el => { if (translations[el.getAttribute('data-translate-key-placeholder')]) el.setAttribute('placeholder', translations[el.getAttribute('data-translate-key-placeholder')]); });
+        }
+        async function loadTranslations(lang) {
+            try {
+                const response = await fetch(`/translations/translation_${lang}.json`);
+                if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+                const translations = await response.json();
+                applyTranslations(translations);
+                document.documentElement.lang = lang;
+                localStorage.setItem('language', lang);
+                const selector = document.getElementById('language-selector');
+                if (selector) selector.value = lang;
+            } catch (error) { console.error("Error al cargar traducciones:", error); }
+        }
+        function changeLanguage(lang) {
+            loadTranslations(lang).then(() => {
+                // Re-renderizar la tabla para aplicar cambios como 'Uds'
+                if (typeof applyFiltersAndSort === 'function') {
+                    applyFiltersAndSort();
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', () => {
+            const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+            loadTranslations(lang).then(() => {
+                if (typeof setupPageLogic === 'function') {
+                    setupPageLogic();
+                }
+            });
+        });
+    </script>
+    <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

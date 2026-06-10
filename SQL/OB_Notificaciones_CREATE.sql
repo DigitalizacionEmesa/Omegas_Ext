@@ -45,7 +45,7 @@ INSERT INTO [OB].[Notificaciones] (
     'gAAAAABpeI0iKTAXr6ynMxUI5sTjdu4tbdxe-VIwpeXzUfVr0-ikYAHemaEAJj-wuCOeDiGErTz2JIYBJBLf6jTHXUuVjtkWpNoenPdMUxyBj2WFd5onqAQ=',
     'gAAAAABpeI0iWMairBJv-yUFx_uKQNznD55KIUiJoGhJ7Mlx04r5ds0WXLVQqDu-UuUBNsy7r9Jjb65zeXFbBaKa8bPlTCwESolH61RjxdRK-GXyAgu2PmQ=',
     1,
-    'digitalizacionemesa@gmail.com',
+    'digitalizacionEMESA@gmail.com',
     'Sistema Omegas',
     'o.abad@saveragroup.com; j.cortes@saveragroup.com; pi.cortes@saveragroup.com',
     GETDATE(),

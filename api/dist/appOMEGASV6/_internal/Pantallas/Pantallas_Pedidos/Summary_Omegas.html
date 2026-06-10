@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">    <title data-translate-key="page_title_pending_orders">Pedidos Pendientes de Secuenciar</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* Tus estilos originales se mantienen intactos */
+        body { background: #eaf3fc; margin: 0; font-family: sans-serif; }
+        .header { display: flex; align-items: center; background: #1976d2; color: white; padding: 10px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .header-title { font-size: 1.5rem; font-weight: 600; flex-grow: 1; }
+        .logo { height: 40px; }
+        main { padding: 20px; }
+        .summary-table-container { background: #fff; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); padding: 1.5rem; }
+        .controls-container { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem; }
+        .filters-container { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+        .filters-container label { font-weight: 500; }
+        .filters-container input, .filters-container select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; }
+        .btn-filter-reset { background: #6c757d; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1em; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
+        .btn-sequence { background: #28a745; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; }
+        .btn-sequence:disabled { background: #aaa; cursor: not-allowed; }
+        .btn-sequence .spinner { width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; margin-right: 5px; }
+        .top-link { margin-bottom: 1em; display: inline-block; background: #1976d2; color: #fff; padding: 0.5em 1.2em; border-radius: 5px; text-decoration: none; font-weight: 500; }
+        .table-wrapper { 
+            overflow-x: auto; 
+            -webkit-overflow-scrolling: touch;
+            max-height: 200vh;
+            width: 100%;
+        }
+        .summary-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+        .summary-table th, .summary-table td { padding: 0.7rem 1rem; border-bottom: 1px solid #e0e0e0; text-align: center; white-space: nowrap; }
+        .summary-table thead th { 
+            background: #1976d2; 
+            color: #fff; 
+            position: sticky; 
+            top: 0; 
+            z-index: 2; 
+        }
+        .summary-table tr:nth-child(even) { background-color: #f8f9fa; }
+        #loadingArea { text-align:center; padding: 2rem; color:#1976d2; font-weight:500; font-size: 1.2rem; }
+        .spinner { display: inline-block; width: 22px; height: 22px; border: 3px solid #1976d2; border-top: 3px solid #fff; border-radius: 50%; animation: spin 1s linear infinite; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        @media (max-width:700px) {
+            .summary-table-container { padding: .5rem; }
+            .summary-table th, .summary-table td { padding: .4rem .5rem; font-size: .95em; }
+            .table-wrapper { max-height: 40vh; }
+        }
+        .error-message { color: #c00; font-weight: bold; }
+        .summary-table th.sorted-asc::after { content: ' \25B2'; font-size: 0.9em; }
+        .summary-table th.sorted-desc::after { content: ' \25BC'; font-size: 0.9em; }
+        .group-header-row {
+            background: #e3eafc;
+            color: #1976d2;
+            font-weight: bold;
+            cursor: pointer;
+            user-select: none;
+        }
+        .group-header-row .group-toggle {
+            font-size: 1.2em;
+            margin-right: 8px;
+            transition: transform 0.2s;
+            display: inline-block;
+        }
+        .group-header-row.collapsed .group-toggle {
+            transform: rotate(240deg);
+        }
+        .group-drop-hover {
+            background: #d0e3ff !important;
+            border-color: #3880c7 !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header generado por globalHeader.js -->
+    <main>
+        <div class="summary-table-container">
+            <div id="group-drop-area" style="min-height:36px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;background:#f3f6fa;border:2px dashed #1976d2;border-radius:7px;color:#1976d2;font-weight:600;transition:background 0.2s;cursor:pointer;">
+                <span id="group-drop-label" data-translate-key="group_drop_label">Arrastra aquí una cabecera para agrupar por esa columna</span>
+                <span id="grouped-by" style="display:none;margin-left:10px;"></span>
+                <button id="clear-group-btn" style="display:none;margin-left:10px;background:#c00;color:#fff;border:none;border-radius:4px;padding:0.2em 0.7em;cursor:pointer;font-weight:600;">✕</button>
+            </div>
+            <a href="/Pantallas/Pantallas_Pedidos/Sequenced_Omegas.html" class="top-link" data-translate-key="link_view_sequenced">Ver Pedidos Secuenciados</a>
+            <div class="controls-container">
+                <div class="filters-container">
+                    <input type="text" id="search-input" placeholder="Buscar Pedido o Assy..." style="width:220px;" data-translate-key-placeholder="placeholder_search_pending">
+                    <label for="starting-date" data-translate-key="label_from_date">Desde:</label>
+                    <input type="date" id="starting-date">
+                    <label for="ending-date" data-translate-key="label_to_date">Hasta:</label>
+                    <input type="date" id="ending-date">
+                    <label for="proyect-select" data-translate-key="label_project">Proyecto:</label>
+                    <select id="proyect-select"></select>
+                    <button id="btn-reset-filters" class="btn-filter-reset" type="button" data-translate-key="button_reset_filters">Reset filtros</button>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <button id="btn-edit-view" class="btn-sequence" type="button" style="background: #ff9800;">
+                        <span>🛠️ Edit View</span>
+                    </button>
+                    <button id="btn-refresh-data" class="btn-sequence" style="background: #007bff;">
+                        <span data-translate-key="button_refresh_data">🔄 Actualizar Datos</span>
+                    </button>
+                    <button id="btn-sequence" class="btn-sequence">
+                        <span data-translate-key="button_sequence">Sequence</span>
+                    </button>
+                </div>
+            </div>
+            <div id="sync-status-banner" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:6px; background:#eef6ff; color:#1a5fb4; font-weight:600;"></div>
+            <!-- Panel flotante para seleccionar columnas -->
+            <div id="edit-view-panel" style="display:none; position:fixed; top:80px; left:50%; transform:translateX(-50%); background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.18); padding:1.2em 2em; z-index:1000; min-width:260px;">
+                <div style="font-weight:600; font-size:1.1em; margin-bottom:10px;">Selecciona columnas a mostrar</div>
+                <form id="edit-view-form" style="display:flex; flex-direction:column; gap:6px;"></form>
+                <div style="margin-top:12px; text-align:right;">
+                    <button type="button" id="btn-close-edit-view" class="btn-sequence" style="background:#aaa; color:#fff; margin-right:8px;">Cerrar</button>
+                    <button type="button" id="btn-reset-edit-view" class="btn-sequence" style="background:#1976d2; color:#fff;">Mostrar Todas</button>
+                </div>
+            </div>
+            <div id="loadingArea">
+                <span class="spinner"></span> <span data-translate-key="text_loading_data">Cargando datos...</span>
+            </div>
+            <div class="table-wrapper">
+                <table class="summary-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th data-translate-key="table_header_order_number">NumeroPedido</th>
+                            <th data-translate-key="table_header_delivery_date">FechaEntrega</th>
+                            <th data-translate-key="table_header_bsark">Bsark</th>
+                            <th data-translate-key="table_header_units_ordered">UnidadesPedidas</th>
+                            <th data-translate-key="table_header_univalmapex">UniValMapex</th>
+                            <th data-translate-key="table_header_assy">Assy</th>
+                            <th data-translate-key="table_header_beam">Beam</th>
+                            <th data-translate-key="table_header_cw">C/W</th>
+                            <th data-translate-key="table_header_cwt">CWT</th>
+                            <th data-translate-key="table_header_ds">DS</th>
+                            <th data-translate-key="table_header_extender">Extender</th>
+                            <th data-translate-key="table_header_ord">Ord</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summary-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+<script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA'));
+            
+            if (!usuarioSGA) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            const nivelRequerido = 5; // Nivel requerido para pantallas de pedidos
+            
+            if (nivelUsuario < nivelRequerido) {
+                alert('No tienes permisos para acceder a esta pantalla');
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+    let summaryData = [];
+    let filteredData = [];
+    let manualSyncStatusPoller = null;
+
+    function setSyncStatusBanner(message, isVisible = true, isError = false) {
+        const banner = document.getElementById('sync-status-banner');
+        if (!banner) return;
+        banner.style.display = isVisible ? 'block' : 'none';
+        banner.style.background = isError ? '#fdecec' : '#eef6ff';
+        banner.style.color = isError ? '#b42318' : '#1a5fb4';
+        banner.textContent = isVisible ? message : '';
+    }
+
+    function stopManualSyncPolling() {
+        if (manualSyncStatusPoller) {
+            clearInterval(manualSyncStatusPoller);
+            manualSyncStatusPoller = null;
+        }
+    }
+
+    function pollManualSyncStatus(buttonText) {
+        const btnRefresh = document.getElementById('btn-refresh-data');
+        stopManualSyncPolling();
+        manualSyncStatusPoller = setInterval(() => {
+            fetch('/api/sync/manual-full/status')
+                .then(res => res.json())
+                .then(status => {
+                    if (status.running) {
+                        setSyncStatusBanner('Actualizando datos en segundo plano... Puedes seguir consultando la tabla.');
+                        return;
+                    }
+
+                    stopManualSyncPolling();
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = buttonText;
+
+                    if (status.error) {
+                        setSyncStatusBanner(`Error actualizando datos: ${status.error}`, true, true);
+                        return;
+                    }
+
+                    setSyncStatusBanner('Actualización completada. Recargando datos...');
+                    fetch('/api/summary')
+                        .then(res => {
+                            if (!res.ok) throw new Error('Error al cargar datos');
+                            return res.json();
+                        })
+                        .then(data => {
+                            summaryData = Array.isArray(data) ? data : [];
+                            populateDropdowns(summaryData);
+                            applyFilters();
+                            document.getElementById('loadingArea').style.display = 'none';
+                            document.querySelector('.summary-table').style.display = '';
+                            setSyncStatusBanner('Datos actualizados correctamente.');
+                        })
+                        .catch(error => {
+                            setSyncStatusBanner(`Error recargando datos: ${error.message}`, true, true);
+                        });
+                })
+                .catch(error => {
+                    stopManualSyncPolling();
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = buttonText;
+                    setSyncStatusBanner(`Error consultando el estado de la actualización: ${error.message}`, true, true);
+                });
+        }, 2000);
+    }
+
+    function getFieldValue(row, fieldName) { return row[fieldName] || row[fieldName.replace('/', '_')] || row[fieldName.replace('/', '')] || ''; }
+
+    // Variables para ordenación
+    let currentSort = { column: null, asc: true };
+
+    // Columnas configurables para Edit View y ordenables por drag & drop
+    const defaultColumnConfig = [
+        { key: 'NumeroPedido', label: 'NumeroPedido' },
+        { key: 'FechaEntrega', label: 'FechaEntrega' },
+        { key: 'Bsark', label: 'Bsark' },
+        { key: 'UnidadesPedidas', label: 'UnidadesPedidas' },
+        { key: 'UniValMapex', label: 'UniValMapex' },
+        { key: 'Assy', label: 'Assy' },
+        { key: 'Beam', label: 'Beam' },
+        { key: 'C/W', label: 'C/W' },
+        { key: 'CWT', label: 'CWT' },
+        { key: 'DS', label: 'DS' },
+        { key: 'EX', label: 'EX' },
+        { key: 'TB', label: 'TB' },
+        { key: 'Ord', label: 'Ord' }
+    ];
+    function getColumnConfig() {
+        const saved = localStorage.getItem('summary_column_order');
+        if (saved) {
+            try {
+                const arr = JSON.parse(saved);
+                if (Array.isArray(arr) && arr.length === defaultColumnConfig.length) {
+                    // Map saved order to config
+                    return arr.map(key => defaultColumnConfig.find(c => c.key === key)).filter(Boolean);
+                }
+            } catch {}
+        }
+        return [...defaultColumnConfig];
+    }
+    function setColumnConfigOrder(arr) {
+        localStorage.setItem('summary_column_order', JSON.stringify(arr.map(c => c.key)));
+    }
+    let columnConfig = getColumnConfig();
+
+    function getVisibleColumns() {
+        const saved = localStorage.getItem('summary_visible_columns');
+        if (saved) {
+            try {
+                const arr = JSON.parse(saved);
+                if (Array.isArray(arr) && arr.length === columnConfig.length) return arr;
+            } catch {}
+        }
+        return Array(columnConfig.length).fill(true); // Todas visibles por defecto
+    }
+    function setVisibleColumns(arr) {
+        localStorage.setItem('summary_visible_columns', JSON.stringify(arr));
+    }
+
+    // Agrupación múltiple
+    let groupedBy = [];
+    let groupCollapsedState = {};
+
+    function renderSummaryTable(data) {
+        const visibleCols = getVisibleColumns();
+        const table = document.querySelector('.summary-table');
+        const thead = table.querySelector('thead');
+        const tbody = document.getElementById('summary-tbody');
+        // Regenerar thead según columnConfig
+        if (thead) {
+            let thRow = document.createElement('tr');
+            columnConfig.forEach((col, idx) => {
+                let th = document.createElement('th');
+                let translateKey = '';
+                switch (col.key) {
+                    case 'NumeroPedido': translateKey = 'table_header_order_number'; break;
+                    case 'FechaEntrega': translateKey = 'table_header_delivery_date'; break;
+                    case 'Bsark': translateKey = 'table_header_bsark'; break;
+                    case 'UnidadesPedidas': translateKey = 'table_header_units_ordered'; break;
+                    case 'UniValMapex': translateKey = 'table_header_univalmapex'; break;
+                    case 'Assy': translateKey = 'table_header_assy'; break;
+                    case 'Beam': translateKey = 'table_header_beam'; break;
+                    case 'C/W': translateKey = 'table_header_cw'; break;
+                    case 'CWT': translateKey = 'table_header_cwt'; break;
+                    case 'DS': translateKey = 'table_header_ds'; break;
+                    case 'EX': translateKey = 'table_header_ex'; break;
+                    case 'TB': translateKey = 'table_header_tb'; break;
+                    case 'Extender': translateKey = 'table_header_extender'; break;
+                    case 'Ord': translateKey = 'table_header_ord'; break;
+                }
+                th.setAttribute('data-translate-key', translateKey);
+                th.style.display = visibleCols[idx] ? '' : 'none';
+                th.style.position = 'relative';
+                // Si no hay traducción, mostrar directamente el nombre de la columna
+                let labelText = currentTranslations[translateKey] ? getTranslation(translateKey) : col.key;
+                th.innerHTML = `<div style='display:flex;align-items:center;height:100%;width:100%;position:relative;'><span class='col-drag-label' draggable='true' data-idx='${idx}' style='flex:1;user-select:none;cursor:grab;padding-right:0px;'>${labelText}</span><div class='col-resizer' data-idx='${idx}' style='position:absolute;right:0;top:10%;width:16px;height:80%;background:rgba(0,0,0,0.08);border-radius:3px;cursor:col-resize;z-index:50;transition:background 0.2s;'></div></div>`;
+                thRow.appendChild(th);
+            });
+            thead.innerHTML = '';
+            thead.appendChild(thRow);
+        }
+        tbody.innerHTML = '';
+        if (data.length === 0) {
+            let colCount = visibleCols.filter(Boolean).length || 1;
+            tbody.innerHTML = `<tr><td colspan="${colCount}" style="text-align:center;color:#888;">${getTranslation('text_no_orders_found')}</td></tr>`;
+            return;
+        }
+        // Mostrar agrupaciones activas y controles
+        const groupedByLabel = document.getElementById('grouped-by');
+        const clearGroupBtn = document.getElementById('clear-group-btn');
+        groupedByLabel.innerHTML = '';
+        if (groupedBy.length > 0) {
+            groupedByLabel.style.display = 'inline';
+            clearGroupBtn.style.display = 'inline-block';
+            groupedBy.forEach((key, i) => {
+                const col = columnConfig.find(c => c.key === key);
+                const span = document.createElement('span');
+                span.style.background = '#e3eafc';
+                span.style.color = '#1976d2';
+                span.style.borderRadius = '4px';
+                span.style.padding = '2px 8px';
+                span.style.marginRight = '6px';
+                span.style.display = 'inline-flex';
+                span.style.alignItems = 'center';
+                span.style.fontWeight = '600';
+                span.innerHTML = `${col ? col.label : key} <button data-idx="${i}" style="margin-left:4px;background:none;border:none;color:#c00;font-weight:bold;cursor:pointer;font-size:1em;line-height:1;">✕</button>`;
+                span.querySelector('button').onclick = function(e) {
+                    e.stopPropagation();
+                    groupedBy.splice(i, 1);
+                    groupCollapsedState = {};
+                    renderSummaryTable(filteredData);
+                };
+                groupedByLabel.appendChild(span);
+            });
+        } else {
+            groupedByLabel.style.display = 'none';
+            clearGroupBtn.style.display = 'none';
+        }
+
+        // Agrupación múltiple anidada
+        function renderGroups(rows, groupKeys, level, parentKey) {
+            if (groupKeys.length === 0) {
+                rows.forEach((row) => {
+                    const tr = document.createElement('tr');
+                    let fecha = '';
+                    if (row.FechaEntrega) {
+                        try {
+                            const dateObj = new Date(row.FechaEntrega);
+                            if (!isNaN(dateObj.getTime())) fecha = dateObj.toLocaleDateString('es-ES');
+                        } catch (e) {}
+                    }
+                    const cellValues = columnConfig.map(col => {
+                        if (col.key === 'FechaEntrega') return fecha;
+                        if (col.key === 'C/W') return getFieldValue(row, 'C/W');
+                        return row[col.key] || '';
+                    });
+                    tr.innerHTML = cellValues.map((val, idx) => `<td style="display:${visibleCols[idx] ? '' : 'none'}">${val}</td>`).join('');
+                    tbody.appendChild(tr);
+                });
+                return;
+            }
+            const key = groupKeys[0];
+            const groups = {};
+            rows.forEach(row => {
+                let val = row[key] || '';
+                if (!groups[val]) groups[val] = [];
+                groups[val].push(row);
+            });
+            Object.keys(groups).sort().forEach(groupVal => {
+                const groupId = `${parentKey || ''}__${key}__${groupVal}`;
+                const collapsed = groupCollapsedState[groupId] || false;
+                const arrow = collapsed ? '▶' : '▼';
+                const groupRow = document.createElement('tr');
+                groupRow.className = 'group-header-row' + (collapsed ? ' collapsed' : '');
+                groupRow.innerHTML = `<td colspan="${visibleCols.filter(Boolean).length}" style="padding-left:${level * 24}px"><span class="group-toggle">${arrow}</span> <span style="font-weight:700;">${(columnConfig.find(c => c.key === key)?.label || key)}: ${groupVal || '(vacío)'}</span> <span style="color:#888;font-weight:400;margin-left:8px;">(${groups[groupVal].length})</span></td>`;
+                groupRow.onclick = function() {
+                    groupCollapsedState[groupId] = !groupCollapsedState[groupId];
+                    renderSummaryTable(data);
+                };
+                tbody.appendChild(groupRow);
+                if (!collapsed) {
+                    renderGroups(groups[groupVal], groupKeys.slice(1), level + 1, groupId);
+                }
+            });
+        }
+        if (groupedBy.length > 0) {
+            renderGroups(data, groupedBy, 0, '');
+        } else {
+            data.forEach((row) => {
+                const tr = document.createElement('tr');
+                let fecha = '';
+                if (row.FechaEntrega) {
+                    try {
+                        const dateObj = new Date(row.FechaEntrega);
+                        if (!isNaN(dateObj.getTime())) fecha = dateObj.toLocaleDateString('es-ES');
+                    } catch (e) {}
+                }
+                const cellValues = columnConfig.map(col => {
+                    if (col.key === 'FechaEntrega') return fecha;
+                    if (col.key === 'C/W') return getFieldValue(row, 'C/W');
+                    return row[col.key] || '';
+                });
+                tr.innerHTML = cellValues.map((val, idx) => `<td style="display:${visibleCols[idx] ? '' : 'none'}">${val}</td>`).join('');
+                tbody.appendChild(tr);
+            });
+        }
+        // Marcar la columna ordenada
+        const ths = table.querySelectorAll('th');
+        ths.forEach((th, idx) => {
+            th.classList.remove('sorted-asc', 'sorted-desc');
+            if (currentSort.column === idx) {
+                th.classList.add(currentSort.asc ? 'sorted-asc' : 'sorted-desc');
+            }
+        });
+        // Drag & drop y resize listeners
+        setupColumnDragAndDropAndResize();
+    }
+
+    // Drag & drop y resize: solo drag en el label, solo resize en el resizer
+    function setupColumnDragAndDropAndResize() {
+        const ths = document.querySelectorAll('.summary-table th');
+        const dragLabels = document.querySelectorAll('.col-drag-label');
+        const resizers = document.querySelectorAll('.col-resizer');
+        let dragIdx = null;
+        let isResizing = false;
+        dragLabels.forEach((label, idx) => {
+            label.addEventListener('dragstart', (e) => {
+                if (isResizing) {
+                    e.preventDefault();
+                    return false;
+                }
+                dragIdx = idx;
+                label.classList.add('dragging');
+                // Si se arrastra fuera de la tabla, permitir soltar en el área de agrupación
+                const groupDrop = document.getElementById('group-drop-area');
+                groupDrop.classList.add('group-drop-hover');
+                groupDrop.ondragover = function(ev) { ev.preventDefault(); };
+                groupDrop.ondrop = function(ev) {
+                    ev.preventDefault();
+                    groupDrop.classList.remove('group-drop-hover');
+                    const key = columnConfig[idx].key;
+                    if (!groupedBy.includes(key)) {
+                        groupedBy.push(key);
+                        groupCollapsedState = {};
+                        renderSummaryTable(filteredData);
+                    }
+                };
+                groupDrop.ondragleave = function() { groupDrop.classList.remove('group-drop-hover'); };
+            });
+            label.addEventListener('dragend', (e) => {
+                dragIdx = null;
+                label.classList.remove('dragging');
+                const groupDrop = document.getElementById('group-drop-area');
+                groupDrop.classList.remove('group-drop-hover');
+                groupDrop.ondragover = null;
+                groupDrop.ondrop = null;
+                groupDrop.ondragleave = null;
+            });
+        });
+        ths.forEach((th, idx) => {
+            th.addEventListener('dragover', (e) => { e.preventDefault(); });
+            th.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (dragIdx === null || dragIdx === idx) return;
+                const newConfig = [...columnConfig];
+                const [moved] = newConfig.splice(dragIdx, 1);
+                newConfig.splice(idx, 0, moved);
+                // Mantener la visibilidad por key, no por posición
+                const oldVisible = getVisibleColumns();
+                const oldKeys = columnConfig.map(c => c.key);
+                const visibleByKey = {};
+                oldKeys.forEach((key, i) => { visibleByKey[key] = oldVisible[i]; });
+                columnConfig = newConfig;
+                setColumnConfigOrder(columnConfig);
+                const newVisible = columnConfig.map(col => visibleByKey[col.key] !== undefined ? visibleByKey[col.key] : true);
+                setVisibleColumns(newVisible);
+                renderSummaryTable(filteredData);
+            });
+        });
+        // Resize
+        let startX, startWidth, colIdx;
+        let colWidths = getColumnWidths();
+        const MIN_COL_WIDTH = 80; // px
+        resizers.forEach(resizer => {
+            resizer.onmousedown = function(e) {
+                e.stopPropagation();
+                isResizing = true;
+                colIdx = parseInt(resizer.getAttribute('data-idx'));
+                startX = e.clientX;
+                startWidth = ths[colIdx].offsetWidth;
+                document.body.style.cursor = 'col-resize';
+                document.onmousemove = onMouseMove;
+                document.onmouseup = onMouseUp;
+            };
+        });
+        function onMouseMove(e) {
+            if (colIdx == null) return;
+            let newWidth = Math.max(MIN_COL_WIDTH, startWidth + (e.clientX - startX));
+            ths[colIdx].style.width = newWidth + 'px';
+            // También ajustar los td de esa columna
+            document.querySelectorAll('.summary-table tbody tr').forEach(tr => {
+                const tds = tr.querySelectorAll('td');
+                if (tds[colIdx]) tds[colIdx].style.width = newWidth + 'px';
+            });
+        }
+        function onMouseUp(e) {
+            if (colIdx == null) return;
+            let finalWidth = ths[colIdx].offsetWidth;
+            if (finalWidth < MIN_COL_WIDTH) finalWidth = MIN_COL_WIDTH;
+            colWidths[colIdx] = finalWidth + 'px';
+            setColumnWidths(colWidths);
+            colIdx = null;
+            document.body.style.cursor = '';
+            document.onmousemove = null;
+            document.onmouseup = null;
+            isResizing = false;
+        }
+        // Feedback visual del resizer
+        document.addEventListener('mouseover', function(e) {
+            if (e.target.classList && e.target.classList.contains('col-resizer')) {
+                e.target.style.background = 'rgba(25,118,210,0.25)';
+            }
+        });
+        document.addEventListener('mouseout', function(e) {
+            if (e.target.classList && e.target.classList.contains('col-resizer')) {
+                e.target.style.background = 'rgba(0,0,0,0.08)';
+            }
+        });
+    }
+    // Helpers para guardar/restaurar anchos de columna
+    function getColumnWidths() {
+        const saved = localStorage.getItem('summary_column_widths');
+        if (saved) {
+            try {
+                const obj = JSON.parse(saved);
+                if (obj && typeof obj === 'object') {
+                    return columnConfig.map(col => obj[col.key] || null);
+                }
+            } catch {}
+        }
+        return columnConfig.map(() => null);
+    }
+    function setColumnWidths(widths) {
+        const obj = {};
+        columnConfig.forEach((col, idx) => {
+            if (widths[idx]) obj[col.key] = widths[idx];
+        });
+        localStorage.setItem('summary_column_widths', JSON.stringify(obj));
+    }
+
+    function applyFilters() {
+        const searchValue = document.getElementById('search-input').value.trim().toLowerCase();
+        const startingDate = document.getElementById('starting-date').value;
+        const endingDate = document.getElementById('ending-date').value;
+        const proyect = document.getElementById('proyect-select').value;
+        filteredData = summaryData.filter(row => {
+            let isMatch = true;
+            if (searchValue && !((row.NumeroPedido || '').toString().toLowerCase().includes(searchValue) || (row.Assy || '').toLowerCase().includes(searchValue))) isMatch = false;
+            let rowDate = null;
+            if (row.FechaEntrega) { try { rowDate = new Date(row.FechaEntrega).toISOString().split('T')[0]; } catch (e) {} }
+            if (startingDate && (!rowDate || rowDate < startingDate)) isMatch = false;
+            if (endingDate && (!rowDate || rowDate > endingDate)) isMatch = false;
+            if (proyect && proyect !== 'Todos' && row.Bsark !== proyect) isMatch = false;
+            return isMatch;
+        });
+        renderSummaryTable(filteredData);
+    }
+
+    function populateDropdowns(data) {
+        const bsarks = Array.from(new Set(data.map(r => r.Bsark).filter(Boolean))).sort();
+        const proyectSelect = document.getElementById('proyect-select');
+        proyectSelect.innerHTML = `<option value="Todos">${getTranslation('select_all_projects')}</option>` + bsarks.map(b => `<option value="${b}">${b}</option>`).join('');
+    }
+
+    function runSequencing() {
+        const sequenceButton = document.getElementById('btn-sequence');
+        if (filteredData.length === 0) {
+            alert(getTranslation('alert_no_visible_orders'));
+            return;
+        }
+        sequenceButton.disabled = true;
+        sequenceButton.innerHTML = `<span class="spinner"></span> ${getTranslation('button_sequencing')}`;
+        // Construir el payload con los campos relevantes para el backend
+        const payload = filteredData.map(row => ({
+            NumeroPedido: row.NumeroPedido,
+            FechaEntrega: row.FechaEntrega,
+            Bsark: row.Bsark,
+            UnidadesPedidas: row.UnidadesPedidas,
+            UniValMapex: row.UniValMapex,
+            Assy: row.Assy,
+            Beam: row.Beam,
+            CW: row['C/W'] || row.CW || row.C_W || '',
+            CWT: row.CWT,
+            DS: row.DS,
+            Ord: row.Ord
+        }));
+        fetch('/api/sequence/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+            .then(response => {
+                if (!response.ok) { return response.text().then(text => { try { const err = JSON.parse(text); throw new Error(err.error || `Server Error: ${response.statusText}`); } catch { throw new Error(`Server Error (${response.status}): ${text}`); } }); }
+                return response.json();
+            })
+            .then(data => {
+                alert(data.message || getTranslation('alert_sequencing_success'));
+                location.reload(); 
+            })
+            .catch(error => { alert(`${getTranslation('alert_sequencing_error')} ${error.message}`); })
+            .finally(() => {
+                sequenceButton.disabled = false;
+                sequenceButton.innerHTML = `<span data-translate-key="button_sequence">${getTranslation('button_sequence')}</span>`;
+            });
+    }
+
+    function loadSummaryData() {
+        const loadingArea = document.getElementById('loadingArea');
+        loadingArea.style.display = 'block';
+        loadingArea.innerHTML = `<span class="spinner"></span> ${getTranslation('text_loading_data')}`;
+        document.querySelector('.summary-table').style.display = 'none';
+        fetch('/api/summary')
+            .then(res => {
+                if (!res.ok) { return res.text().then(text => { try { const err = JSON.parse(text); throw new Error(err.error || 'Server Error'); } catch { throw new Error(`Network/Server Error (${res.status}): ${text}`); } }); }
+                return res.json();
+            })
+            .then(data => {
+                summaryData = Array.isArray(data) ? data : [];
+                filteredData = summaryData;
+                populateDropdowns(summaryData);
+                loadingArea.style.display = 'none';
+                document.querySelector('.summary-table').style.display = '';
+                renderSummaryTable(summaryData);
+            })
+            .catch(error => {
+                loadingArea.innerHTML = `<div class="error-message">${getTranslation('text_error_loading_data')} ${error.message}</div>`;
+            });
+    }
+
+    function refreshDataManually() {
+        const btnRefresh = document.getElementById('btn-refresh-data');
+        const originalText = btnRefresh.innerHTML;
+        
+        btnRefresh.disabled = true;
+        btnRefresh.innerHTML = `<span class="spinner"></span> ${getTranslation('button_updating')}`;
+        setSyncStatusBanner('Lanzando actualización en segundo plano...');
+        fetch('/api/sync/manual-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }})
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) throw new Error(data.error);
+                pollManualSyncStatus(originalText);
+            })
+            .catch(error => {
+                btnRefresh.disabled = false;
+                btnRefresh.innerHTML = originalText;
+                setSyncStatusBanner(`${getTranslation('alert_error_updating_data')} ${error.message}`, true, true);
+            })
+            .finally(() => {
+                if (!manualSyncStatusPoller) {
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = originalText;
+                }
+            });
+    }
+
+    function resetFilters() {
+        document.getElementById('search-input').value = '';
+        document.getElementById('starting-date').value = '';
+        document.getElementById('ending-date').value = '';
+        document.getElementById('proyect-select').value = 'Todos';
+        applyFilters();
+        updateSequenceButtonState();
+    }
+    
+    function setupEditViewPanel() {
+        const btnEditView = document.getElementById('btn-edit-view');
+        const panel = document.getElementById('edit-view-panel');
+        const form = document.getElementById('edit-view-form');
+        const btnClose = document.getElementById('btn-close-edit-view');
+        const btnReset = document.getElementById('btn-reset-edit-view');
+        function updateForm() {
+            const visibleCols = getVisibleColumns();
+            form.innerHTML = '';
+            columnConfig.forEach((col, idx) => {
+                const label = document.createElement('label');
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '6px';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.checked = visibleCols[idx];
+                checkbox.addEventListener('change', () => {
+                    const arr = getVisibleColumns();
+                    arr[idx] = checkbox.checked;
+                    // Al menos una columna debe quedar visible
+                    if (arr.filter(Boolean).length === 0) {
+                        checkbox.checked = true;
+                        return;
+                    }
+                    setVisibleColumns(arr);
+                    renderSummaryTable(filteredData);
+                });
+                label.appendChild(checkbox);
+                label.appendChild(document.createTextNode(col.label));
+                form.appendChild(label);
+            });
+        }
+        btnEditView.addEventListener('click', () => {
+            updateForm();
+            panel.style.display = 'block';
+        });
+        btnClose.addEventListener('click', () => { panel.style.display = 'none'; });
+        btnReset.addEventListener('click', () => {
+            setVisibleColumns(Array(columnConfig.length).fill(true));
+            updateForm();
+            renderSummaryTable(filteredData);
+        });
+        // Cerrar al hacer click fuera del panel
+        window.addEventListener('mousedown', (e) => {
+            if (panel.style.display === 'block' && !panel.contains(e.target) && e.target !== btnEditView) {
+                panel.style.display = 'none';
+            }
+        });
+    }
+
+    function updateSequenceButtonState() {
+        const btnSequence = document.getElementById('btn-sequence');
+        const from = document.getElementById('starting-date').value;
+        const to = document.getElementById('ending-date').value;
+        const searchValue = document.getElementById('search-input').value.trim();
+        // Activar si hay fechas o si el input de búsqueda tiene al menos 5 caracteres
+        btnSequence.disabled = !((from && to) || searchValue.length >= 5);
+    }
+
+    function setupPageLogic() {
+        document.getElementById('btn-sequence').addEventListener('click', runSequencing);
+        document.getElementById('search-input').addEventListener('input', function() {
+            applyFilters();
+            updateSequenceButtonState();
+        });
+        document.getElementById('starting-date').addEventListener('change', function() { applyFilters(); updateSequenceButtonState(); });
+        document.getElementById('ending-date').addEventListener('change', function() { applyFilters(); updateSequenceButtonState(); });
+        document.getElementById('proyect-select').addEventListener('change', applyFilters);
+        document.getElementById('btn-refresh-data').addEventListener('click', refreshDataManually);
+        document.getElementById('btn-reset-filters').addEventListener('click', resetFilters);
+        setupEditViewPanel();
+        // Ordenar al hacer click en los th y permitir drag & drop
+        const ths = document.querySelectorAll('.summary-table th');
+        const table = document.querySelector('.summary-table');
+        let dragSrcIdx = null;
+        ths.forEach((th, idx) => {
+            th.style.cursor = 'pointer';
+            th.title = 'Ordenar';
+            th.setAttribute('draggable', 'true');
+            th.addEventListener('dragstart', (e) => {
+                dragSrcIdx = idx;
+                e.dataTransfer.effectAllowed = 'move';
+                th.classList.add('dragging');
+            });
+            th.addEventListener('dragend', () => {
+                th.classList.remove('dragging');
+            });
+            th.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            });
+            th.addEventListener('drop', (e) => {
+                e.preventDefault();
+                if (dragSrcIdx === null || dragSrcIdx === idx) return;
+                // Reordenar columnConfig
+                const newConfig = [...columnConfig];
+                const [moved] = newConfig.splice(dragSrcIdx, 1);
+                newConfig.splice(idx, 0, moved);
+                columnConfig = newConfig;
+                setColumnConfigOrder(columnConfig);
+                // Ajustar visible columns para que sigan el nuevo orden
+                const oldVisible = getVisibleColumns();
+                const newVisible = columnConfig.map(col => {
+                    const oldIdx = defaultColumnConfig.findIndex(c => c.key === col.key);
+                    return oldVisible[oldIdx];
+                });
+                setVisibleColumns(newVisible);
+                renderSummaryTable(filteredData);
+                // Volver a poner listeners
+                setupPageLogic();
+            });
+            th.addEventListener('click', () => {
+                if (currentSort.column === idx) {
+                    currentSort.asc = !currentSort.asc;
+                } else {
+                    currentSort.column = idx;
+                    currentSort.asc = true;
+                }
+                let field = columnConfig[idx].key;
+                let sorted = [...filteredData];
+                sorted.sort((a, b) => {
+                    let va = a[field];
+                    let vb = b[field];
+                    if (field === 'FechaEntrega') {
+                        va = va ? new Date(va) : new Date(0);
+                        vb = vb ? new Date(vb) : new Date(0);
+                        return currentSort.asc ? va - vb : vb - va;
+                    }
+                    if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb))) {
+                        return currentSort.asc ? (parseFloat(va) - parseFloat(vb)) : (parseFloat(vb) - parseFloat(va));
+                    }
+                    va = (va || '').toString().toLowerCase();
+                    vb = (vb || '').toString().toLowerCase();
+                    if (va < vb) return currentSort.asc ? -1 : 1;
+                    if (va > vb) return currentSort.asc ? 1 : -1;
+                    return 0;
+                });
+                renderSummaryTable(sorted);
+            });
+        });
+        // Listener para el botón de limpiar agrupación
+        const clearGroupBtn = document.getElementById('clear-group-btn');
+        if (clearGroupBtn) {
+            clearGroupBtn.onclick = function() {
+                groupedBy = [];
+                groupCollapsedState = {};
+                renderSummaryTable(filteredData);
+            };
+        }
+        loadSummaryData();
+        updateSequenceButtonState();
+    }
+</script>
+
+<!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+<script>
+    let currentTranslations = {};
+    function getTranslation(key) { return currentTranslations[key] || key; }
+    function applyTranslations(translations) {
+        currentTranslations = translations;
+        document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+        document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+        document.querySelectorAll('[data-translate-key-placeholder]').forEach(el => { if (translations[el.getAttribute('data-translate-key-placeholder')]) el.setAttribute('placeholder', translations[el.getAttribute('data-translate-key-placeholder')]); });
+    }
+    async function loadTranslations(lang) {
+        try {
+            const response = await fetch(`/translations/translation_${lang}.json`);
+            if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+            const translations = await response.json();
+            applyTranslations(translations);
+            document.documentElement.lang = lang;
+            localStorage.setItem('language', lang);
+            // Sincronizar ambos selectores
+            const selector = document.getElementById('language-selector');
+            const headerSelector = document.getElementById('header-language-selector');
+            if (selector) selector.value = lang;
+            if (headerSelector) headerSelector.value = lang;
+        } catch (error) { console.error("Error al cargar traducciones:", error); }
+    }
+    function changeLanguage(lang) { loadTranslations(lang).then(() => { if (typeof setupPageLogic === 'function') { applyFilters(); } }); }
+    document.addEventListener('DOMContentLoaded', () => {
+        const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+        loadTranslations(lang).then(() => { setupPageLogic(); });
+    });
+</script>
+<script src="/assets/globalHeader.js" data-title="Pedidos Pendientes de Secuenciar" data-title-key="header_pending_orders"></script>
+<!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

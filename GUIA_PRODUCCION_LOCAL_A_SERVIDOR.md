@@ -87,7 +87,7 @@ logger = logging.getLogger(__name__)
 
 # APLICACIÓN
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'emesa_sga_secret_key_2025_dev_only')
+app.secret_key = os.getenv('SECRET_KEY', 'EMESA_sga_secret_key_2025_dev_only')
 CORS(app, supports_credentials=True)
 
 # VARIABLES DE ENTORNO (SEGURIDAD)
@@ -225,7 +225,7 @@ from requests.auth import HTTPBasicAuth
 class ConexionSAP:
     """Maneja llamadas a SAP REST API"""
     
-    def __init__(self, url='http://emesapprdapp:8000/sap/bc/z_ordenes',
+    def __init__(self, url='http://EMESApprdapp:8000/sap/bc/z_ordenes',
                  client='100', user='EMESA.MM', password='EMESA1234'):
         self.url = url
         self.client = client
@@ -405,7 +405,7 @@ DB_SERVER=172.16.10.10
 DB_USER=sccz
 DB_PASSWORD=S@vera,CZ,2024
 DB_DATABASE=DataLakeSCCZ
-SAP_URL=http://emesapprdapp:8000/sap/bc/z_ordenes
+SAP_URL=http://EMESApprdapp:8000/sap/bc/z_ordenes
 SAP_CLIENT=100
 SAP_USER=EMESA.MM
 SAP_PASSWORD=EMESA1234

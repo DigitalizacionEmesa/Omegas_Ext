@@ -19,6 +19,7 @@ import threading
 import socket
 import json
 import requests
+from decimal import Decimal
 # Instalar con: pip install schedule
 import schedule
 import smtplib
@@ -38,7 +39,7 @@ if sys.platform == 'win32':
 
 
 # Configuración de conexión al servicio ICF de SAP
-SAP_STOCK_URL = 'http://emesapprdapp:8000/sap/bc/z_ordenes_stock'
+SAP_STOCK_URL = 'http://EMESApprdapp:8000/sap/bc/z_ordenes_stock'
 SAP_CLIENT    = '100'
 SAP_USER      = 'EMESA.MM'
 SAP_PASSWORD  = 'EMESA1234'
@@ -115,6 +116,123 @@ def configure_logging():
 
 
 configure_logging()
+
+PEDIDOS_DB_LOCK = threading.Lock()
+ENDPOINT_RESPONSE_CACHE_LOCK = threading.Lock()
+ENDPOINT_RESPONSE_CACHE = {}
+ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = max(3, int(os.getenv('OMEGAS_VIEW_CACHE_TTL_SECONDS', '15')))
+AUTO_SYNC_SEQUENCED_INTERVAL_SECONDS = max(5, int(os.getenv('OMEGAS_PEDIDOS_SYNC_INTERVAL', '15')))
+CLEANUP_SEQUENCED_INTERVAL_SECONDS = max(15, int(os.getenv('OMEGAS_PEDIDOS_CLEANUP_INTERVAL', '60')))
+CLEANUP_OLD_UNSEQUENCED_INTERVAL_SECONDS = max(30, int(os.getenv('OMEGAS_PEDIDOS_OLD_CLEANUP_INTERVAL', '120')))
+MANUAL_SYNC_STATE_LOCK = threading.Lock()
+CLINCHING_MASTER_CACHE_LOCK = threading.Lock()
+MAPEX_COMPONENT_QTY_CACHE_LOCK = threading.Lock()
+CLINCHING_MASTER_CACHE = {
+    'timestamp': 0,
+    'mapping': {},
+}
+MAPEX_COMPONENT_QTY_CACHE = {}
+CLINCHING_MASTER_CACHE_TTL_SECONDS = max(30, int(os.getenv('OMEGAS_CLINCHING_MASTER_CACHE_TTL_SECONDS', '60')))
+MAPEX_COMPONENT_QTY_CACHE_TTL_SECONDS = max(10, int(os.getenv('OMEGAS_MAPEX_COMPONENT_CACHE_TTL_SECONDS', '60')))
+MANUAL_SYNC_STATE = {
+    'running': False,
+    'started_at': None,
+    'finished_at': None,
+    'result': None,
+    'error': None,
+}
+
+
+def get_cached_endpoint_response(cache_key):
+    now = time.time()
+    with ENDPOINT_RESPONSE_CACHE_LOCK:
+        cache_entry = ENDPOINT_RESPONSE_CACHE.get(cache_key)
+        if not cache_entry:
+            return None
+        if now - cache_entry['timestamp'] > ENDPOINT_RESPONSE_CACHE_TTL_SECONDS:
+            ENDPOINT_RESPONSE_CACHE.pop(cache_key, None)
+            return None
+        return cache_entry['payload']
+
+
+def set_cached_endpoint_response(cache_key, payload):
+    with ENDPOINT_RESPONSE_CACHE_LOCK:
+        ENDPOINT_RESPONSE_CACHE[cache_key] = {
+            'timestamp': time.time(),
+            'payload': payload,
+        }
+
+
+def clear_endpoint_response_cache(*cache_keys):
+    with ENDPOINT_RESPONSE_CACHE_LOCK:
+        if cache_keys:
+            for cache_key in cache_keys:
+                ENDPOINT_RESPONSE_CACHE.pop(cache_key, None)
+        else:
+            ENDPOINT_RESPONSE_CACHE.clear()
+
+
+def clear_clinching_master_cache():
+    with CLINCHING_MASTER_CACHE_LOCK:
+        CLINCHING_MASTER_CACHE['timestamp'] = 0
+        CLINCHING_MASTER_CACHE['mapping'] = {}
+
+
+def get_cached_mapex_component_quantities(assy_codes):
+    now = time.time()
+    cleaned_codes = sorted({str(code).strip() for code in (assy_codes or []) if code and str(code).strip()})
+    if not cleaned_codes:
+        return {}, []
+
+    cached_quantities = {}
+    missing_codes = []
+
+    with MAPEX_COMPONENT_QTY_CACHE_LOCK:
+        expired_codes = []
+        for assy_code in cleaned_codes:
+            cache_entry = MAPEX_COMPONENT_QTY_CACHE.get(assy_code)
+            if not cache_entry:
+                missing_codes.append(assy_code)
+                continue
+
+            if now - cache_entry['timestamp'] > MAPEX_COMPONENT_QTY_CACHE_TTL_SECONDS:
+                expired_codes.append(assy_code)
+                missing_codes.append(assy_code)
+                continue
+
+            cached_quantities[assy_code] = dict(cache_entry['components'])
+
+        for assy_code in expired_codes:
+            MAPEX_COMPONENT_QTY_CACHE.pop(assy_code, None)
+
+    return cached_quantities, missing_codes
+
+
+def set_cached_mapex_component_quantities(quantities_by_assy):
+    if not quantities_by_assy:
+        return
+
+    timestamp = time.time()
+    with MAPEX_COMPONENT_QTY_CACHE_LOCK:
+        for assy_code, component_quantities in quantities_by_assy.items():
+            normalized_assy = str(assy_code).strip()
+            if not normalized_assy:
+                continue
+            MAPEX_COMPONENT_QTY_CACHE[normalized_assy] = {
+                'timestamp': timestamp,
+                'components': dict(component_quantities or {}),
+            }
+
+
+def clear_mapex_component_quantities_cache(*assy_codes):
+    with MAPEX_COMPONENT_QTY_CACHE_LOCK:
+        if assy_codes:
+            for assy_code in assy_codes:
+                normalized_assy = str(assy_code).strip()
+                if normalized_assy:
+                    MAPEX_COMPONENT_QTY_CACHE.pop(normalized_assy, None)
+        else:
+            MAPEX_COMPONENT_QTY_CACHE.clear()
 
 # ====================================================================================
 # LOGGER ESPECÍFICO PARA DIAGNÓSTICO DE VISTAS
@@ -317,127 +435,266 @@ def cargar_config_smtp():
 
 def sync_pending_orders(lookback_days=1, log_prefix='[SYNC]'):
     """Sincroniza en DataLake los pedidos pendientes de MAPEX dentro de la ventana indicada."""
-    cutoff_time = datetime.now() - timedelta(days=lookback_days)
-    print(f"{log_prefix} Sincronizando pendientes desde: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    with PEDIDOS_DB_LOCK:
+        cutoff_time = datetime.now() - timedelta(days=lookback_days)
+        print(f"{log_prefix} Sincronizando pendientes desde: {cutoff_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-    # Obtener catálogo local para derivar CWT/DS/EX/TB desde las líneas.
-    with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-        if conn_main is None:
-            raise Exception('No se pudo conectar a DataLakeSCCZ para cargar OB.Omegas')
+        def is_pending_status(row):
+            return row['EstadoERP'] == 0 and row['Id_wam_estado_pedido_cliente'] == 1
 
-        cursor_main = conn_main.cursor()
-        cursor_main.execute("SELECT Assy, [W/C] FROM OB.Omegas")
-        omegas_map = {row.Assy: row[1] for row in cursor_main.fetchall()}
+        # Obtener catálogo local para derivar CWT/DS/EX/TB/CWI desde las líneas.
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+            if conn_main is None:
+                raise Exception('No se pudo conectar a DataLakeSCCZ para cargar OB.Omegas')
 
-    datos_externos = []
-    with ConexionODBCCZ(database='mapexbp') as conn_cz:
-        if conn_cz is None:
-            raise Exception('No se pudo conectar a MAPEXBP para sincronizar pedidos')
+            cursor_main = conn_main.cursor()
+            cursor_main.execute("SELECT Assy, [W/C] FROM OB.Omegas")
+            omegas_map = {row.Assy: row[1] for row in cursor_main.fetchall()}
 
-        cursor_cz = conn_cz.cursor()
-        query = """
-            SELECT 
-                A.id_his_wam_pedido_cliente,
-                A.NumeroPedido,
-                A.FechaEntrega,
-                A.Bsark,
-                A.EstadoERP,
-                A.Id_wam_estado_pedido_cliente,
-                B.id_his_wam_linea_pedido_cliente,
-                B.Id_producto,
-                B.UnidadesPedidas,
-                B.UniValMapex,
-                C.Cod_producto,
-                A.FechaPedido
-            FROM 
-                his_wam_pedido_cliente A
-            JOIN 
-                his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
-            JOIN 
-                V_Cfg_producto C ON C.Id_producto = B.Id_producto
-            WHERE 
-                A.FechaEntrega >= ?
-                AND A.EstadoERP = 0 
-                AND A.Id_wam_estado_pedido_cliente = 1;
-        """
-        cursor_cz.execute(query, cutoff_time.strftime('%Y-%m-%d %H:%M:%S'))
-        columns = [desc[0] for desc in cursor_cz.description]
-        datos_externos = [dict(zip(columns, row)) for row in cursor_cz.fetchall()]
+        latest_orders = []
+        latest_pending_order_ids = []
+        terminal_order_numbers = []
+        datos_externos = []
+        with ConexionODBCCZ(database='mapexbp') as conn_cz:
+            if conn_cz is None:
+                raise Exception('No se pudo conectar a MAPEXBP para sincronizar pedidos')
 
-    if not datos_externos:
-        print(f"{log_prefix} No hay datos para procesar en el período especificado")
+            cursor_cz = conn_cz.cursor()
+            latest_orders_query = """
+                WITH LatestPedidos AS (
+                    SELECT 
+                        A.id_his_wam_pedido_cliente,
+                        A.NumeroPedido,
+                        A.FechaEntrega,
+                        A.Bsark,
+                        A.EstadoERP,
+                        A.Id_wam_estado_pedido_cliente,
+                        A.FechaPedido,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY A.NumeroPedido
+                            ORDER BY A.id_his_wam_pedido_cliente DESC
+                        ) AS rn
+                    FROM his_wam_pedido_cliente A
+                    WHERE A.FechaEntrega >= ?
+                )
+                SELECT 
+                    id_his_wam_pedido_cliente,
+                    NumeroPedido,
+                    FechaEntrega,
+                    Bsark,
+                    EstadoERP,
+                    Id_wam_estado_pedido_cliente,
+                    FechaPedido
+                FROM LatestPedidos
+                WHERE rn = 1;
+            """
+            cursor_cz.execute(latest_orders_query, cutoff_time.strftime('%Y-%m-%d %H:%M:%S'))
+            latest_columns = [desc[0] for desc in cursor_cz.description]
+            latest_orders = [dict(zip(latest_columns, row)) for row in cursor_cz.fetchall()]
+
+            for order in latest_orders:
+                if is_pending_status(order):
+                    latest_pending_order_ids.append(order['id_his_wam_pedido_cliente'])
+                else:
+                    terminal_order_numbers.append(order['NumeroPedido'])
+
+            if latest_pending_order_ids:
+                placeholders = ','.join(['?' for _ in latest_pending_order_ids])
+                query = f"""
+                SELECT 
+                    A.id_his_wam_pedido_cliente,
+                    A.NumeroPedido,
+                    A.FechaEntrega,
+                    A.Bsark,
+                    A.EstadoERP,
+                    A.Id_wam_estado_pedido_cliente,
+                    B.id_his_wam_linea_pedido_cliente,
+                    B.Id_producto,
+                    B.UnidadesPedidas,
+                    B.UniValMapex,
+                    C.Cod_producto,
+                    A.FechaPedido
+                FROM 
+                    his_wam_pedido_cliente A
+                JOIN 
+                    his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
+                JOIN 
+                    V_Cfg_producto C ON C.Id_producto = B.Id_producto
+                WHERE 
+                    A.id_his_wam_pedido_cliente IN ({placeholders});
+                """
+                cursor_cz.execute(query, latest_pending_order_ids)
+                columns = [desc[0] for desc in cursor_cz.description]
+                datos_externos = [dict(zip(columns, row)) for row in cursor_cz.fetchall()]
+
+        affected_order_numbers = [order['NumeroPedido'] for order in latest_orders]
+
+        if not affected_order_numbers:
+            print(f"{log_prefix} No hay datos para procesar en el período especificado")
+            return {
+                'cabeceras_procesadas': 0,
+                'lineas_procesadas': 0,
+                'pedidos_terminales_invalidados': 0,
+                'periodo_desde': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+
+        pedidos_agrupados = defaultdict(list)
+        for linea in datos_externos:
+            pedidos_agrupados[linea['id_his_wam_pedido_cliente']].append(linea)
+
+        cabeceras_a_procesar, lineas_a_insertar = {}, []
+        for pedido_id, lineas in pedidos_agrupados.items():
+            cwt, ds, ex, tb, cwi = None, None, None, None, None
+            primera_linea = lineas[0]
+
+            for linea in lineas:
+                wc_type = omegas_map.get(linea['Cod_producto'])
+                if wc_type == 'CWT' and not cwt:
+                    cwt = linea['Cod_producto']
+                elif wc_type == 'DS' and not ds:
+                    ds = linea['Cod_producto']
+                elif wc_type == 'EX' and not ex:
+                    ex = linea['Cod_producto']
+                elif wc_type == 'TB' and not tb:
+                    tb = linea['Cod_producto']
+                elif wc_type == 'CWI' and not cwi:
+                    cwi = linea['Cod_producto']
+
+            cabecera_values = [
+                pedido_id,
+                primera_linea['NumeroPedido'],
+                primera_linea['FechaEntrega'],
+                primera_linea['Bsark'],
+                primera_linea['EstadoERP'],
+                primera_linea['Id_wam_estado_pedido_cliente'],
+                cwt,
+                ds,
+                ex,
+                tb,
+            ]
+            if pedidos_cabecera_has_column('CWI'):
+                cabecera_values.append(cwi)
+
+            cabeceras_a_procesar[pedido_id] = tuple(cabecera_values)
+
+            for linea in lineas:
+                lineas_a_insertar.append((
+                    linea['id_his_wam_linea_pedido_cliente'], linea['id_his_wam_pedido_cliente'],
+                    linea['Id_producto'], linea['Cod_producto'],
+                    linea['UnidadesPedidas'], linea['UniValMapex']
+                ))
+        lista_cabeceras = list(cabeceras_a_procesar.values())
+
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+            if conn_main is None:
+                raise Exception('No se pudo conectar a DataLakeSCCZ para actualizar PedidosCabecera')
+
+            cursor_main = conn_main.cursor()
+            try:
+                conn_main.autocommit = False
+
+                if terminal_order_numbers:
+                    placeholders_terminales = ','.join(['?' for _ in terminal_order_numbers])
+                    cursor_main.execute(
+                        f"DELETE FROM OB.PedidosSecuenciados WHERE NumeroPedido IN ({placeholders_terminales})",
+                        terminal_order_numbers
+                    )
+
+                if affected_order_numbers:
+                    placeholders = ','.join(['?' for _ in affected_order_numbers])
+                    cursor_main.execute(
+                        f"""
+                        DELETE pl
+                        FROM OB.PedidosLineas pl
+                        INNER JOIN OB.PedidosCabecera pc ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                        WHERE pc.NumeroPedido IN ({placeholders})
+                        """,
+                        affected_order_numbers
+                    )
+                    cursor_main.execute(
+                        f"DELETE FROM OB.PedidosCabecera WHERE NumeroPedido IN ({placeholders})",
+                        affected_order_numbers
+                    )
+
+                if lista_cabeceras:
+                    pedidos_cabecera_columns = [
+                        'ID_PedidoCabecera_Externa',
+                        'NumeroPedido',
+                        'FechaEntrega',
+                        'Bsark',
+                        'EstadoERP',
+                        'Id_wam_estado_pedido_cliente',
+                        'CWT',
+                        'DS',
+                        'EX',
+                        'TB',
+                    ]
+                    if pedidos_cabecera_has_column('CWI'):
+                        pedidos_cabecera_columns.append('CWI')
+                    placeholders_cabecera = ', '.join(['?' for _ in pedidos_cabecera_columns])
+                    sql_cabecera = f"INSERT INTO OB.PedidosCabecera ({', '.join(pedidos_cabecera_columns)}) VALUES ({placeholders_cabecera});"
+                    cursor_main.executemany(sql_cabecera, lista_cabeceras)
+
+                if lineas_a_insertar:
+                    sql_lineas = "INSERT INTO OB.PedidosLineas (ID_PedidoLinea_Externa, ID_PedidoCabecera_Externa, ID_Producto_Externo, Cod_Producto_Externo, UnidadesPedidas, UniValMapex) VALUES (?, ?, ?, ?, ?, ?);"
+                    cursor_main.executemany(sql_lineas, lineas_a_insertar)
+
+                conn_main.commit()
+            except Exception:
+                conn_main.rollback()
+                raise
+            finally:
+                conn_main.autocommit = True
+
+        print(
+            f"{log_prefix} Procesados: {len(lista_cabeceras)} cabeceras y {len(lineas_a_insertar)} líneas | "
+            f"Pedidos terminales invalidados: {len(terminal_order_numbers)}"
+        )
         return {
-            'cabeceras_procesadas': 0,
-            'lineas_procesadas': 0,
+            'cabeceras_procesadas': len(lista_cabeceras),
+            'lineas_procesadas': len(lineas_a_insertar),
+            'pedidos_terminales_invalidados': len(terminal_order_numbers),
             'periodo_desde': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
-    pedidos_agrupados = defaultdict(list)
-    for linea in datos_externos:
-        pedidos_agrupados[linea['id_his_wam_pedido_cliente']].append(linea)
 
-    cabeceras_a_procesar, lineas_a_insertar = {}, []
-    for pedido_id, lineas in pedidos_agrupados.items():
-        cwt, ds, ex, tb = None, None, None, None
-        primera_linea = lineas[0]
-
-        for linea in lineas:
-            wc_type = omegas_map.get(linea['Cod_producto'])
-            if wc_type == 'CWT' and not cwt:
-                cwt = linea['Cod_producto']
-            elif wc_type == 'DS' and not ds:
-                ds = linea['Cod_producto']
-            elif wc_type == 'EX' and not ex:
-                ex = linea['Cod_producto']
-            elif wc_type == 'TB' and not tb:
-                tb = linea['Cod_producto']
-
-        cabeceras_a_procesar[pedido_id] = (
-            pedido_id, primera_linea['NumeroPedido'], primera_linea['FechaEntrega'],
-            primera_linea['Bsark'], primera_linea['EstadoERP'],
-            primera_linea['Id_wam_estado_pedido_cliente'], cwt, ds, ex, tb
+def run_startup_sync():
+    try:
+        print("[MAIN] Sincronizando pedidos pendientes al arranque...")
+        startup_sync = sync_pending_orders(lookback_days=1, log_prefix='[STARTUP SYNC]')
+        print(
+            f"[MAIN] -> Sync inicial completado: "
+            f"{startup_sync['cabeceras_procesadas']} cabeceras y {startup_sync['lineas_procesadas']} líneas."
         )
+    except Exception as e:
+        logging.exception("[MAIN] Fallo en la sync inicial de pedidos")
+        print(f"[MAIN] ADVERTENCIA: no se pudo ejecutar la sync inicial de pedidos: {e}")
 
-        for linea in lineas:
-            lineas_a_insertar.append((
-                linea['id_his_wam_linea_pedido_cliente'], linea['id_his_wam_pedido_cliente'],
-                linea['Id_producto'], linea['Cod_producto'],
-                linea['UnidadesPedidas'], linea['UniValMapex']
-            ))
 
-    lista_cabeceras = list(cabeceras_a_procesar.values())
-    ids_cabeceras_afectadas = list(cabeceras_a_procesar.keys())
+def _manual_sync_state_response():
+    with MANUAL_SYNC_STATE_LOCK:
+        return {
+            'running': MANUAL_SYNC_STATE['running'],
+            'started_at': MANUAL_SYNC_STATE['started_at'],
+            'finished_at': MANUAL_SYNC_STATE['finished_at'],
+            'result': MANUAL_SYNC_STATE['result'],
+            'error': MANUAL_SYNC_STATE['error'],
+        }
 
-    with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-        if conn_main is None:
-            raise Exception('No se pudo conectar a DataLakeSCCZ para actualizar PedidosCabecera')
 
-        cursor_main = conn_main.cursor()
-        if ids_cabeceras_afectadas:
-            placeholders = ','.join(['?' for _ in ids_cabeceras_afectadas])
-            cursor_main.execute(
-                f"DELETE FROM OB.PedidosLineas WHERE ID_PedidoCabecera_Externa IN ({placeholders})",
-                ids_cabeceras_afectadas
-            )
-            cursor_main.execute(
-                f"DELETE FROM OB.PedidosCabecera WHERE ID_PedidoCabecera_Externa IN ({placeholders})",
-                ids_cabeceras_afectadas
-            )
-
-        if lista_cabeceras:
-            sql_cabecera = "INSERT INTO OB.PedidosCabecera (ID_PedidoCabecera_Externa, NumeroPedido, FechaEntrega, Bsark, EstadoERP, Id_wam_estado_pedido_cliente, CWT, DS, EX, TB) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
-            cursor_main.executemany(sql_cabecera, lista_cabeceras)
-
-        if lineas_a_insertar:
-            sql_lineas = "INSERT INTO OB.PedidosLineas (ID_PedidoLinea_Externa, ID_PedidoCabecera_Externa, ID_Producto_Externo, Cod_Producto_Externo, UnidadesPedidas, UniValMapex) VALUES (?, ?, ?, ?, ?, ?);"
-            cursor_main.executemany(sql_lineas, lineas_a_insertar)
-
-    print(f"{log_prefix} Procesados: {len(lista_cabeceras)} cabeceras y {len(lineas_a_insertar)} líneas")
-    return {
-        'cabeceras_procesadas': len(lista_cabeceras),
-        'lineas_procesadas': len(lineas_a_insertar),
-        'periodo_desde': cutoff_time.strftime('%Y-%m-%d %H:%M:%S')
-    }
+def run_manual_full_sync_background():
+    try:
+        resultado_sync = sync_pending_orders(lookback_days=1, log_prefix='[MANUAL SYNC]')
+        with MANUAL_SYNC_STATE_LOCK:
+            MANUAL_SYNC_STATE['running'] = False
+            MANUAL_SYNC_STATE['finished_at'] = datetime.now().isoformat(timespec='seconds')
+            MANUAL_SYNC_STATE['result'] = resultado_sync
+    except Exception as e:
+        logging.exception('[MANUAL SYNC] ERROR GENERAL en segundo plano')
+        with MANUAL_SYNC_STATE_LOCK:
+            MANUAL_SYNC_STATE['running'] = False
+            MANUAL_SYNC_STATE['finished_at'] = datetime.now().isoformat(timespec='seconds')
+            MANUAL_SYNC_STATE['error'] = str(e)
 
 # ====================================================================================
 # FUNCIÓN SCHEDULER PARA EJECUCIÓN AUTOMÁTICA DIARIA
@@ -484,8 +741,9 @@ def auto_sync_sequenced():
     print('[AUTO-SYNC] Servicio de actualización incremental de pedidos secuenciados iniciado.')
     while True:
         try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
+            with PEDIDOS_DB_LOCK:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
 
                 # ==========================================================
                 # === ÚNICO CAMBIO: SE MODIFICA ESTA CONSULTA Y SU ORDER BY ===
@@ -623,7 +881,7 @@ def auto_sync_sequenced():
         except Exception as e:
             print(f"[AUTO-SYNC] ERROR: {str(e)}")
         
-        time.sleep(5)
+        time.sleep(AUTO_SYNC_SEQUENCED_INTERVAL_SECONDS)
 
 # La función para iniciar el hilo no cambia
 def start_auto_sync_thread():
@@ -673,8 +931,9 @@ def cleanup_sequenced_orders():
     
     while True:
         try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
+            with PEDIDOS_DB_LOCK:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
                 
                 # 1. Obtener todos los pedidos secuenciados
                 cursor_main.execute("""
@@ -687,7 +946,7 @@ def cleanup_sequenced_orders():
                 
                 if not pedidos_secuenciados:
                     print("[CLEANUP] No hay pedidos secuenciados para verificar.")
-                    time.sleep(30)
+                    time.sleep(CLEANUP_SEQUENCED_INTERVAL_SECONDS)
                     continue
                 
                 # 2. Verificar cada uno directamente en MAPEX
@@ -766,7 +1025,7 @@ def cleanup_sequenced_orders():
         except Exception as e:
             print(f"[CLEANUP] ERROR GENERAL: {str(e)}")
         
-        time.sleep(30)  # Ejecutar cada 30 segundos
+        time.sleep(CLEANUP_SEQUENCED_INTERVAL_SECONDS)
 
 
 # ====================================================================================
@@ -784,8 +1043,9 @@ def cleanup_old_unsequenced_orders():
     
     while True:
         try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
+            with PEDIDOS_DB_LOCK:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
                 
                 # Obtener lista de pedidos secuenciados para excluirlos
                 cursor_main.execute("SELECT DISTINCT NumeroPedido FROM OB.PedidosSecuenciados")
@@ -943,7 +1203,7 @@ def cleanup_old_unsequenced_orders():
         except Exception as e:
             print(f"[CLEANUP-OLD] ERROR GENERAL: {str(e)}")
         
-        time.sleep(60)  # Ejecutar cada 60 segundos
+        time.sleep(CLEANUP_OLD_UNSEQUENCED_INTERVAL_SECONDS)
 
 
 # ====================================================================================
@@ -1396,6 +1656,289 @@ def delete_all_sequences():
 # ENDPOINT PARA PEDIDOS SECUENCIADOS C (para pantalla OB_C)
 # ====================================================================================
 
+def normalize_wc_value(raw_value):
+    if raw_value is None:
+        return None
+    normalized_value = str(raw_value).strip()
+    if not normalized_value:
+        return None
+    if normalized_value.upper() == 'MS':
+        return 'DS'
+    if normalized_value.upper() == 'WIC':
+        return 'CWI'
+    return normalized_value
+
+
+PEDIDOS_CABECERA_OPTIONAL_COLUMNS_CACHE = {}
+
+
+def pedidos_cabecera_has_column(column_name):
+    normalized_column = str(column_name).strip().upper()
+    if not normalized_column:
+        return False
+
+    if PEDIDOS_CABECERA_OPTIONAL_COLUMNS_CACHE.get(normalized_column) is True:
+        return True
+
+    exists = False
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is not None:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = 'OB'
+                      AND TABLE_NAME = 'PedidosCabecera'
+                      AND UPPER(COLUMN_NAME) = ?
+                    """,
+                    normalized_column,
+                )
+                exists = cursor.fetchone() is not None
+    except Exception as exc:
+        logging.error(f"Error comprobando columna {normalized_column} en OB.PedidosCabecera: {exc}")
+
+    if exists:
+        PEDIDOS_CABECERA_OPTIONAL_COLUMNS_CACHE[normalized_column] = True
+    else:
+        PEDIDOS_CABECERA_OPTIONAL_COLUMNS_CACHE.pop(normalized_column, None)
+    return exists
+
+
+def build_pedidos_cabecera_optional_select_sql(column_name, alias=None):
+    safe_column = str(column_name).strip()
+    safe_alias = alias or safe_column
+    if pedidos_cabecera_has_column(safe_column):
+        return f"ISNULL(pc.[{safe_column}], '') AS {safe_alias}"
+    return f"'' AS {safe_alias}"
+
+
+def normalize_component_quantity(raw_value):
+    if raw_value is None:
+        return 0
+    if isinstance(raw_value, Decimal):
+        return int(raw_value) if raw_value == raw_value.to_integral_value() else float(raw_value)
+    if isinstance(raw_value, float):
+        return int(raw_value) if raw_value.is_integer() else raw_value
+    return raw_value
+
+
+def scale_component_quantity(component_qty, order_qty):
+    component_qty = normalize_component_quantity(component_qty)
+    order_qty = normalize_component_quantity(order_qty)
+
+    if component_qty in (None, '') or order_qty in (None, ''):
+        return 0
+
+    return normalize_component_quantity(component_qty * order_qty)
+
+
+def scale_component_quantity_from_beam(component_qty, beam_component_qty, beam_order_qty):
+    component_qty = normalize_component_quantity(component_qty)
+    beam_component_qty = normalize_component_quantity(beam_component_qty)
+    beam_order_qty = normalize_component_quantity(beam_order_qty)
+
+    if component_qty in (None, '') or beam_component_qty in (None, '', 0) or beam_order_qty in (None, ''):
+        return 0
+
+    return normalize_component_quantity((component_qty / beam_component_qty) * beam_order_qty)
+
+
+def format_if_quantity_display(if1, if2, if1_qty, if2_qty):
+    if1_qty = normalize_component_quantity(if1_qty)
+    if2_qty = normalize_component_quantity(if2_qty)
+
+    if if1 and if2 and str(if1).strip() and str(if2).strip() and str(if1).strip() != str(if2).strip():
+        return f"{if1_qty}/{if2_qty}"
+    return if1_qty
+
+
+def get_mapex_component_quantities_by_assy(assy_codes):
+    cleaned_codes = sorted({str(code).strip() for code in (assy_codes or []) if code and str(code).strip()})
+    if not cleaned_codes:
+        return {}
+
+    cached_quantities, missing_codes = get_cached_mapex_component_quantities(cleaned_codes)
+    if not missing_codes:
+        return cached_quantities
+
+    placeholders = ','.join('?' for _ in missing_codes)
+    query = f'''
+        WITH target_assy AS (
+            SELECT v.Id_producto, v.Cod_producto AS Assy
+            FROM dbo.V_Cfg_producto v WITH (NOLOCK)
+            WHERE v.Cod_producto IN ({placeholders})
+        )
+        SELECT
+            target.Assy,
+            component.Cod_producto AS ComponentCode,
+            SUM(ISNULL(fp.Unidades, 0)) AS ComponentQty
+        FROM target_assy target
+        INNER JOIN dbo.cfg_fase fase WITH (NOLOCK)
+            ON fase.Id_producto_final = target.Id_producto
+        INNER JOIN dbo.cfg_fase_producto fp WITH (NOLOCK)
+            ON fp.Id_fase = fase.Id_fase
+        LEFT JOIN dbo.V_Cfg_producto component WITH (NOLOCK)
+            ON component.Id_producto = fp.Id_producto
+        WHERE fp.EntradaSalida = 0
+          AND component.Cod_producto IS NOT NULL
+          AND LTRIM(RTRIM(component.Cod_producto)) <> ''
+        GROUP BY target.Assy, component.Cod_producto
+    '''
+
+    quantities_by_assy = defaultdict(dict)
+    for assy_code, component_quantities in cached_quantities.items():
+        quantities_by_assy[assy_code].update(component_quantities)
+
+    fetched_quantities = defaultdict(dict)
+
+    try:
+        with ConexionODBCCZ(database='mapexbp') as conn:
+            if conn is None:
+                logging.error('No se pudo conectar a MAPEX para resolver BeamQty/IFQty')
+                return quantities_by_assy
+
+            cursor = conn.cursor()
+            cursor.execute(query, missing_codes)
+            for assy, component_code, component_qty in cursor.fetchall():
+                normalized_assy = str(assy).strip() if assy is not None else ''
+                normalized_component = str(component_code).strip() if component_code is not None else ''
+                if not normalized_assy or not normalized_component:
+                    continue
+                normalized_qty = normalize_component_quantity(component_qty)
+                quantities_by_assy[normalized_assy][normalized_component] = normalized_qty
+                fetched_quantities[normalized_assy][normalized_component] = normalized_qty
+
+            for assy_code in missing_codes:
+                fetched_quantities.setdefault(assy_code, {})
+
+            set_cached_mapex_component_quantities(fetched_quantities)
+    except Exception as exc:
+        logging.error(f'Error obteniendo cantidades Beam/IF desde MAPEX: {exc}')
+
+    return quantities_by_assy
+
+
+def load_clinching_subomega_master_mapping():
+    """Carga y cachea el mapeo Sub-Omega -> Beam + Guide Interface desde SQL Server."""
+    now = time.time()
+    with CLINCHING_MASTER_CACHE_LOCK:
+        cached_timestamp = CLINCHING_MASTER_CACHE.get('timestamp', 0)
+        cached_mapping = CLINCHING_MASTER_CACHE.get('mapping') or {}
+        if cached_mapping and (now - cached_timestamp) <= CLINCHING_MASTER_CACHE_TTL_SECONDS:
+            return cached_mapping
+
+    mapping = {}
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                logging.error('No se pudo conectar a DataLakeSCCZ para cargar el master de clinching')
+                return {}
+
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT SubOmega, Beam, GuideInterface
+                FROM OB.ClinchingSubOmegaMaster WITH (NOLOCK)
+                WHERE IsActive = 1
+                ORDER BY SubOmega ASC
+                """
+            )
+
+            for subomega, beam, guide_interface in cursor.fetchall():
+                subomega_code = str(subomega).strip() if subomega is not None else ''
+                beam_code = str(beam).strip() if beam is not None else ''
+                guide_code = str(guide_interface).strip() if guide_interface is not None else ''
+                if not subomega_code or not beam_code or not guide_code:
+                    continue
+                mapping[subomega_code] = {
+                    'Beam': beam_code,
+                    'GuideInterface': guide_code,
+                }
+    except Exception as exc:
+        logging.error(f'Error cargando master de clinching desde SQL: {exc}')
+        return {}
+
+    with CLINCHING_MASTER_CACHE_LOCK:
+        CLINCHING_MASTER_CACHE['timestamp'] = now
+        CLINCHING_MASTER_CACHE['mapping'] = mapping
+
+    logging.info(f'[CLINCHING MASTER] Cargados {len(mapping)} Sub-Omegas desde SQL')
+    return mapping
+
+
+def enrich_clinching_orders_with_master_components(items):
+    """Enriquece pedidos de clinching usando Sub-Omega master + cantidades desde MAPEX."""
+    if not items:
+        return items
+
+    master_mapping = load_clinching_subomega_master_mapping()
+    if not master_mapping:
+        for item in items:
+            item['SubOmega'] = str(item.get('Beam') or '').strip()
+            item['SubOmegaQty'] = normalize_component_quantity(item.get('Qty', 0))
+            item['ClinchingBeam'] = ''
+            item['ClinchingBeamQty'] = 0
+            item['GuideInterface'] = ''
+            item['GuideInterfaceQty'] = 0
+        return items
+
+    subomega_codes = [str(item.get('Beam') or '').strip() for item in items]
+    quantities_by_subomega = get_mapex_component_quantities_by_assy(subomega_codes)
+
+    for item in items:
+        subomega_code = str(item.get('Beam') or '').strip()
+        item['SubOmega'] = subomega_code
+        item['SubOmegaQty'] = normalize_component_quantity(item.get('Qty', 0))
+
+        mapping = master_mapping.get(subomega_code, {})
+        clinching_beam = mapping.get('Beam', '')
+        guide_interface = mapping.get('GuideInterface', '')
+        component_quantities = quantities_by_subomega.get(subomega_code, {})
+
+        beam_component_qty = normalize_component_quantity(component_quantities.get(clinching_beam, 0)) if clinching_beam else 0
+        guide_component_qty = normalize_component_quantity(component_quantities.get(guide_interface, 0)) if guide_interface else 0
+
+        subomega_master_qty = beam_component_qty if beam_component_qty else 0
+        subomega_order_qty = item['SubOmegaQty']
+
+        item['ClinchingBeam'] = clinching_beam
+        item['GuideInterface'] = guide_interface
+        item['ClinchingBeamQty'] = scale_component_quantity_from_beam(beam_component_qty, subomega_master_qty, subomega_order_qty) if clinching_beam else 0
+        item['GuideInterfaceQty'] = scale_component_quantity_from_beam(guide_component_qty, subomega_master_qty, subomega_order_qty) if guide_interface else 0
+
+    return items
+
+
+def enrich_orders_with_mapex_quantities(items):
+    if not items:
+        return items
+
+    quantities_by_assy = get_mapex_component_quantities_by_assy(item.get('Assy') for item in items)
+
+    for item in items:
+        assy = str(item.get('Assy') or '').strip()
+        component_quantities = quantities_by_assy.get(assy, {})
+        order_qty = normalize_component_quantity(item.get('Qty', 0))
+
+        beam_code = str(item.get('Beam') or '').strip()
+        if1_code = str(item.get('IF1') or '').strip()
+        if2_code = str(item.get('IF2') or '').strip()
+        beam_component_qty = normalize_component_quantity(component_quantities.get(beam_code, 0)) if beam_code else 0
+
+        beam_qty = order_qty if beam_code else 0
+        if1_qty = scale_component_quantity_from_beam(component_quantities.get(if1_code, 0), beam_component_qty, beam_qty) if if1_code else 0
+        if2_qty = scale_component_quantity_from_beam(component_quantities.get(if2_code, 0), beam_component_qty, beam_qty) if if2_code else 0
+
+        item['BeamQty'] = beam_qty
+        item['IF1Qty'] = if1_qty
+        item['IF2Qty'] = if2_qty
+        item['IFQty'] = format_if_quantity_display(if1_code, if2_code, if1_qty, if2_qty)
+
+    return items
+
+
 @app.route('/api/pedidos_secuenciados_c', methods=['GET'])
 @cross_origin()
 def get_pedidos_secuenciados_c():
@@ -1407,6 +1950,13 @@ def get_pedidos_secuenciados_c():
     """
     inicio = time.time()
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_c ===")
+    cache_key = 'pedidos_secuenciados_c'
+
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
+        VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_c ===\n")
+        return jsonify(cached_result)
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1424,25 +1974,33 @@ def get_pedidos_secuenciados_c():
                     ps.Beam,
                     o.IF1,
                     o.IF2,
+                    ISNULL(ps.TB, '') AS TieBracket,
+                    ISNULL(pc.CWT, '') AS CWT,
+                    ISNULL(pc.DS, '') AS MS,
+                    pc.FechaEntrega AS DeliveryDate,
+                    ''' + build_pedidos_cabecera_optional_select_sql('CWI') + ''',
                     ps.OFs AS WO,
-                    ISNULL(ps.EX, '') AS Extender,
+                    ''' + build_extender_resolved_value_sql('ps') + ''' AS Extender,
                     ps.PriorityOrder,
-                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
-                    CASE 
-                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
-                        THEN ps.UnidadesPedidas - 2
-                        ELSE NULL
-                    END AS ExtenderQuantity
+''' + build_tb_cards_quantity_case_sql('ps', False, 'TieBracketQty') + ''',
+''' + build_tb_cards_quantity_case_sql('ps', True, 'TieExtenderQty') + ''',
+''' + build_extender_resolved_quantity_sql('ps') + '''
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
+                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
+''' + build_extender_line_apply_sql('ps') + '''
+''' + build_extender_derived_apply_sql('ps') + '''
+''' + build_extender_target_apply_sql('ps') + '''
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
                     ps.Sequence ASC
             '''
+            query_inicio = time.time()
             cursor.execute(query)
             rows = cursor.fetchall()
+            query_duracion = time.time() - query_inicio
             columns = [desc[0] for desc in cursor.description]
             result = []
             for row in rows:
@@ -1453,9 +2011,15 @@ def get_pedidos_secuenciados_c():
                 else:
                     item['IF'] = item.get('IF1','')
                 result.append(item)
+
+            enrich_inicio = time.time()
+            enrich_orders_with_mapex_quantities(result)
+            enrich_duracion = time.time() - enrich_inicio
+            set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
             cantidad = len(result)
+            VIEW_LOGGER.info(f"DB: {query_duracion:.3f}s | MAPEX: {enrich_duracion:.3f}s")
             
             if cantidad == 0:
                 VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
@@ -1483,6 +2047,13 @@ def get_pedidos_secuenciados_c_trazabilidad():
     """
     inicio = time.time()
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_c_trazabilidad ===")
+    cache_key = 'pedidos_secuenciados_c_trazabilidad'
+
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
+        VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_c_trazabilidad ===\n")
+        return jsonify(cached_result)
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1498,19 +2069,9 @@ def get_pedidos_secuenciados_c_trazabilidad():
                     ISNULL(ps.AssignedStockBeam,0) AS DoneQty,
                     ps.Assy,
                     ps.Beam,
-                    o.IF1,
-                    o.IF2,
-                    ps.OFs AS WO,
-                    ps.EX AS Extender,
-                    ps.PriorityOrder,
-                    -- Verificar si el Extender (EX) existe en OB.Omegas como ExtenderVariable
-                    CASE 
-                        WHEN EXISTS (SELECT 1 FROM OB.Omegas ox WHERE ox.ExtenderVariable = ps.EX)
-                        THEN ps.UnidadesPedidas - 2
-                        ELSE NULL
-                    END AS ExtenderQuantity
+                    pc.FechaEntrega AS DeliveryDate
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
-                LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
+                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
                   AND ps.UnidadesPedidas > ISNULL(ps.AssignedStockBeam,0)
                 ORDER BY 
@@ -1518,21 +2079,21 @@ def get_pedidos_secuenciados_c_trazabilidad():
                     ps.PriorityOrder ASC,
                     ps.Sequence ASC
             '''
+            query_inicio = time.time()
             cursor.execute(query)
             rows = cursor.fetchall()
+            query_duracion = time.time() - query_inicio
             columns = [desc[0] for desc in cursor.description]
-            result = []
-            for row in rows:
-                item = dict(zip(columns, row))
-                # IF: Si IF1 e IF2 no coinciden, mostrar ambos separados por /, si coinciden solo uno
-                if item.get('IF1') != item.get('IF2'):
-                    item['IF'] = f"{item.get('IF1','')}/{item.get('IF2','')}"
-                else:
-                    item['IF'] = item.get('IF1','')
-                result.append(item)
+            result = [dict(zip(columns, row)) for row in rows]
+
+            enrich_inicio = time.time()
+            enrich_clinching_orders_with_master_components(result)
+            enrich_duracion = time.time() - enrich_inicio
+            set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
             cantidad = len(result)
+            VIEW_LOGGER.info(f"DB: {query_duracion:.3f}s | MAPEX: {enrich_duracion:.3f}s")
             
             if cantidad == 0:
                 VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
@@ -1547,171 +2108,6 @@ def get_pedidos_secuenciados_c_trazabilidad():
         print(f"Error en /api/pedidos_secuenciados_c_trazabilidad: {e}")
         return jsonify({"error": "Error interno", "details": str(e)}), 500
 
-
-# ====================================================================================
-# ENDPOINT: OBTENER MATERIALES EXTENSORES DE UN PEDIDO
-# ====================================================================================
-@app.route('/api/obtener-extenders-pedido', methods=['GET'])
-@cross_origin()
-def obtener_extenders_pedido():
-    """
-    Para un pedido (numero_pedido), devuelve:
-    - bracket_type: valor de GRP_OMEGA_BRACKET_TYPE_TSD
-    - assy_extensores: lista de Assy en OB.Omegas para ese ExtenderVariable
-
-    El frontend solo necesita saber en qué Assy del pedido aplicar la regla Qty - 2.
-    """
-    try:
-        numero_pedido = request.args.get('numero_pedido')
-        if not numero_pedido:
-            return jsonify({"error": "Parámetro numero_pedido requerido"}), 400
-        
-        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-            
-            cursor = conn.cursor()
-            
-            # PASO 1: Confirmar que el pedido tiene GRP_HSK_TYPE = LH y obtener el bracket type.
-            cursor.execute("""
-                SELECT 
-                    characteristic_value,
-                    characteristic_name
-                FROM [OB].[pedidos_exportados]
-                WHERE sales_document = ?
-                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_TSD', 'GRP_HSK_TYPE')
-            """, (numero_pedido,))
-            
-            rows = cursor.fetchall()
-            bracket_type = None
-            es_lh = False
-            
-            for row in rows:
-                value, char_name = row[0], row[1]
-                if char_name == 'GRP_OMEGA_BRACKET_TYPE_TSD' and value:
-                    bracket_type = value.strip()
-                elif char_name == 'GRP_HSK_TYPE' and value and value.upper() == 'LH':
-                    es_lh = True
-            
-            # Si no hay bracket_type o no es LH, no hay extensores aplicables.
-            if not bracket_type or not es_lh:
-                return jsonify({
-                    "numero_pedido": numero_pedido,
-                    "es_lh": es_lh,
-                    "bracket_type": None,
-                    "assy_extensores": []
-                }), 200
-            
-            # PASO 2: Resolver qué Assy deben considerarse extensores para ese bracket.
-            cursor.execute("""
-                SELECT DISTINCT LTRIM(RTRIM(Assy))
-                FROM OB.Omegas
-                WHERE LTRIM(RTRIM(ExtenderVariable)) = ?
-                  AND LTRIM(RTRIM(Assy)) != ''
-            """, (bracket_type,))
-            
-            assy_extensores = [row[0] for row in cursor.fetchall()]
-            
-            return jsonify({
-                "numero_pedido": numero_pedido,
-                "es_lh": es_lh,
-                "bracket_type": bracket_type,
-                "assy_extensores": assy_extensores
-            }), 200
-    
-    except Exception as e:
-        logging.error(f"Error en /api/obtener-extenders-pedido: {str(e)}", exc_info=True)
-        return jsonify({"error": "Error interno", "details": str(e)}), 500
-
-# ====================================================================================
-# ENDPOINT: OBTENER MATERIAL QUE DEBE RESTAR CANTIDAD (GRP_OMEGA_BRACKET_TYPE)
-# ====================================================================================
-@app.route('/api/obtener-material-descuento-pedido', methods=['GET'])
-@cross_origin()
-def obtener_material_descuento_pedido():
-    """
-    Para un pedido (numero_pedido), devuelve los Assy candidatos que deben restar -2 en cantidad.
-    
-    Lógica:
-    1. Busca GRP_OMEGA_BRACKET_TYPE_HEAD en pedidos_exportados
-    2. Si está vacío, usa GRP_OMEGA_BRACKET_TYPE_TRAV
-    3. Busca en OB.Omegas qué Assy tiene ese valor en la columna OmegaType
-    4. Retorna todos los Assy candidatos para que el frontend compare con el Assy real de la tarjeta
-    """
-    try:
-        numero_pedido = request.args.get('numero_pedido')
-        if not numero_pedido:
-            return jsonify({"error": "Parámetro numero_pedido requerido"}), 400
-        
-        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
-            if conn is None:
-                return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
-            
-            cursor = conn.cursor()
-            
-            # PASO 1: Obtener GRP_OMEGA_BRACKET_TYPE_HEAD y GRP_OMEGA_BRACKET_TYPE_TRAV
-            cursor.execute("""
-                SELECT 
-                    characteristic_value,
-                    characteristic_name
-                FROM [OB].[pedidos_exportados]
-                WHERE sales_document = ?
-                  AND characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV', 'GRP_OMEGA_BRACKET_TYPE_TSD')
-            """, (numero_pedido,))
-            
-            rows = cursor.fetchall()
-            bracket_type_head = None
-            bracket_type_trav = None
-            bracket_type_tsd = None
-            
-            for row in rows:
-                value, char_name = row[0], row[1]
-                if char_name == 'GRP_OMEGA_BRACKET_TYPE_HEAD' and value:
-                    bracket_type_head = value.strip()
-                elif char_name == 'GRP_OMEGA_BRACKET_TYPE_TRAV' and value:
-                    bracket_type_trav = value.strip()
-                elif char_name == 'GRP_OMEGA_BRACKET_TYPE_TSD' and value:
-                    bracket_type_tsd = value.strip()
-            
-            # PASO 2: Resolver con prioridad HEAD > TRAV > TSD
-            bracket_type_efectivo = bracket_type_head if bracket_type_head else (bracket_type_trav if bracket_type_trav else bracket_type_tsd)
-            
-            if not bracket_type_efectivo:
-                # No hay bracket type para buscar, retornar vacío
-                return jsonify({
-                    "numero_pedido": numero_pedido,
-                    "bracket_type_head": bracket_type_head,
-                    "bracket_type_trav": bracket_type_trav,
-                    "bracket_type_tsd": bracket_type_tsd,
-                    "assy_descuento": None,
-                    "assy_descuento_list": []
-                }), 200
-            
-            # PASO 3: Buscar qué Assy en OB.Omegas tiene ese OmegaType
-            cursor.execute("""
-                SELECT DISTINCT LTRIM(RTRIM(Assy))
-                FROM OB.Omegas
-                WHERE LTRIM(RTRIM(OmegaType)) = ?
-                  AND LTRIM(RTRIM(Assy)) != ''
-            """, (bracket_type_efectivo,))
-            
-            assy_resultados = [row[0].strip() for row in cursor.fetchall() if row[0] and row[0].strip()]
-            
-            return jsonify({
-                "numero_pedido": numero_pedido,
-                "bracket_type_head": bracket_type_head,
-                "bracket_type_trav": bracket_type_trav,
-                "bracket_type_tsd": bracket_type_tsd,
-                "bracket_type_efectivo": bracket_type_efectivo,
-                "assy_descuento": assy_resultados[0] if assy_resultados else None,
-                "assy_descuento_list": assy_resultados
-            }), 200
-    
-    except Exception as e:
-        logging.error(f"Error en /api/obtener-material-descuento-pedido: {str(e)}", exc_info=True)
-        return jsonify({"error": "Error interno", "details": str(e)}), 500
-
-    
 # ====================================================================================
 # ENDPOINT PARA PEDIDOS SECUENCIADOS W (para pantalla OB_W)
 # ====================================================================================
@@ -1725,6 +2121,13 @@ def get_pedidos_secuenciados_w():
     """
     inicio = time.time()
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_secuenciados_w ===")
+    cache_key = 'pedidos_secuenciados_w'
+
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
+        VIEW_LOGGER.info("=== FIN: GET /api/pedidos_secuenciados_w ===\n")
+        return jsonify(cached_result)
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1742,38 +2145,40 @@ def get_pedidos_secuenciados_w():
                     ps.Beam,
                     o.IF1,
                     o.IF2,
+                    ISNULL(ps.TB, '') AS TieBracket,
+                    pc.FechaEntrega AS DeliveryDate,
                     ps.OFs AS WO,
-                    ps.EX AS Extender,
-                    ps.PriorityOrder,
-                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
-                    CASE 
-                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
-                        THEN ps.UnidadesPedidas - 2
-                        ELSE NULL
-                    END AS ExtenderQuantity
+                    ''' + build_extender_resolved_value_sql('ps') + ''' AS Extender,
+''' + build_tb_cards_quantity_case_sql('ps', False, 'TieBracketQty') + ''',
+''' + build_tb_cards_quantity_case_sql('ps', True, 'TieExtenderQty') + ''',
+''' + build_extender_resolved_quantity_sql('ps') + '''
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
+                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
                 LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
+''' + build_extender_line_apply_sql('ps') + '''
+''' + build_extender_derived_apply_sql('ps') + '''
+''' + build_extender_target_apply_sql('ps') + '''
                 WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
                     ps.Sequence ASC
             '''
+            query_inicio = time.time()
             cursor.execute(query)
             rows = cursor.fetchall()
+            query_duracion = time.time() - query_inicio
             columns = [desc[0] for desc in cursor.description]
-            result = []
-            for row in rows:
-                item = dict(zip(columns, row))
-                # IF: Si IF1 e IF2 no coinciden, mostrar ambos separados por /, si coinciden solo uno
-                if item.get('IF1') != item.get('IF2'):
-                    item['IF'] = f"{item.get('IF1','')}/{item.get('IF2','')}"
-                else:
-                    item['IF'] = item.get('IF1','')
-                result.append(item)
+            result = [dict(zip(columns, row)) for row in rows]
+
+            enrich_inicio = time.time()
+            enrich_orders_with_mapex_quantities(result)
+            enrich_duracion = time.time() - enrich_inicio
+            set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
             cantidad = len(result)
+            VIEW_LOGGER.info(f"DB: {query_duracion:.3f}s | MAPEX: {enrich_duracion:.3f}s")
             
             if cantidad == 0:
                 VIEW_LOGGER.warning(f"⚠️ ADVERTENCIA: Vista retornó 0 registros | Duración: {duracion:.3f}s")
@@ -1798,11 +2203,19 @@ def get_pedidos_tb():
     Devuelve los pedidos secuenciados que tengan TB (Tie Bracket) asignado.
     Usa la vista wrapper OB.V_PedidosSummary_Secuenciados_Full que ya incluye EX y TB.
     Esta tarjeta es exclusiva para pedidos con TB para que no se solapen con OB_C/OB_W.
-    Muestra: Sequence, SalesOrder, Qty, TieBracket, Extender, ExtenderQuantity
+    Muestra: Sequence, SalesOrder, Qty, TieBracket, Extender, ExtenderQuantity.
+    Devuelve solo las filas objetivo: por lógica de TB y/o por lógica de extensor.
     Ordenados por PriorityOrder primero y luego por Sequence.
     """
     inicio = time.time()
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_tb ===")
+    cache_key = 'pedidos_tb'
+
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
+        VIEW_LOGGER.info("=== FIN: GET /api/pedidos_tb ===\n")
+        return jsonify(cached_result)
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1814,19 +2227,19 @@ def get_pedidos_tb():
                 SELECT 
                     ps.Sequence AS Sequence,
                     ps.NumeroPedido AS SalesOrder,
-                    ps.UnidadesPedidas AS Qty,
+''' + build_tb_cards_quantity_case_sql('ps', False) + ''',
                     ps.Assy AS Assy,
                     ISNULL(ps.TB, '') AS TieBracket,
-                    ISNULL(ps.EX, '') AS Extender,
+                                        pc.FechaEntrega AS DeliveryDate,
+''' + build_extender_value_case_sql('ps') + ''' AS Extender,
                     ps.PriorityOrder,
-                    -- Si la vista ya detecta EX, la cantidad de extensores es Qty - 2.
-                    CASE 
-                        WHEN ps.EX IS NOT NULL AND LTRIM(RTRIM(ps.EX)) != ''
-                        THEN ps.UnidadesPedidas - 2
-                        ELSE NULL
-                    END AS ExtenderQuantity
+''' + build_tb_cards_quantity_case_sql('ps', True) + '''
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
+                                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
                 WHERE ps.TB IS NOT NULL AND LTRIM(RTRIM(ps.TB)) != ''
+                  AND (
+''' + build_tb_cards_quantity_predicate_sql('ps') + '''
+                  )
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -1836,6 +2249,7 @@ def get_pedidos_tb():
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             result = [dict(zip(columns, row)) for row in rows]
+            set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
             cantidad = len(result)
@@ -1865,6 +2279,13 @@ def get_pedidos_picking():
     """
     inicio = time.time()
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_picking ===")
+    cache_key = 'pedidos_picking'
+
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
+        VIEW_LOGGER.info("=== FIN: GET /api/pedidos_picking ===\n")
+        return jsonify(cached_result)
     
     try:
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -1880,15 +2301,22 @@ def get_pedidos_picking():
                     ps.Assy,
                     ps.Beam,
                     ps.FechaEntrega AS DeliveryDate,
-                    ps.Picking,         -- <--- Añade este campo
-                    ps.UniValMapex      -- <--- Y este campo
+                    ps.Picking,
+                    ps.UniValMapex,
+                    ISNULL(pc.CWT, '') AS CWT,
+                    ISNULL(pc.DS, '') AS MS,
+                    ''' + build_pedidos_cabecera_optional_select_sql('CWI') + ''',
+                    ISNULL(o.[W/C], '') AS WCType
                 FROM OB.V_PedidosSummary_Secuenciados ps WITH (NOLOCK)
+                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
+                LEFT JOIN OB.Omegas o WITH (NOLOCK) ON o.Assy = ps.Assy
                 WHERE UPPER(LTRIM(RTRIM(ps.Picking))) = 'YES'
             '''
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
             result = [dict(zip(columns, row)) for row in rows]
+            set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
             cantidad = len(result)
@@ -1937,19 +2365,37 @@ def manual_full_sync():
     Endpoint para actualización manual completa - trae pedidos de 1 día atrás
     """
     print(f"[MANUAL SYNC] Inicio actualización manual completa - {datetime.now().strftime('%H:%M:%S')}")
-    
-    try:
-        resultado_sync = sync_pending_orders(lookback_days=1, log_prefix='[MANUAL SYNC]')
 
-        return jsonify({
-            "message": "Actualización manual completada exitosamente",
-            "cabeceras_procesadas": resultado_sync['cabeceras_procesadas'],
-            "lineas_procesadas": resultado_sync['lineas_procesadas'],
-            "periodo": f"Desde {resultado_sync['periodo_desde']}"
-        }), 200
-    except Exception as e:
-        print(f"[MANUAL SYNC] ERROR GENERAL: {str(e)}")
-        return jsonify({"error": f"Error interno: {str(e)}"}), 500
+    with MANUAL_SYNC_STATE_LOCK:
+        if MANUAL_SYNC_STATE['running']:
+            return jsonify({
+                'message': 'La actualización manual ya está en curso',
+                **_manual_sync_state_response(),
+            }), 202
+
+        MANUAL_SYNC_STATE['running'] = True
+        MANUAL_SYNC_STATE['started_at'] = datetime.now().isoformat(timespec='seconds')
+        MANUAL_SYNC_STATE['finished_at'] = None
+        MANUAL_SYNC_STATE['result'] = None
+        MANUAL_SYNC_STATE['error'] = None
+
+        worker = threading.Thread(
+            target=run_manual_full_sync_background,
+            daemon=True,
+            name='ManualFullSync',
+        )
+        worker.start()
+
+    return jsonify({
+        'message': 'Actualización manual iniciada en segundo plano',
+        **_manual_sync_state_response(),
+    }), 202
+
+
+@app.route('/api/sync/manual-full/status', methods=['GET'])
+@cross_origin()
+def manual_full_sync_status():
+    return jsonify(_manual_sync_state_response()), 200
 
 # ====================================================================================
 # ENDPOINT PARA ACTUALIZACIÓN INCREMENTAL DE PEDIDOS MODIFICADOS
@@ -1961,103 +2407,96 @@ def incremental_sync():
     Endpoint para actualización incremental - solo pedidos modificados recientemente
     """
     try:
-        # Reponer cabeceras/líneas pendientes ausentes para evitar pedidos futuros sin importar.
-        try:
-            sync_pending_orders(lookback_days=1, log_prefix='[INCREMENTAL SYNC]')
-        except Exception as e:
-            print(f"[INCREMENTAL SYNC] ADVERTENCIA reponiendo cabeceras pendientes: {e}")
+        with PEDIDOS_DB_LOCK:
+            # Reponer cabeceras/líneas pendientes ausentes para evitar pedidos futuros sin importar.
+            try:
+                sync_pending_orders(lookback_days=1, log_prefix='[INCREMENTAL SYNC]')
+            except Exception as e:
+                print(f"[INCREMENTAL SYNC] ADVERTENCIA reponiendo cabeceras pendientes: {e}")
 
-        # Actualizar UniValMapex de TODOS los pedidos secuenciados desde MAPEX
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("""
-                    SELECT ps.NumeroPedido, ps.Assy, pl.ID_PedidoLinea_Externa
-                    FROM OB.PedidosSecuenciados ps
-                    INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
-                    INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
-                """)
-                pedidos_secuenciados = cursor_main.fetchall()
-                updates_univalmapex = []
-                with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                    cursor_cz = conn_cz.cursor()
-                    for pedido in pedidos_secuenciados:
-                        numero_pedido = pedido.NumeroPedido
+            # Actualizar UniValMapex de TODOS los pedidos secuenciados desde MAPEX
+            try:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
+                    cursor_main.execute("""
+                        SELECT ps.NumeroPedido, ps.Assy, pl.ID_PedidoLinea_Externa
+                        FROM OB.PedidosSecuenciados ps
+                        INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
+                        INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
+                    """)
+                    pedidos_secuenciados = cursor_main.fetchall()
+                    updates_univalmapex = []
+                    with ConexionODBCCZ(database='mapexbp') as conn_cz:
+                        cursor_cz = conn_cz.cursor()
+                        for pedido in pedidos_secuenciados:
+                            numero_pedido = pedido.NumeroPedido
+                            assy = pedido.Assy
+                            id_pedido_linea_externa = pedido.ID_PedidoLinea_Externa
+                            cursor_cz.execute("""
+                                SELECT TOP 1 B.UniValMapex
+                                FROM his_wam_pedido_cliente A
+                                JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
+                                JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
+                                WHERE A.NumeroPedido = ? AND C.Cod_producto = ?
+                            """, (numero_pedido, assy))
+                            row = cursor_cz.fetchone()
+                            if row:
+                                updates_univalmapex.append((row.UniValMapex, id_pedido_linea_externa))
+                    if updates_univalmapex:
+                        cursor_main.executemany("UPDATE OB.PedidosLineas SET UniValMapex = ? WHERE ID_PedidoLinea_Externa = ?", updates_univalmapex)
+            except Exception:
+                pass
+
+            # Recalcular AssignedStock para TODOS los pedidos secuenciados
+            try:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
+                    cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
+                    stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
+                    cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
+                    stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
+                    cursor_main.execute("""
+                        SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam, ps.PriorityOrder
+                        FROM OB.PedidosSecuenciados ps
+                        INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
+                        INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
+                        WHERE ISNULL(pl.UniValMapex, 0) < pl.UnidadesPedidas
+                        ORDER BY
+                            CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                            ps.PriorityOrder ASC,
+                            ps.SequenceValue ASC
+                    """)
+                    pedidos_a_actualizar = cursor_main.fetchall()
+                    updates_necesarios = []
+                    for pedido in pedidos_a_actualizar:
                         assy = pedido.Assy
-                        id_pedido_linea_externa = pedido.ID_PedidoLinea_Externa
-                        cursor_cz.execute("""
-                            SELECT TOP 1 B.UniValMapex
-                            FROM his_wam_pedido_cliente A
-                            JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
-                            JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
-                            WHERE A.NumeroPedido = ? AND C.Cod_producto = ?
-                        """, (numero_pedido, assy))
-                        row = cursor_cz.fetchone()
-                        if row:
-                            updates_univalmapex.append((row.UniValMapex, id_pedido_linea_externa))
-                if updates_univalmapex:
-                    cursor_main.executemany("UPDATE OB.PedidosLineas SET UniValMapex = ? WHERE ID_PedidoLinea_Externa = ?", updates_univalmapex)
-        except Exception as e:
-            pass
+                        beam = pedido.Beam
+                        stock_actual_para_assy = stock_disponible.get(assy, 0)
+                        stock_actual_para_beam = stock_beams.get(beam, 0) if beam else 0
+                        cantidad_necesaria = (pedido.UnidadesPedidas or 0) - (pedido.UniValMapex or 0)
+                        cantidad_necesaria_beam = pedido.UnidadesPedidas or 0
 
-        # Recalcular AssignedStock para TODOS los pedidos secuenciados
-        try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                cursor_main = conn_main.cursor()
-                
-                # Obtener stock de Assy (nueva arquitectura: Stock_Omegas_New)
-                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
-                stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                
-                # Obtener stock de Beam
-                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
-                stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                
-                cursor_main.execute("""
-                    SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam, ps.PriorityOrder
-                    FROM OB.PedidosSecuenciados ps
-                    INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
-                    INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
-                    WHERE ISNULL(pl.UniValMapex, 0) < pl.UnidadesPedidas
-                    ORDER BY
-                        CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                        ps.PriorityOrder ASC,
-                        ps.SequenceValue ASC
-                """)
-                pedidos_a_actualizar = cursor_main.fetchall()
-                updates_necesarios = []
-                for pedido in pedidos_a_actualizar:
-                    assy = pedido.Assy
-                    beam = pedido.Beam
-                    stock_actual_para_assy = stock_disponible.get(assy, 0)
-                    stock_actual_para_beam = stock_beams.get(beam, 0) if beam else 0
-                    cantidad_necesaria = (pedido.UnidadesPedidas or 0) - (pedido.UniValMapex or 0)
-                    cantidad_necesaria_beam = pedido.UnidadesPedidas or 0  # Para Beam: no restamos UniValMapex
-                    
-                    # Calcular AssignedStock (Assy)
-                    nuevo_stock_asignado_assy = 0
-                    if cantidad_necesaria > 0 and stock_actual_para_assy > 0:
-                        nuevo_stock_asignado_assy = min(cantidad_necesaria, stock_actual_para_assy)
-                        stock_disponible[assy] = max(0, stock_actual_para_assy - nuevo_stock_asignado_assy)
-                    
-                    # Calcular AssignedStockBeam (SIN restar UniValMapex)
-                    nuevo_stock_asignado_beam = 0
-                    if beam and cantidad_necesaria_beam > 0 and stock_actual_para_beam > 0:
-                        nuevo_stock_asignado_beam = min(cantidad_necesaria_beam, stock_actual_para_beam)
-                        stock_beams[beam] = max(0, stock_actual_para_beam - nuevo_stock_asignado_beam)
-                    
-                    
-                    viejo_assy = pedido.AssignedStock if pedido.AssignedStock is not None else 0
-                    viejo_beam = pedido.AssignedStockBeam if pedido.AssignedStockBeam is not None else 0
-                    
-                    if nuevo_stock_asignado_assy != viejo_assy or nuevo_stock_asignado_beam != viejo_beam:
-                        updates_necesarios.append((nuevo_stock_asignado_assy, nuevo_stock_asignado_beam, pedido.NumeroPedido, pedido.Assy))
-                
-                if updates_necesarios:
-                    sql_update = "UPDATE OB.PedidosSecuenciados SET AssignedStock = ?, AssignedStockBeam = ? WHERE NumeroPedido = ? AND Assy = ?"
-                    cursor_main.executemany(sql_update, updates_necesarios)
-        except Exception as e:
-            pass
+                        nuevo_stock_asignado_assy = 0
+                        if cantidad_necesaria > 0 and stock_actual_para_assy > 0:
+                            nuevo_stock_asignado_assy = min(cantidad_necesaria, stock_actual_para_assy)
+                            stock_disponible[assy] = max(0, stock_actual_para_assy - nuevo_stock_asignado_assy)
+
+                        nuevo_stock_asignado_beam = 0
+                        if beam and cantidad_necesaria_beam > 0 and stock_actual_para_beam > 0:
+                            nuevo_stock_asignado_beam = min(cantidad_necesaria_beam, stock_actual_para_beam)
+                            stock_beams[beam] = max(0, stock_actual_para_beam - nuevo_stock_asignado_beam)
+
+                        viejo_assy = pedido.AssignedStock if pedido.AssignedStock is not None else 0
+                        viejo_beam = pedido.AssignedStockBeam if pedido.AssignedStockBeam is not None else 0
+
+                        if nuevo_stock_asignado_assy != viejo_assy or nuevo_stock_asignado_beam != viejo_beam:
+                            updates_necesarios.append((nuevo_stock_asignado_assy, nuevo_stock_asignado_beam, pedido.NumeroPedido, pedido.Assy))
+
+                    if updates_necesarios:
+                        sql_update = "UPDATE OB.PedidosSecuenciados SET AssignedStock = ?, AssignedStockBeam = ? WHERE NumeroPedido = ? AND Assy = ?"
+                        cursor_main.executemany(sql_update, updates_necesarios)
+            except Exception:
+                pass
 
         return jsonify({
             "message": "Actualización incremental completada exitosamente",
@@ -2492,7 +2931,11 @@ def servir_pantalla(nombre_archivo):
     ruta_completa = os.path.join(RUTA_PANTALLAS, nombre_archivo)
     if not os.path.exists(ruta_completa):
         return f"Archivo no encontrado: {nombre_archivo}", 404
-    return send_from_directory(RUTA_PANTALLAS, nombre_archivo)
+    response = send_from_directory(RUTA_PANTALLAS, nombre_archivo)
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 def buscar_usuario_cz(cursor, columnas_sql, usuario):
@@ -2548,6 +2991,401 @@ def verificar_password_usuario(stored_password, plain_password):
 # ====================================================================================
 # ENDPOINTS DE LA API
 # ====================================================================================
+def build_extender_line_apply_sql(order_alias='ps', apply_alias='extline'):
+    """Recupera el EX real desde las líneas del pedido cuando la cabecera no lo materializó."""
+    return f"""
+                OUTER APPLY (
+                    SELECT TOP 1
+                        LTRIM(RTRIM(pl.Cod_Producto_Externo)) AS LineExtender
+                    FROM OB.PedidosCabecera pc WITH (NOLOCK)
+                    INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                        ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                    INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                    WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                      AND LTRIM(RTRIM(o_line.[W/C])) = 'EX'
+                    ORDER BY pl.UnidadesPedidas DESC, pl.Cod_Producto_Externo ASC
+                ) {apply_alias}
+    """
+
+
+def build_extender_derived_apply_sql(order_alias='ps', apply_alias='extderived'):
+    """Calcula una sola vez el extensor derivado desde LH/TSD para reutilizarlo en la query."""
+    return f"""
+                OUTER APPLY (
+                    SELECT TOP 1
+                        LTRIM(RTRIM(pe_tsd.characteristic_value)) AS DerivedExtender
+                    FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                    INNER JOIN OB.pedidos_exportados pe_tsd WITH (NOLOCK)
+                        ON LTRIM(RTRIM(pe_tsd.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
+                    INNER JOIN OB.Omegas o_tsd WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_tsd.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                       AND LTRIM(RTRIM(o_tsd.ExtenderVariable)) = LTRIM(RTRIM(pe_tsd.characteristic_value))
+                                        WHERE LTRIM(RTRIM(pe_lh.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                      AND pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                      AND UPPER(LTRIM(RTRIM(pe_lh.characteristic_value))) = 'LH'
+                      AND pe_tsd.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                      AND pe_tsd.characteristic_value IS NOT NULL
+                      AND LTRIM(RTRIM(pe_tsd.characteristic_value)) <> ''
+                                            AND NOT EXISTS (
+                                                    SELECT 1
+                                                    FROM OB.PedidosCabecera pc WITH (NOLOCK)
+                                                    INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                                                            ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                                                    INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                                                            ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                                                    WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                                                        AND LTRIM(RTRIM(o_line.[W/C])) = 'EX'
+                                            )
+                ) {apply_alias}
+    """
+
+
+def build_extender_target_apply_sql(order_alias='ps', apply_alias='exttarget'):
+    """Identifica una sola vez si la fila actual es la fila objetivo para ExtenderQty."""
+    return f"""
+                OUTER APPLY (
+                    SELECT TOP 1 1 AS IsTargetAssy
+                    FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                    INNER JOIN OB.pedidos_exportados pe WITH (NOLOCK)
+                        ON LTRIM(RTRIM(pe.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
+                    INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                        ON (
+                            pe.characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                            AND LTRIM(RTRIM(o_target.OmegaType)) = LTRIM(RTRIM(pe.characteristic_value))
+                        )
+                        OR (
+                            pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                            AND LTRIM(RTRIM(o_target.ExtenderVariable)) = LTRIM(RTRIM(pe.characteristic_value))
+                        )
+                    WHERE LTRIM(RTRIM(pe_lh.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                      AND pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                      AND UPPER(LTRIM(RTRIM(pe_lh.characteristic_value))) = 'LH'
+                      AND pe.characteristic_value IS NOT NULL
+                      AND LTRIM(RTRIM(pe.characteristic_value)) <> ''
+                      AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                ) {apply_alias}
+    """
+
+
+def build_extender_resolved_value_sql(order_alias='ps', line_alias='extline', derived_alias='extderived'):
+    """Devuelve EX persistido, EX real en líneas o el extensor derivado ya calculado por OUTER APPLY."""
+    return f"COALESCE(NULLIF(LTRIM(RTRIM({order_alias}.EX)), ''), {line_alias}.LineExtender, {derived_alias}.DerivedExtender)"
+
+
+def build_extender_resolved_quantity_sql(order_alias='ps', line_alias='extline', derived_alias='extderived', target_alias='exttarget', alias_name='ExtenderQuantity'):
+    """Devuelve la cantidad de extensor reutilizando el extensor derivado y la fila objetivo."""
+    resolved_value = build_extender_resolved_value_sql(order_alias, line_alias, derived_alias)
+    return f"""
+                    CASE
+                        WHEN {resolved_value} IS NULL THEN NULL
+                        WHEN {target_alias}.IsTargetAssy = 1 THEN CASE
+                            WHEN {order_alias}.UnidadesPedidas > 2 THEN {order_alias}.UnidadesPedidas - 2
+                            ELSE 0
+                        END
+                        ELSE NULL
+                    END AS {alias_name}
+    """
+
+
+def build_sequenced_orders_extender_query(assembly_value, done_qty_sql, extra_where_sql=''):
+    """Consulta set-based para tarjetas C/W evitando subconsultas correlacionadas repetidas."""
+    extra_where_clause = ''
+    if extra_where_sql and extra_where_sql.strip():
+        extra_where_clause = f"\n                  AND {extra_where_sql.strip()}"
+
+    cwi_select_sql = build_pedidos_cabecera_optional_select_sql('CWI')
+
+    return f'''
+                WITH base AS (
+                    SELECT
+                        ps.Sequence AS Sequence,
+                        ps.NumeroPedido AS SalesOrder,
+                        ps.NumeroPedido AS NumeroPedido,
+                        ps.UnidadesPedidas AS Qty,
+                        ps.UnidadesPedidas AS UnidadesPedidas,
+                        {done_qty_sql} AS DoneQty,
+                        ps.Assy,
+                        ps.Beam,
+                        o.IF1,
+                        o.IF2,
+                        ISNULL(pc.CWT, '') AS CWT,
+                        ISNULL(pc.DS, '') AS MS,
+                        {cwi_select_sql},
+                        ps.OFs AS WO,
+                        ps.EX AS RawEX,
+                        ps.PriorityOrder
+                    FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
+                    LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
+                    LEFT JOIN OB.Omegas o WITH (NOLOCK) ON ps.Assy = o.Assy
+                    WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = '{assembly_value}'{extra_where_clause}
+                ),
+                extender_value AS (
+                    SELECT DISTINCT
+                        b.NumeroPedido,
+                        b.Assy,
+                        pe_tsd.characteristic_value AS DerivedExtender
+                    FROM base b
+                    INNER JOIN OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                        ON pe_lh.sales_document = b.NumeroPedido
+                    INNER JOIN OB.pedidos_exportados pe_tsd WITH (NOLOCK)
+                        ON pe_tsd.sales_document = pe_lh.sales_document
+                    INNER JOIN OB.Omegas o_tsd WITH (NOLOCK)
+                        ON o_tsd.Assy = b.Assy
+                       AND o_tsd.ExtenderVariable = pe_tsd.characteristic_value
+                    WHERE pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                      AND pe_lh.characteristic_value = 'LH'
+                      AND pe_tsd.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                      AND pe_tsd.characteristic_value IS NOT NULL
+                      AND pe_tsd.characteristic_value <> ''
+                ),
+                extender_target AS (
+                    SELECT DISTINCT
+                        b.NumeroPedido,
+                        b.Assy,
+                        1 AS IsTargetAssy
+                    FROM base b
+                    INNER JOIN OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                        ON pe_lh.sales_document = b.NumeroPedido
+                    INNER JOIN OB.pedidos_exportados pe WITH (NOLOCK)
+                        ON pe.sales_document = pe_lh.sales_document
+                    INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                        ON (
+                            pe.characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                            AND o_target.OmegaType = pe.characteristic_value
+                        )
+                        OR (
+                            pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                            AND o_target.ExtenderVariable = pe.characteristic_value
+                        )
+                    WHERE pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                      AND pe_lh.characteristic_value = 'LH'
+                      AND pe.characteristic_value IS NOT NULL
+                      AND pe.characteristic_value <> ''
+                      AND o_target.Assy = b.Assy
+                )
+                SELECT
+                    b.Sequence,
+                    b.SalesOrder,
+                    b.Qty,
+                    b.DoneQty,
+                    b.Assy,
+                    b.Beam,
+                    b.IF1,
+                    b.IF2,
+                    b.CWT,
+                    b.MS,
+                    b.CWI,
+                    b.WO,
+                    COALESCE(NULLIF(b.RawEX, ''), ev.DerivedExtender) AS Extender,
+                    b.PriorityOrder,
+                    CASE
+                        WHEN COALESCE(NULLIF(b.RawEX, ''), ev.DerivedExtender) IS NULL THEN NULL
+                        WHEN et.IsTargetAssy = 1 THEN CASE
+                            WHEN b.UnidadesPedidas > 2 THEN b.UnidadesPedidas - 2
+                            ELSE 0
+                        END
+                        ELSE NULL
+                    END AS ExtenderQuantity
+                FROM base b
+                LEFT JOIN extender_value ev
+                    ON ev.NumeroPedido = b.NumeroPedido
+                   AND ev.Assy = b.Assy
+                LEFT JOIN extender_target et
+                    ON et.NumeroPedido = b.NumeroPedido
+                   AND et.Assy = b.Assy
+                ORDER BY
+                    CASE WHEN b.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                    b.PriorityOrder ASC,
+                    b.Sequence ASC
+    '''
+
+
+def build_extender_value_case_sql(order_alias='ps'):
+    """Construye la expresión SQL de extensor usando EX persistido, EX en líneas o derivándolo desde LH/TSD."""
+    return f"""
+                    COALESCE(
+                        NULLIF(LTRIM(RTRIM({order_alias}.EX)), ''),
+                        (
+                            SELECT TOP 1 LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                            FROM OB.PedidosCabecera pc WITH (NOLOCK)
+                            INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                                ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                            INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                                ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                            WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND LTRIM(RTRIM(o_line.[W/C])) = 'EX'
+                            ORDER BY pl.UnidadesPedidas DESC, pl.Cod_Producto_Externo ASC
+                        ),
+                        (
+                            SELECT TOP 1 LTRIM(RTRIM(pe_tsd.characteristic_value))
+                            FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                            INNER JOIN OB.pedidos_exportados pe_tsd WITH (NOLOCK)
+                                ON LTRIM(RTRIM(pe_tsd.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
+                            INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                                ON LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                               AND LTRIM(RTRIM(o_target.ExtenderVariable)) = LTRIM(RTRIM(pe_tsd.characteristic_value))
+                            WHERE LTRIM(RTRIM(pe_lh.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                              AND UPPER(LTRIM(RTRIM(pe_lh.characteristic_value))) = 'LH'
+                              AND pe_tsd.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                              AND pe_tsd.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe_tsd.characteristic_value)) <> ''
+                                                            AND NOT EXISTS (
+                                                                    SELECT 1
+                                                                    FROM OB.PedidosCabecera pc WITH (NOLOCK)
+                                                                    INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                                                                            ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                                                                    INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                                                                            ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                                                                    WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                                                                        AND LTRIM(RTRIM(o_line.[W/C])) = 'EX'
+                                                            )
+                        )
+                    )
+    """
+
+
+def build_extender_quantity_case_sql(order_alias='ps'):
+    """Construye la expresión SQL que identifica el Assy correcto para descontar 2 unidades."""
+    return f"""
+                    CASE
+                        WHEN {build_extender_value_case_sql(order_alias).strip()} IS NULL THEN NULL
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                            INNER JOIN OB.pedidos_exportados pe WITH (NOLOCK)
+                                ON LTRIM(RTRIM(pe.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
+                            INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                                ON (
+                                    pe.characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                                    AND LTRIM(RTRIM(o_target.OmegaType)) = LTRIM(RTRIM(pe.characteristic_value))
+                                )
+                                OR (
+                                    pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                                    AND LTRIM(RTRIM(o_target.ExtenderVariable)) = LTRIM(RTRIM(pe.characteristic_value))
+                                )
+                                                        WHERE LTRIM(RTRIM(pe_lh.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                                                            AND pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                                                            AND UPPER(LTRIM(RTRIM(pe_lh.characteristic_value))) = 'LH'
+                              AND pe.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe.characteristic_value)) <> ''
+                              AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                        )
+                        THEN CASE
+                            WHEN {order_alias}.UnidadesPedidas > 2 THEN {order_alias}.UnidadesPedidas - 2
+                            ELSE 0
+                        END
+                        ELSE NULL
+                    END AS ExtenderQuantity
+    """
+
+
+def build_extender_quantity_value_case_sql(order_alias='ps'):
+    """Construye la expresión SQL de cantidad de extensor sin alias para reutilizarla."""
+    return f"""
+                    CASE
+                        WHEN {build_extender_value_case_sql(order_alias).strip()} IS NULL THEN NULL
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
+                            INNER JOIN OB.pedidos_exportados pe WITH (NOLOCK)
+                                ON LTRIM(RTRIM(pe.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
+                            INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                                ON (
+                                    pe.characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                                    AND LTRIM(RTRIM(o_target.OmegaType)) = LTRIM(RTRIM(pe.characteristic_value))
+                                )
+                                OR (
+                                    pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                                    AND LTRIM(RTRIM(o_target.ExtenderVariable)) = LTRIM(RTRIM(pe.characteristic_value))
+                                )
+                                                        WHERE LTRIM(RTRIM(pe_lh.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                                                            AND pe_lh.characteristic_name = 'GRP_HSK_TYPE'
+                                                            AND UPPER(LTRIM(RTRIM(pe_lh.characteristic_value))) = 'LH'
+                              AND pe.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe.characteristic_value)) <> ''
+                              AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                        )
+                        THEN CASE
+                            WHEN {order_alias}.UnidadesPedidas > 2 THEN {order_alias}.UnidadesPedidas - 2
+                            ELSE 0
+                        END
+                        ELSE NULL
+                    END
+    """
+
+
+def build_tie_bracket_target_quantity_value_sql(order_alias='ps'):
+    """Construye la expresión SQL de cantidad TB sin alias para reutilizarla."""
+    return f"""
+                    CASE
+                        WHEN {order_alias}.TB IS NULL OR LTRIM(RTRIM({order_alias}.TB)) = '' THEN NULL
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM OB.pedidos_exportados pe_opt WITH (NOLOCK)
+                            INNER JOIN OB.pedidos_exportados pe_type WITH (NOLOCK)
+                                ON LTRIM(RTRIM(pe_type.sales_document)) = LTRIM(RTRIM(pe_opt.sales_document))
+                            INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                                ON LTRIM(RTRIM(o_target.OmegaType)) = LTRIM(RTRIM(pe_type.characteristic_value))
+                            WHERE LTRIM(RTRIM(pe_opt.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_opt.characteristic_name = 'GRP_TIE_BRACKET_OPT'
+                              AND UPPER(LTRIM(RTRIM(pe_opt.characteristic_value))) = 'Y'
+                              AND pe_type.characteristic_name = 'GRP_TIE_BRACKET_TYPE'
+                              AND pe_type.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe_type.characteristic_value)) <> ''
+                              AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM({order_alias}.Assy))
+                        )
+                        THEN (
+                            SELECT TOP 1 TRY_CAST(LTRIM(RTRIM(pe_qty.characteristic_value)) AS INT)
+                            FROM OB.pedidos_exportados pe_qty WITH (NOLOCK)
+                            WHERE LTRIM(RTRIM(pe_qty.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_qty.characteristic_name = 'GRP_TIE_BRACKET_QTY'
+                              AND pe_qty.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe_qty.characteristic_value)) <> ''
+                        )
+                        ELSE NULL
+                    END
+    """
+
+
+def build_tie_bracket_fallback_quantity_value_sql(order_alias='ps'):
+    """Construye el fallback 1/1 para TB cuando no existan variables o OPT sea N."""
+    return f"""
+                    CASE
+                        WHEN {order_alias}.TB IS NULL OR LTRIM(RTRIM({order_alias}.TB)) = '' THEN NULL
+                        WHEN EXISTS (
+                            SELECT 1
+                            FROM OB.pedidos_exportados pe_opt_y WITH (NOLOCK)
+                            WHERE LTRIM(RTRIM(pe_opt_y.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_opt_y.characteristic_name = 'GRP_TIE_BRACKET_OPT'
+                              AND UPPER(LTRIM(RTRIM(pe_opt_y.characteristic_value))) = 'Y'
+                        ) THEN NULL
+                        WHEN {build_extender_quantity_value_case_sql(order_alias).strip()} IS NOT NULL THEN 1
+                        ELSE NULL
+                    END
+    """
+
+
+def build_tb_cards_quantity_case_sql(order_alias='ps', require_extender=False, alias_name=None):
+    """Construye la cantidad a mostrar en tarjetas TB combinando objetivo TB y objetivo de extensor."""
+    alias_name = alias_name or ('ExtenderQuantity' if require_extender else 'Qty')
+    return f"""
+                    COALESCE(
+                        {build_tie_bracket_target_quantity_value_sql(order_alias).strip()},
+                        {build_tie_bracket_fallback_quantity_value_sql(order_alias).strip()}
+                    ) AS {alias_name}
+    """
+
+
+def build_tb_cards_quantity_predicate_sql(order_alias='ps'):
+    """Devuelve el predicado SQL para quedarnos solo con filas objetivo en tarjetas TB."""
+    return f"""
+                        {build_tie_bracket_target_quantity_value_sql(order_alias).strip()} IS NOT NULL
+                        OR {build_tie_bracket_fallback_quantity_value_sql(order_alias).strip()} IS NOT NULL
+    """
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
     """
@@ -3175,7 +4013,8 @@ def update_omega():
     for campo in campos_validos:
         if campo in data:
             set_clauses.append(f"[{campo}] = ?")
-            params.append(data[campo])
+            value = normalize_wc_value(data[campo]) if campo == 'W/C' else data[campo]
+            params.append(value)
 
     if not set_clauses:
         return jsonify({'success': False, 'error': 'No hay campos para actualizar.'}), 400
@@ -3220,6 +4059,8 @@ def bulk_insert_omegas():
         values_list = []
         for col in columns:
             val = row.get(col)
+            if col == 'W/C':
+                val = normalize_wc_value(val)
             # Si es string vacío y no es Assy (requerido), convertir a None
             if val == '' and col != 'Assy':
                 val = None
@@ -3233,7 +4074,9 @@ def bulk_insert_omegas():
             if conn is None:
                 return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos'}), 500
             cursor = conn.cursor()
-            sql = "INSERT INTO OB.Omegas (Assy, Beam, IF1, IF2, [W/C], ExtenderVariable, OmegaType) VALUES (?, ?, ?, ?, ?, ?, ?)"
+            insert_columns = ['Assy', 'Beam', 'IF1', 'IF2', '[W/C]', 'ExtenderVariable', 'OmegaType']
+            placeholders = ', '.join(['?' for _ in columns])
+            sql = f"INSERT INTO OB.Omegas ({', '.join(insert_columns)}) VALUES ({placeholders})"
             print(f"[BULK INSERT] SQL: {sql}")
             print(f"[BULK INSERT] Values: {values}")
             cursor.executemany(sql, values)
@@ -3283,6 +4126,151 @@ def delete_omega():
         import logging
         logging.error(f'Error al eliminar omega: {e}')
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/clinching-master/all', methods=['GET'])
+@cross_origin()
+def get_all_clinching_master_rows():
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({'error': 'No se pudo conectar a la base de datos Digitalizacion'}), 500
+
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT Id_ClinchingSubOmegaMaster, SubOmega, Beam, GuideInterface, IsActive, SourceNote
+                FROM OB.ClinchingSubOmegaMaster
+                ORDER BY SubOmega ASC;
+                """
+            )
+            rows = cursor.fetchall()
+            columns = [column[0] for column in cursor.description]
+            result = [dict(zip(columns, row)) for row in rows]
+            return jsonify(result), 200
+    except Exception as e:
+        logging.error(f'Error al obtener Clinching master: {e}')
+        return jsonify({'error': 'Error interno del servidor'}), 500
+
+
+@app.route('/api/clinching-master/update', methods=['PATCH'])
+@cross_origin()
+def update_clinching_master_row():
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No se recibieron datos.'}), 400
+
+    campos_validos = ['Beam', 'GuideInterface', 'IsActive', 'SourceNote']
+    set_clauses = []
+    params = []
+
+    if 'newSubOmega' in data and data['newSubOmega']:
+        set_clauses.append('[SubOmega] = ?')
+        params.append(data['newSubOmega'])
+
+    for campo in campos_validos:
+        if campo in data:
+            set_clauses.append(f'[{campo}] = ?')
+            params.append(data[campo])
+
+    if not set_clauses:
+        return jsonify({'success': False, 'error': 'No hay campos para actualizar.'}), 400
+
+    if 'Beam' in data and not str(data.get('Beam') or '').strip():
+        return jsonify({'success': False, 'error': 'Beam es obligatorio.'}), 400
+    if 'GuideInterface' in data and not str(data.get('GuideInterface') or '').strip():
+        return jsonify({'success': False, 'error': 'Guide Interface es obligatorio.'}), 400
+    if 'newSubOmega' in data and not str(data.get('newSubOmega') or '').strip():
+        return jsonify({'success': False, 'error': 'Sub-Omega es obligatorio.'}), 400
+
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            cursor = conn.cursor()
+            if 'Id_ClinchingSubOmegaMaster' in data and data['Id_ClinchingSubOmegaMaster'] is not None:
+                sql = f"UPDATE OB.ClinchingSubOmegaMaster SET {', '.join(set_clauses)}, [UpdatedAt] = GETDATE() WHERE Id_ClinchingSubOmegaMaster = ?"
+                params.append(data['Id_ClinchingSubOmegaMaster'])
+            elif 'SubOmega' in data and data['SubOmega']:
+                sql = f"UPDATE OB.ClinchingSubOmegaMaster SET {', '.join(set_clauses)}, [UpdatedAt] = GETDATE() WHERE SubOmega = ?"
+                params.append(data['SubOmega'])
+            else:
+                return jsonify({'success': False, 'error': 'No se proporcionó Id_ClinchingSubOmegaMaster ni SubOmega.'}), 400
+
+            cursor.execute(sql, params)
+            if cursor.rowcount == 0:
+                return jsonify({'success': False, 'error': 'No se encontró la fila a actualizar.'}), 404
+
+            clear_clinching_master_cache()
+            return jsonify({'success': True})
+    except Exception as e:
+        logging.error(f'Error al actualizar Clinching master: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/clinching-master/bulk-insert', methods=['POST'])
+@cross_origin()
+def bulk_insert_clinching_master_rows():
+    data = request.get_json()
+    if not data or not isinstance(data, list) or not data:
+        return jsonify({'success': False, 'error': 'No se recibieron datos válidos.'}), 400
+
+    rows_to_insert = []
+    for row in data:
+        subomega = str(row.get('SubOmega') or '').strip()
+        beam = str(row.get('Beam') or '').strip()
+        guide_interface = str(row.get('GuideInterface') or '').strip()
+        if not subomega or not beam or not guide_interface:
+            return jsonify({'success': False, 'error': 'SubOmega, Beam y GuideInterface son obligatorios.'}), 400
+        rows_to_insert.append((subomega, beam, guide_interface, 1, row.get('SourceNote') or 'Manual maintenance'))
+
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            if conn is None:
+                return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos'}), 500
+
+            cursor = conn.cursor()
+            sql = """
+                INSERT INTO OB.ClinchingSubOmegaMaster (SubOmega, Beam, GuideInterface, IsActive, SourceNote)
+                VALUES (?, ?, ?, ?, ?)
+            """
+            cursor.executemany(sql, rows_to_insert)
+            clear_clinching_master_cache()
+        return jsonify({'success': True, 'inserted': len(rows_to_insert)})
+    except Exception as e:
+        logging.error(f'Error al insertar Clinching master: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/clinching-master/delete', methods=['POST'])
+@cross_origin()
+def delete_clinching_master_row():
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No se recibieron datos.'}), 400
+
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            cursor = conn.cursor()
+            if 'Id_ClinchingSubOmegaMaster' in data and data['Id_ClinchingSubOmegaMaster'] is not None:
+                cursor.execute(
+                    'DELETE FROM OB.ClinchingSubOmegaMaster WHERE Id_ClinchingSubOmegaMaster = ?',
+                    (data['Id_ClinchingSubOmegaMaster'],)
+                )
+            elif 'SubOmega' in data and data['SubOmega']:
+                cursor.execute(
+                    'DELETE FROM OB.ClinchingSubOmegaMaster WHERE SubOmega = ?',
+                    (data['SubOmega'],)
+                )
+            else:
+                return jsonify({'success': False, 'error': 'No se proporcionó Id_ClinchingSubOmegaMaster ni SubOmega.'}), 400
+
+            if cursor.rowcount == 0:
+                return jsonify({'success': False, 'error': 'No se encontró la fila a eliminar.'}), 404
+
+            clear_clinching_master_cache()
+            return jsonify({'success': True})
+    except Exception as e:
+        logging.error(f'Error al eliminar Clinching master: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
     
 # ====================================================================================
 # ENDPOINT PARA CONSULTAR UN RESUMEN DE PEDIDOS PENDIENTES
@@ -3300,15 +4288,38 @@ def get_summary_omegas():
                 return jsonify({"error": "No se pudo conectar a la base de datos Digitalizacion"}), 500
 
             cursor = conn.cursor()
-            # Query mejorada: agregar columnas EX y TB desde PedidosCabecera
+            cursor.execute("SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;")
+
+            # Esta vista alimenta una pantalla de consulta; aceptamos lectura no bloqueante
+            # para evitar deadlocks cuando otras tareas refrescan pedidos en paralelo.
             query = """
                 SELECT 
                     vp.*
                 FROM OB.V_PedidosSummary_Pendientes_EX vp
             """
-            cursor.execute(query)
-            rows = cursor.fetchall()
-            columns = [desc[0] for desc in cursor.description]
+
+            deadlock_error = None
+            rows = []
+            columns = []
+            for attempt in range(3):
+                try:
+                    cursor.execute(query)
+                    rows = cursor.fetchall()
+                    columns = [desc[0] for desc in cursor.description]
+                    deadlock_error = None
+                    break
+                except pyodbc.Error as ex:
+                    if '1205' not in str(ex):
+                        raise
+
+                    deadlock_error = ex
+                    logging.warning(f"[/api/summary] Deadlock detectado en intento {attempt + 1}/3: {ex}")
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.2)
+
+            if deadlock_error is not None:
+                raise deadlock_error
 
             results = []
             for row in rows:
@@ -3491,6 +4502,61 @@ def get_wo_for_beam(beam_code):
     except pyodbc.Error as db_err:
         import logging
         logging.error(f"Error de BD en get_wo_for_beam para beam '{beam_code}': {db_err}")
+        return jsonify({'error': 'Error de base de datos', 'details': str(db_err)}), 500
+
+
+@app.route('/api/beam_wos', methods=['POST'])
+@cross_origin()
+def get_wos_for_beams_batch():
+    """
+    Devuelve las WO activas para múltiples Beams en una sola consulta a MAPEX.
+    Espera JSON: { "beamCodes": ["BEAM1", "BEAM2"] }
+    """
+    payload = request.get_json(silent=True) or {}
+    beam_codes = payload.get('beamCodes') or []
+    normalized_codes = sorted({str(code).strip() for code in beam_codes if code and str(code).strip()})
+
+    if not normalized_codes:
+        return jsonify({})
+
+    cache_key = f"beam_wos_batch:{'|'.join(normalized_codes)}"
+    cached_result = get_cached_endpoint_response(cache_key)
+    if cached_result is not None:
+        return jsonify(cached_result)
+
+    placeholders = ','.join('?' for _ in normalized_codes)
+    query = f"""
+        SELECT Cod_producto, Cod_of
+        FROM dbo.V_OFs WITH (NOLOCK)
+        WHERE Cod_producto IN ({placeholders})
+          AND Desc_estadoof IN ('IN PROGRESS', 'PLANNED')
+        ORDER BY Cod_producto ASC, Fecha_ini ASC
+    """
+
+    try:
+        results = {beam_code: [] for beam_code in normalized_codes}
+
+        with ConexionODBCCZ(database='mapexbp') as conn_cz:
+            if conn_cz is None:
+                error_message = "No se pudo establecer conexión con la base de datos 'mapexbp'."
+                logging.error(f"[API GET WOS BATCH] ERROR: {error_message}")
+                return jsonify({'error': error_message}), 500
+
+            cursor_cz = conn_cz.cursor()
+            cursor_cz.execute(query, normalized_codes)
+
+            for beam_code, wo_code in cursor_cz.fetchall():
+                normalized_beam = str(beam_code).strip() if beam_code is not None else ''
+                normalized_wo = str(wo_code).strip() if wo_code is not None else ''
+                if not normalized_beam or not normalized_wo:
+                    continue
+                results.setdefault(normalized_beam, []).append(normalized_wo)
+
+        set_cached_endpoint_response(cache_key, results)
+        return jsonify(results)
+
+    except pyodbc.Error as db_err:
+        logging.error(f"Error de BD en get_wos_for_beams_batch: {db_err}")
         return jsonify({'error': 'Error de base de datos', 'details': str(db_err)}), 500
     except Exception as e:
         import logging
@@ -3753,6 +4819,9 @@ def importar_pedidos():
             - GRP_OMEGA_BRACKET_TYPE_TSD con cualquier valor
             - GRP_OMEGA_BRACKET_TYPE_HEAD con cualquier valor
             - GRP_OMEGA_BRACKET_TYPE_TRAV con cualquier valor
+            - GRP_TIE_BRACKET_OPT con valor Y/N
+            - GRP_TIE_BRACKET_QTY con valor
+            - GRP_TIE_BRACKET_TYPE con valor
             """
             char_upper = normalizar_valor(characteristic_name).upper()
             
@@ -3771,6 +4840,18 @@ def importar_pedidos():
             # Relevante 4: GRP_OMEGA_BRACKET_TYPE_TRAV con valor
             if char_upper == 'GRP_OMEGA_BRACKET_TYPE_TRAV' and normalizar_valor(characteristic_value):
                 return True, 'GRP_OMEGA_BRACKET_TYPE_TRAV'
+
+            # Relevante 5: GRP_TIE_BRACKET_OPT con Y/N
+            if char_upper == 'GRP_TIE_BRACKET_OPT' and normalizar_valor(characteristic_value).upper() in ('Y', 'N'):
+                return True, 'GRP_TIE_BRACKET_OPT'
+
+            # Relevante 6: GRP_TIE_BRACKET_QTY con valor
+            if char_upper == 'GRP_TIE_BRACKET_QTY' and normalizar_valor(characteristic_value):
+                return True, 'GRP_TIE_BRACKET_QTY'
+
+            # Relevante 7: GRP_TIE_BRACKET_TYPE con valor
+            if char_upper == 'GRP_TIE_BRACKET_TYPE' and normalizar_valor(characteristic_value):
+                return True, 'GRP_TIE_BRACKET_TYPE'
             
             # No relevante
             return False, None
@@ -3832,12 +4913,24 @@ def importar_pedidos():
                     # Contabilizar por pedido
                     clave_pedido = (sales_doc, material)
                     if clave_pedido not in resumen_por_pedido:
-                        resumen_por_pedido[clave_pedido] = {'lh': False, 'bracket': False}
+                        resumen_por_pedido[clave_pedido] = {
+                            'lh': False,
+                            'bracket': False,
+                            'tb_opt': False,
+                            'tb_qty': False,
+                            'tb_type': False,
+                        }
                     
                     if tipo_relevancia == 'GRP_HSK_TYPE=LH':
                         resumen_por_pedido[clave_pedido]['lh'] = True
                     elif tipo_relevancia == 'GRP_OMEGA_BRACKET_TYPE_TSD':
                         resumen_por_pedido[clave_pedido]['bracket'] = True
+                    elif tipo_relevancia == 'GRP_TIE_BRACKET_OPT':
+                        resumen_por_pedido[clave_pedido]['tb_opt'] = True
+                    elif tipo_relevancia == 'GRP_TIE_BRACKET_QTY':
+                        resumen_por_pedido[clave_pedido]['tb_qty'] = True
+                    elif tipo_relevancia == 'GRP_TIE_BRACKET_TYPE':
+                        resumen_por_pedido[clave_pedido]['tb_type'] = True
 
                     logging.info(
                         f"[IMPORTAR-PEDIDOS] {origen} fila {idx_fila} GUARDADA ({tipo_relevancia}): "
@@ -3952,13 +5045,16 @@ def importar_pedidos():
             logging.warning("[IMPORTAR-PEDIDOS] No se insertaron registros relevantes")
             return jsonify({
                 'success': False,
-                'mensaje': 'No se insertaron registros. Verifica que el archivo contenga características GRP_HSK_TYPE=LH o GRP_OMEGA_BRACKET_TYPE_TSD.',
+                'mensaje': 'No se insertaron registros. Verifica que el archivo contenga características GRP_HSK_TYPE=LH, GRP_OMEGA_BRACKET_TYPE_* o GRP_TIE_BRACKET_*.',
                 'errores': errores
             }), 400
         
         # Contar resumen
         pedidos_lh = sum(1 for datos in resumen_por_pedido.values() if datos['lh'])
         pedidos_bracket = sum(1 for datos in resumen_por_pedido.values() if datos['bracket'])
+        pedidos_tb_opt = sum(1 for datos in resumen_por_pedido.values() if datos['tb_opt'])
+        pedidos_tb_qty = sum(1 for datos in resumen_por_pedido.values() if datos['tb_qty'])
+        pedidos_tb_type = sum(1 for datos in resumen_por_pedido.values() if datos['tb_type'])
 
         # Respuesta exitosa
         respuesta = {
@@ -3966,11 +5062,17 @@ def importar_pedidos():
             'mensaje': (
                 f'Importación completada: {registros_insertados} registros guardados. '
                 f'Pedidos con GRP_HSK_TYPE=LH: {pedidos_lh}. '
-                f'Pedidos con GRP_OMEGA_BRACKET_TYPE_TSD: {pedidos_bracket}.'
+                f'Pedidos con GRP_OMEGA_BRACKET_TYPE_TSD: {pedidos_bracket}. '
+                f'Pedidos con TB OPT: {pedidos_tb_opt}. '
+                f'Pedidos con TB QTY: {pedidos_tb_qty}. '
+                f'Pedidos con TB TYPE: {pedidos_tb_type}.'
             ),
             'registros_insertados': registros_insertados,
             'pedidos_lh': pedidos_lh,
             'pedidos_bracket': pedidos_bracket,
+            'pedidos_tb_opt': pedidos_tb_opt,
+            'pedidos_tb_qty': pedidos_tb_qty,
+            'pedidos_tb_type': pedidos_tb_type,
             'errores': errores if errores else None
         }
         
@@ -3983,6 +5085,43 @@ def importar_pedidos():
         return jsonify({
             'success': False,
             'mensaje': f'Error inesperado: {str(e)}'
+        }), 500
+
+
+@app.route('/api/pedidos-importados', methods=['GET'])
+@cross_origin()
+def obtener_pedidos_importados():
+    """Devuelve pedidos únicos ya guardados en OB.pedidos_exportados."""
+    try:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT TOP (1000)
+                    LTRIM(RTRIM([sales_document])) AS sales_document,
+                    MAX([fecha_importacion]) AS fecha_importacion
+                FROM [DataLakeSCCZ].[OB].[pedidos_exportados] WITH (NOLOCK)
+                WHERE [sales_document] IS NOT NULL
+                  AND LTRIM(RTRIM([sales_document])) <> ''
+                GROUP BY LTRIM(RTRIM([sales_document]))
+                ORDER BY MAX([fecha_importacion]) DESC, LTRIM(RTRIM([sales_document])) DESC
+            """)
+
+            rows = []
+            for row in cursor.fetchall():
+                rows.append({
+                    'order': row.sales_document,
+                })
+
+        return jsonify({
+            'success': True,
+            'total': len(rows),
+            'rows': rows,
+        }), 200
+    except Exception as e:
+        logging.error(f"[PEDIDOS-IMPORTADOS] Error obteniendo pedidos importados: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'mensaje': f'Error obteniendo pedidos importados: {e}'
         }), 500
 
 
@@ -4796,20 +5935,17 @@ if __name__ == '__main__':
     # Cargar configuración SMTP desde BD (ahora ConexionODBCCZ ya está definida)
     cargar_config_smtp()
 
-    try:
-        print("[MAIN] Sincronizando pedidos pendientes al arranque...")
-        startup_sync = sync_pending_orders(lookback_days=1, log_prefix='[STARTUP SYNC]')
-        print(
-            f"[MAIN] -> Sync inicial completado: "
-            f"{startup_sync['cabeceras_procesadas']} cabeceras y {startup_sync['lineas_procesadas']} líneas."
-        )
-    except Exception as e:
-        print(f"[MAIN] ADVERTENCIA: no se pudo ejecutar la sync inicial de pedidos: {e}")
+    startup_sync_thread = threading.Thread(target=run_startup_sync, daemon=True, name="StartupSync")
+    startup_sync_thread.start()
+    print("[MAIN] -> Sync inicial lanzada en segundo plano.")
 
     # --- INICIAR EL SERVIDOR FLASK ---
     print("="*50)
     hostname = socket.gethostname()
-    local_ip = socket.gethostbyname(hostname)
+    try:
+        local_ip = socket.gethostbyname(hostname)
+    except Exception:
+        local_ip = '127.0.0.1'
     print(f"Servidor Flask iniciándose en: http://{local_ip}:{APP_PORT}")
     print("="*50)
 
@@ -4854,4 +5990,4 @@ if __name__ == '__main__':
     print("[MAIN] -> Hilo de scheduler diario iniciado.")
 
     # Ejecutar la aplicación principal. Esto SIEMPRE debe ser lo último.
-    app.run(host='0.0.0.0', port=APP_PORT, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=APP_PORT, debug=DEV_MODE, use_reloader=False)

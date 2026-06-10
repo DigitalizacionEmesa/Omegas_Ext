@@ -6,10 +6,11 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
-        ('../translations', 'translations'), 
-        ('../assets', 'assets'), 
-        ('../IMAGENES', 'IMAGENES'), 
-        ('../Pantallas', 'Pantallas')
+        ('../translations', 'translations'),
+        ('../assets', 'assets'),
+        ('../IMAGENES', 'IMAGENES'),
+        ('../Pantallas', 'Pantallas'),
+        ('../stock_sap_omegas.json', '.'),
     ],
     hiddenimports=['pyodbc'],
     hookspath=[],

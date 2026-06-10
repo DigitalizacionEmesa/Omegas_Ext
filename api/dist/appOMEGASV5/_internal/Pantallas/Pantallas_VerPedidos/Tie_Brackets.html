@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">    <title data-translate-key="page_title_tie_brackets">Tie Brackets</title>
+    <link rel="stylesheet" href="../../assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+</head>
+<body>
+  <!-- Header generado por globalHeader.js -->
+  <div style="display:flex;justify-content:center;gap:14px;padding:24px 0 0 0;max-width:1200px;margin:0 auto;">
+    <button id="toggleNoFabricados" type="button" data-translate-key="tie_brackets_filter_not_fabricated" onclick="setFiltroFabricado('no_fabricados')" style="padding:12px 22px;border-radius:999px;border:2px solid #1976d2;background:#1976d2;color:#fff;font-size:1rem;font-weight:700;cursor:pointer;">No fabricados</button>
+    <button id="toggleFabricados" type="button" data-translate-key="tie_brackets_filter_fabricated" onclick="setFiltroFabricado('fabricados')" style="padding:12px 22px;border-radius:999px;border:2px solid #1976d2;background:#fff;color:#1976d2;font-size:1rem;font-weight:700;cursor:pointer;">Fabricados</button>
+  </div>
+  <div style="max-width:1200px;margin:14px auto 0 auto;padding:0 12px;">
+    <input id="buscadorPedidos" type="search" data-translate-key-placeholder="tie_brackets_search_placeholder" placeholder="Buscar pedido, secuencia, tie bracket, extensor o assy" oninput="actualizarBusqueda(this.value)" style="width:100%;padding:14px 18px;border:2px solid #d6e2f5;border-radius:14px;font-size:1rem;color:#3456a1;background:#fff;box-shadow:0 4px 14px rgba(0,91,170,.08);outline:none;">
+  </div>
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1200px; margin: 0 auto;">
+    <!-- Cards se insertan por JS -->
+  </div>
+
+  <script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            // Obtener datos del usuario desde localStorage
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+            
+            if (!usuarioSGA.id || !usuarioSGA.nivel) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            
+            console.log(`🔍 Verificando permisos - Usuario: ${usuarioSGA.nombre}, Nivel: ${nivelUsuario}`);
+            
+            // Esta pantalla requiere nivel 1 (acceso básico)
+            if (nivelUsuario < 1) {
+                alert(`❌ Acceso denegado.\n\nNecesitas nivel 1 o superior para acceder a esta sección.\nTu nivel actual: ${nivelUsuario}`);
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+            console.log(`✅ Acceso permitido - Tie Brackets`);
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            alert('Error al verificar permisos. Redirigiendo al inicio...');
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+        }
+    }
+
+    // Ejecutar verificación al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+    let pedidosCache = [];
+    let filtroFabricadoActual = localStorage.getItem('tieBracketsFiltroFabricado') || 'no_fabricados';
+    let busquedaActual = localStorage.getItem('tieBracketsBusqueda') || '';
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function getFabricadoStorageKey(pedido) {
+      const salesOrder = pedido?.SalesOrder || '';
+      const assy = pedido?.Assy || '';
+      const tieBracket = pedido?.TieBracket || '';
+      return `tie_brackets_fabricado_${salesOrder}_${assy}_${tieBracket}`;
+    }
+
+    function estaFabricado(pedido) {
+      return localStorage.getItem(getFabricadoStorageKey(pedido)) === '1';
+    }
+
+    function guardarEstadoFabricado(pedido, fabricado) {
+      localStorage.setItem(getFabricadoStorageKey(pedido), fabricado ? '1' : '0');
+    }
+
+    function setFiltroFabricado(filtro) {
+      filtroFabricadoActual = filtro;
+      localStorage.setItem('tieBracketsFiltroFabricado', filtro);
+      actualizarToggleFiltro();
+      renderCards(pedidosCache);
+    }
+
+    function actualizarBusqueda(valor) {
+      busquedaActual = (valor || '').trim().toLowerCase();
+      localStorage.setItem('tieBracketsBusqueda', busquedaActual);
+      renderCards(pedidosCache);
+    }
+
+    function coincideBusqueda(pedido) {
+      if (!busquedaActual) {
+        return true;
+      }
+
+      const campos = [
+        pedido?.SalesOrder,
+        pedido?.Sequence,
+        pedido?.TieBracket,
+        pedido?.Extender,
+        pedido?.Assy
+      ];
+
+      return campos.some(valor => String(valor || '').toLowerCase().includes(busquedaActual));
+    }
+
+    function actualizarToggleFiltro() {
+      const botonNoFabricados = document.getElementById('toggleNoFabricados');
+      const botonFabricados = document.getElementById('toggleFabricados');
+      const esNoFabricados = filtroFabricadoActual === 'no_fabricados';
+
+      if (botonNoFabricados) {
+        botonNoFabricados.style.background = esNoFabricados ? '#1976d2' : '#fff';
+        botonNoFabricados.style.color = esNoFabricados ? '#fff' : '#1976d2';
+      }
+
+      if (botonFabricados) {
+        botonFabricados.style.background = esNoFabricados ? '#fff' : '#2e7d32';
+        botonFabricados.style.borderColor = esNoFabricados ? '#1976d2' : '#2e7d32';
+        botonFabricados.style.color = esNoFabricados ? '#1976d2' : '#fff';
+      }
+    }
+
+    function toggleFabricadoCard(salesOrder, assy, tieBracket) {
+      const pedido = pedidosCache.find(item =>
+        String(item.SalesOrder || '') === String(salesOrder || '')
+        && String(item.Assy || '') === String(assy || '')
+        && String(item.TieBracket || '') === String(tieBracket || '')
+      );
+
+      if (!pedido) {
+        return;
+      }
+
+      guardarEstadoFabricado(pedido, !estaFabricado(pedido));
+      renderCards(pedidosCache);
+    }
+
+    async function getPedidosTieBrackets() {
+      const res = await fetch('/api/pedidos_tb');
+      if (!res.ok) return [];
+      return await res.json();
+    }
+
+    function renderCards(pedidos) {
+      // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
+      function parseSeq(val) {
+        if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
+        const m = String(val).match(/\d+/g);
+        if (!m || m.length === 0) return Number.POSITIVE_INFINITY;
+        // Usar el último bloque numérico por seguridad (e.g., ES1-021)
+        return parseInt(m[m.length - 1], 10);
+      }
+      function compareOrders(a, b) {
+        const pa = (typeof a.PriorityOrder === 'number') ? a.PriorityOrder : null;
+        const pb = (typeof b.PriorityOrder === 'number') ? b.PriorityOrder : null;
+        if (pa !== null && pb !== null) return pa - pb;
+        const sa = parseSeq(a.Sequence || a.SequenceValue);
+        const sb = parseSeq(b.Sequence || b.SequenceValue);
+        if (sa !== sb) return sa - sb;
+        return 0;
+      }
+      const sorted = Array.isArray(pedidos) ? [...pedidos].sort(compareOrders) : [];
+      pedidosCache = sorted;
+      actualizarToggleFiltro();
+      const grid = document.getElementById('cardsGrid');
+      grid.innerHTML = '';
+      const filtrados = sorted.filter(pedido => {
+        const fabricado = estaFabricado(pedido);
+        const cumpleFabricado = filtroFabricadoActual === 'fabricados' ? fabricado : !fabricado;
+        return cumpleFabricado && coincideBusqueda(pedido);
+      });
+
+      if (!filtrados.length) {
+        const vacio = document.createElement('div');
+        vacio.textContent = filtroFabricadoActual === 'fabricados'
+          ? getTranslation('text_no_tb_orders_fabricated')
+          : getTranslation('text_no_tb_orders');
+        vacio.style.textAlign = 'center';
+        vacio.style.color = '#3456a1';
+        vacio.style.marginTop = '40px';
+        grid.appendChild(vacio);
+        return;
+      }
+      // Los pedidos ya vienen ordenados correctamente del backend con PriorityOrder
+      filtrados.forEach((pedido, idx) => {
+        const fabricado = estaFabricado(pedido);
+        const colorPrincipal = fabricado ? '#2e7d32' : '#1976d2';
+        const colorSecundario = fabricado ? '#2f5f35' : '#3456a1';
+        const colorBordeSuave = fabricado ? '#dcefdc' : '#e3eafc';
+        const fondoCard = fabricado ? '#f3fbf3' : '#f4f8ff';
+        const fabricadoLabel = fabricado ? getTranslation('status_mark_not_fabricated_display') : getTranslation('status_mark_fabricated_display');
+        const fabricadoTooltip = fabricado ? getTranslation('status_mark_not_fabricated_tooltip') : getTranslation('status_mark_fabricated_tooltip');
+        const fabricadoEstadoTexto = fabricado ? getTranslation('status_mark_not_fabricated_help') : getTranslation('status_mark_fabricated_help');
+        const card = document.createElement('div');
+        card.className = 'secuenciacion-card';
+        card.style = `background: ${fondoCard}; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid ${colorPrincipal}; margin: 0; width: 100%; max-width: 1400px;`;
+
+        card.innerHTML = `
+          <div style="background:${colorPrincipal};color:white;padding:11px 20px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <span style="font-size:1.04rem;font-weight:700;letter-spacing:.02em;line-height:1.2;">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+            <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:flex-end;">
+              <div style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:126px;">
+                <button
+                  type="button"
+                  class="status-action-button"
+                  title="${fabricadoTooltip}"
+                  aria-label="${fabricadoTooltip}"
+                  style="--status-color:${fabricado ? '#e74c3c' : '#27ae60'};--status-color-dark:${fabricado ? '#7f1d1d' : '#14532d'};"
+                  onclick="toggleFabricadoCard('${String(pedido.SalesOrder || '').replace(/'/g, "\\'")}', '${String(pedido.Assy || '').replace(/'/g, "\\'")}', '${String(pedido.TieBracket || '').replace(/'/g, "\\'")}')"
+                >
+                  ${fabricadoLabel}
+                </button>
+                <span style="font-size:.62rem;font-weight:700;letter-spacing:.25px;color:#f4fbff;opacity:.95;margin-left:12px;line-height:1.1;">
+                  ${fabricadoEstadoTexto}
+                </span>
+              </div>
+              <span style="font-size:1.04rem;font-weight:700;white-space:nowrap;line-height:1.2;">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+            </div>
+          </div>
+          <div class="tb-card-row tb-card-row--single">
+            <div class="pedido-info-container pedido-info-top" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_tie_bracket')}</span><div style="color:${colorSecundario};">${pedido.TieBracket || '-'}</div></div>
+            <div class="pedido-info-container pedido-info-top" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_extender')}</span><div style="color:${colorSecundario};">${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_qty')}</span><div style="color:${colorSecundario};">${pedido.Qty || ''}</div></div>
+            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_extender_qty')}</span><div style="color:${colorSecundario};">${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+            <div class="pedido-info-container pedido-info-bottom" style="border-color:${colorBordeSuave};"><span style="color:${colorPrincipal};">${getTranslation('card_label_delivery_date')}</span><div style="color:${colorSecundario};">${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+
+    }
+
+    function setupPageLogic() {
+        async function autoUpdate() {
+            const pedidos = await getPedidosTieBrackets();
+            renderCards(pedidos);
+        }
+        autoUpdate();
+        setInterval(autoUpdate, 5000);
+    }
+  </script>
+
+  <!-- ESTILOS ADICIONALES -->
+  <style>
+    .status-action-button{--status-color:#27ae60;--status-color-dark:#14532d;background:linear-gradient(135deg,color-mix(in srgb,var(--status-color) 92%,#fff 8%),var(--status-color));color:#fff;border:2px solid color-mix(in srgb,var(--status-color-dark) 60%,#fff 40%);border-radius:999px;padding:8px 16px;cursor:pointer;font-weight:800;font-size:.8rem;line-height:1.1;transition:transform .18s,filter .18s,box-shadow .18s,background .18s;min-width:128px;text-align:center;box-shadow:0 6px 14px rgba(0,0,0,.16);text-transform:uppercase;letter-spacing:.35px}.status-action-button:hover{filter:brightness(1.06);transform:translateY(-1px) scale(1.02);box-shadow:0 10px 18px rgba(0,0,0,.2)}
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;min-width:0;max-width:none;min-height:72px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600}.pedido-info-top{font-size:1rem}.pedido-info-bottom{font-size:1rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;line-height:1.2;text-align:center;overflow-wrap:anywhere}.tb-card-row{display:grid;gap:12px;justify-content:center;padding-left:16px;padding-right:16px}.tb-card-row--single{grid-template-columns:minmax(150px,1.05fr) minmax(150px,1.05fr) minmax(90px,.55fr) minmax(110px,.68fr) minmax(120px,.78fr);padding-top:14px;padding-bottom:14px;align-items:stretch}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}.main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}@media (max-width:900px){.main-grid{padding:14px 10px 20px}.tb-card-row--single{grid-template-columns:repeat(2,minmax(110px,1fr));gap:10px}.pedido-info-container{min-height:64px;padding:7px 8px}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}@media (max-width:520px){.tb-card-row--single{grid-template-columns:1fr}.pedido-info-container{min-height:60px}}
+  </style>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+      
+      let currentTranslations = {};
+      function getTranslation(key) { return currentTranslations[key] || key; }
+      function applyTranslations(translations) {
+          currentTranslations = translations;
+          document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+          document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+          document.querySelectorAll('[data-translate-key-placeholder]').forEach(el => { if (translations[el.getAttribute('data-translate-key-placeholder')]) el.setAttribute('placeholder', translations[el.getAttribute('data-translate-key-placeholder')]); });
+      }
+      async function loadTranslations(lang) {
+          try {
+              const response = await fetch(`/translations/translation_${lang}.json`);
+              if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+              const translations = await response.json();
+              applyTranslations(translations);
+              document.documentElement.lang = lang;
+              localStorage.setItem('language', lang);
+              // Sincronizar ambos selectores
+              const selector = document.getElementById('language-selector');
+              const headerSelector = document.getElementById('header-language-selector');
+              if (selector) selector.value = lang;
+              if (headerSelector) headerSelector.value = lang;
+          } catch (error) { console.error("Error al cargar traducciones:", error); }
+      }
+      function changeLanguage(lang) {
+          loadTranslations(lang).then(() => {
+              // Re-renderizar las tarjetas con el nuevo idioma usando la caché de datos
+              if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
+                  renderCards(pedidosCache);
+              }
+          });
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+          const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+          actualizarToggleFiltro();
+          const buscadorPedidos = document.getElementById('buscadorPedidos');
+          if (buscadorPedidos) {
+            buscadorPedidos.value = busquedaActual;
+          }
+          loadTranslations(lang).then(() => {
+              if (typeof setupPageLogic === 'function') {
+                  setupPageLogic();
+              }
+          });
+      });
+  </script>
+  <script src="/assets/globalHeader.js" data-title="TIE BRACKETS" data-title-key="header_tie_brackets"></script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

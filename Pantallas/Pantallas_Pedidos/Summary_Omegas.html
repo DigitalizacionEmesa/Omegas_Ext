@@ -104,6 +104,7 @@
                     </button>
                 </div>
             </div>
+            <div id="sync-status-banner" style="display:none; margin-bottom:12px; padding:10px 14px; border-radius:6px; background:#eef6ff; color:#1a5fb4; font-weight:600;"></div>
             <!-- Panel flotante para seleccionar columnas -->
             <div id="edit-view-panel" style="display:none; position:fixed; top:80px; left:50%; transform:translateX(-50%); background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.18); padding:1.2em 2em; z-index:1000; min-width:260px;">
                 <div style="font-weight:600; font-size:1.1em; margin-bottom:10px;">Selecciona columnas a mostrar</div>
@@ -173,6 +174,71 @@
     
     let summaryData = [];
     let filteredData = [];
+    let manualSyncStatusPoller = null;
+
+    function setSyncStatusBanner(message, isVisible = true, isError = false) {
+        const banner = document.getElementById('sync-status-banner');
+        if (!banner) return;
+        banner.style.display = isVisible ? 'block' : 'none';
+        banner.style.background = isError ? '#fdecec' : '#eef6ff';
+        banner.style.color = isError ? '#b42318' : '#1a5fb4';
+        banner.textContent = isVisible ? message : '';
+    }
+
+    function stopManualSyncPolling() {
+        if (manualSyncStatusPoller) {
+            clearInterval(manualSyncStatusPoller);
+            manualSyncStatusPoller = null;
+        }
+    }
+
+    function pollManualSyncStatus(buttonText) {
+        const btnRefresh = document.getElementById('btn-refresh-data');
+        stopManualSyncPolling();
+        manualSyncStatusPoller = setInterval(() => {
+            fetch('/api/sync/manual-full/status')
+                .then(res => res.json())
+                .then(status => {
+                    if (status.running) {
+                        setSyncStatusBanner('Actualizando datos en segundo plano... Puedes seguir consultando la tabla.');
+                        return;
+                    }
+
+                    stopManualSyncPolling();
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = buttonText;
+
+                    if (status.error) {
+                        setSyncStatusBanner(`Error actualizando datos: ${status.error}`, true, true);
+                        return;
+                    }
+
+                    setSyncStatusBanner('Actualización completada. Recargando datos...');
+                    fetch('/api/summary')
+                        .then(res => {
+                            if (!res.ok) throw new Error('Error al cargar datos');
+                            return res.json();
+                        })
+                        .then(data => {
+                            summaryData = Array.isArray(data) ? data : [];
+                            populateDropdowns(summaryData);
+                            applyFilters();
+                            document.getElementById('loadingArea').style.display = 'none';
+                            document.querySelector('.summary-table').style.display = '';
+                            setSyncStatusBanner('Datos actualizados correctamente.');
+                        })
+                        .catch(error => {
+                            setSyncStatusBanner(`Error recargando datos: ${error.message}`, true, true);
+                        });
+                })
+                .catch(error => {
+                    stopManualSyncPolling();
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = buttonText;
+                    setSyncStatusBanner(`Error consultando el estado de la actualización: ${error.message}`, true, true);
+                });
+        }, 2000);
+    }
 
     function getFieldValue(row, fieldName) { return row[fieldName] || row[fieldName.replace('/', '_')] || row[fieldName.replace('/', '')] || ''; }
 
@@ -609,31 +675,23 @@
         
         btnRefresh.disabled = true;
         btnRefresh.innerHTML = `<span class="spinner"></span> ${getTranslation('button_updating')}`;
+        setSyncStatusBanner('Lanzando actualización en segundo plano...');
         fetch('/api/sync/manual-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }})
             .then(res => res.json())
             .then(data => {
                 if (data.error) throw new Error(data.error);
-                // Cargar datos del backend
-                return fetch('/api/summary');
+                pollManualSyncStatus(originalText);
             })
-            .then(res => {
-                if (!res.ok) throw new Error('Error al cargar datos');
-                return res.json();
-            })
-            .then(data => {
-                summaryData = Array.isArray(data) ? data : [];
-                populateDropdowns(summaryData);
-                
-                // Aplicar los filtros que el usuario tenga en los campos
-                applyFilters();
-                
-                document.getElementById('loadingArea').style.display = 'none';
-                document.querySelector('.summary-table').style.display = '';
-            })
-            .catch(error => { alert(`${getTranslation('alert_error_updating_data')} ${error.message}`); })
-            .finally(() => {
+            .catch(error => {
                 btnRefresh.disabled = false;
                 btnRefresh.innerHTML = originalText;
+                setSyncStatusBanner(`${getTranslation('alert_error_updating_data')} ${error.message}`, true, true);
+            })
+            .finally(() => {
+                if (!manualSyncStatusPoller) {
+                    btnRefresh.disabled = false;
+                    btnRefresh.innerHTML = originalText;
+                }
             });
     }
 

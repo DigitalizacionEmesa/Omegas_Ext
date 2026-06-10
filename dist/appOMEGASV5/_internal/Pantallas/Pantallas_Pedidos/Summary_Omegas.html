@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title data-translate-key="page_title_pending_orders">Pedidos Pendientes de Secuenciar</title>
+    <meta charset="UTF-8">  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">    <title data-translate-key="page_title_pending_orders">Pedidos Pendientes de Secuenciar</title>
     <link rel="stylesheet" href="/assets/styles.css">
     <link rel="stylesheet" href="/assets/loginModal.css">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,16 +17,19 @@
         .filters-container { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
         .filters-container label { font-weight: 500; }
         .filters-container input, .filters-container select { padding: 8px 12px; border-radius: 6px; border: 1px solid #ccc; font-size: 1rem; }
+        .btn-filter-reset { background: #6c757d; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1em; cursor: pointer; font-weight: 600; font-size: 0.95rem; }
         .btn-sequence { background: #28a745; color: #fff; border: none; border-radius: 5px; padding: 0.6em 1.2em; cursor: pointer; font-weight: 600; font-size: 1rem; }
         .btn-sequence:disabled { background: #aaa; cursor: not-allowed; }
         .btn-sequence .spinner { width: 16px; height: 16px; border: 2px solid #fff; border-top: 2px solid transparent; margin-right: 5px; }
         .top-link { margin-bottom: 1em; display: inline-block; background: #1976d2; color: #fff; padding: 0.5em 1.2em; border-radius: 5px; text-decoration: none; font-weight: 500; }
         .table-wrapper { 
             overflow-x: auto; 
-            max-height: 200vh; /* Hace que la tabla use más alto de la pantalla */
+            -webkit-overflow-scrolling: touch;
+            max-height: 200vh;
+            width: 100%;
         }
-        .summary-table { width: 100%; border-collapse: collapse; }
-        .summary-table th, .summary-table td { padding: 0.7rem 1rem; border-bottom: 1px solid #e0e0e0; text-align: left; white-space: nowrap; }
+        .summary-table { width: 100%; border-collapse: collapse; min-width: 1200px; }
+        .summary-table th, .summary-table td { padding: 0.7rem 1rem; border-bottom: 1px solid #e0e0e0; text-align: center; white-space: nowrap; }
         .summary-table thead th { 
             background: #1976d2; 
             color: #fff; 
@@ -88,6 +90,7 @@
                     <input type="date" id="ending-date">
                     <label for="proyect-select" data-translate-key="label_project">Proyecto:</label>
                     <select id="proyect-select"></select>
+                    <button id="btn-reset-filters" class="btn-filter-reset" type="button" data-translate-key="button_reset_filters">Reset filtros</button>
                 </div>
                 <div style="display: flex; gap: 10px; align-items: center;">
                     <button id="btn-edit-view" class="btn-sequence" type="button" style="background: #ff9800;">
@@ -127,6 +130,7 @@
                             <th data-translate-key="table_header_cw">C/W</th>
                             <th data-translate-key="table_header_cwt">CWT</th>
                             <th data-translate-key="table_header_ds">DS</th>
+                            <th data-translate-key="table_header_extender">Extender</th>
                             <th data-translate-key="table_header_ord">Ord</th>
                         </tr>
                     </thead>
@@ -187,6 +191,8 @@
         { key: 'C/W', label: 'C/W' },
         { key: 'CWT', label: 'CWT' },
         { key: 'DS', label: 'DS' },
+        { key: 'EX', label: 'EX' },
+        { key: 'TB', label: 'TB' },
         { key: 'Ord', label: 'Ord' }
     ];
     function getColumnConfig() {
@@ -247,12 +253,17 @@
                     case 'C/W': translateKey = 'table_header_cw'; break;
                     case 'CWT': translateKey = 'table_header_cwt'; break;
                     case 'DS': translateKey = 'table_header_ds'; break;
+                    case 'EX': translateKey = 'table_header_ex'; break;
+                    case 'TB': translateKey = 'table_header_tb'; break;
+                    case 'Extender': translateKey = 'table_header_extender'; break;
                     case 'Ord': translateKey = 'table_header_ord'; break;
                 }
                 th.setAttribute('data-translate-key', translateKey);
                 th.style.display = visibleCols[idx] ? '' : 'none';
                 th.style.position = 'relative';
-                th.innerHTML = `<div style='display:flex;align-items:center;height:100%;width:100%;position:relative;'><span class='col-drag-label' draggable='true' data-idx='${idx}' style='flex:1;user-select:none;cursor:grab;padding-right:0px;'>${getTranslation(translateKey)}</span><div class='col-resizer' data-idx='${idx}' style='position:absolute;right:0;top:10%;width:16px;height:80%;background:rgba(0,0,0,0.08);border-radius:3px;cursor:col-resize;z-index:50;transition:background 0.2s;'></div></div>`;
+                // Si no hay traducción, mostrar directamente el nombre de la columna
+                let labelText = currentTranslations[translateKey] ? getTranslation(translateKey) : col.key;
+                th.innerHTML = `<div style='display:flex;align-items:center;height:100%;width:100%;position:relative;'><span class='col-drag-label' draggable='true' data-idx='${idx}' style='flex:1;user-select:none;cursor:grab;padding-right:0px;'>${labelText}</span><div class='col-resizer' data-idx='${idx}' style='position:absolute;right:0;top:10%;width:16px;height:80%;background:rgba(0,0,0,0.08);border-radius:3px;cursor:col-resize;z-index:50;transition:background 0.2s;'></div></div>`;
                 thRow.appendChild(th);
             });
             thead.innerHTML = '';
@@ -596,19 +607,13 @@
         const btnRefresh = document.getElementById('btn-refresh-data');
         const originalText = btnRefresh.innerHTML;
         
-        // Guardar los filtros actuales antes del refresh
-        const savedSearchValue = document.getElementById('search-input').value;
-        const savedStartDate = document.getElementById('starting-date').value;
-        const savedEndDate = document.getElementById('ending-date').value;
-        const savedProyect = document.getElementById('proyect-select').value;
-        
         btnRefresh.disabled = true;
         btnRefresh.innerHTML = `<span class="spinner"></span> ${getTranslation('button_updating')}`;
         fetch('/api/sync/manual-full', { method: 'POST', headers: { 'Content-Type': 'application/json' }})
             .then(res => res.json())
             .then(data => {
                 if (data.error) throw new Error(data.error);
-                // Cargar datos y luego restaurar filtros
+                // Cargar datos del backend
                 return fetch('/api/summary');
             })
             .then(res => {
@@ -619,13 +624,7 @@
                 summaryData = Array.isArray(data) ? data : [];
                 populateDropdowns(summaryData);
                 
-                // Restaurar los filtros guardados
-                document.getElementById('search-input').value = savedSearchValue;
-                document.getElementById('starting-date').value = savedStartDate;
-                document.getElementById('ending-date').value = savedEndDate;
-                document.getElementById('proyect-select').value = savedProyect;
-                
-                // Aplicar filtros para mostrar solo datos filtrados
+                // Aplicar los filtros que el usuario tenga en los campos
                 applyFilters();
                 
                 document.getElementById('loadingArea').style.display = 'none';
@@ -636,6 +635,15 @@
                 btnRefresh.disabled = false;
                 btnRefresh.innerHTML = originalText;
             });
+    }
+
+    function resetFilters() {
+        document.getElementById('search-input').value = '';
+        document.getElementById('starting-date').value = '';
+        document.getElementById('ending-date').value = '';
+        document.getElementById('proyect-select').value = 'Todos';
+        applyFilters();
+        updateSequenceButtonState();
     }
     
     function setupEditViewPanel() {
@@ -708,6 +716,7 @@
         document.getElementById('ending-date').addEventListener('change', function() { applyFilters(); updateSequenceButtonState(); });
         document.getElementById('proyect-select').addEventListener('change', applyFilters);
         document.getElementById('btn-refresh-data').addEventListener('click', refreshDataManually);
+        document.getElementById('btn-reset-filters').addEventListener('click', resetFilters);
         setupEditViewPanel();
         // Ordenar al hacer click en los th y permitir drag & drop
         const ths = document.querySelectorAll('.summary-table th');

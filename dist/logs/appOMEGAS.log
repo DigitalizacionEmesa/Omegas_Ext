@@ -5,7 +5,7 @@
 2026-04-14 17:48:05 - root - INFO - [CONFIG] RUTA_IMAGENES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242\IMAGENES -> Existe: True
 2026-04-14 17:48:05 - root - INFO - [CONFIG] RUTA_TRADUCCIONES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI302242\translations -> Existe: True
 2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
-2026-04-14 17:48:06 - root - INFO - [SMTP] Config cargada — servidor: smtp.gmail.com, origen: digitalizacionemesa@gmail.com, destinatarios: 2
+2026-04-14 17:48:06 - root - INFO - [SMTP] Config cargada — servidor: smtp.gmail.com, origen: digitalizacionEMESA@gmail.com, destinatarios: 2
 2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
 2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
 2026-04-14 17:48:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server

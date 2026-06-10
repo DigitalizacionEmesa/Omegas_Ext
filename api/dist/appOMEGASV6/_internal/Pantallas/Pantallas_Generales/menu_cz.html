@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+  <title>MENU - SAVERA</title>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+  <div class="header">
+    <button class="back-icon" onclick="window.location.href='http://192.168.253.9:3000/Pantallas/Pantallas_Generales/PLANTAS.html'"  title="Volver atrás">
+      <svg viewBox="0 0 32 32" width="32" height="32"><path d="M22 4L10 16l12 12" stroke="#fff" stroke-width="3" fill="none"/></svg>
+    </button>
+    <span style="flex:1;text-align:center;margin-left: 80px;">MENU</span>
+    <img class="EMESA-logo" src="/IMAGENES/Logo_EMESA.png" alt="Logo EMESA">
+  </div>
+<div class="main-grid">
+    <div class="card" onclick="location.href='http://192.168.253.9:5014/Pantallas/Pantallas_Generales/Pantalla_INICIO.html'" style="display:flex;flex-direction:column;justify-content:center;align-items:center;">
+      <div class="card-title" style="text-align:center;flex:0 0 auto;">OMEGAS</div>
+    </div>
+    <div class="card" onclick="location.href='https://apps.powerapps.com/play/e/default-69181b66-5af0-4bb7-a76d-6f904c038b59/a/6a870c3e-8b91-4339-8ab9-9733fc300a1d?tenantId=69181b66-5af0-4bb7-a76d-6f904c038b59&hint=85e44dd6-5dbb-4269-b26c-7ef215da038b&sourcetime=1756120784968'" style="display:flex;flex-direction:column;justify-content:center;align-items:center;">
+      <div class="card-title" style="text-align:center;flex:0 0 auto;">SGA POWER APPS</div>
+    </div>
+    <!-- Botón para acceder a la guía visual de componentes y probar estilos generales
+    <div class="bottom-card" onclick="window.location.href='/Pantallas/Pantallas_Generales/guia_visual_componentes.html'">
+      Prueba de Estilos Generales
+    </div>
+    -->
+    <!-- Presentacion Comentada: 
+    <div class="card" onclick="location.href='/Pantallas/Pantallas_Generales/Presentacion_SGA2.html'" style="border:2px solid #005baa;background:#eaf3ff;">
+      <div class="card-title" style="color:#005baa;font-weight:bold;">PRESENTACIÓN SGA</div>
+      <img src="/IMAGENES/Logo_EMESA.png" alt="Presentación SGA" style="width:80px;height:80px;object-fit:contain;filter:drop-shadow(0 2px 6px #005baa33);margin-top:8px;">
+      <div style="margin-top:10px;font-size:1em;color:#005baa;">Ver presentación interactiva</div>
+    </div>
+    -->
+  </div>
+  <!-- Chatbot Widget Universal -->
+  <div id="chatbot-widget" style="position:fixed;bottom:28px;right:28px;z-index:9999;">
+    <button onclick="toggleChat()" style="background:#005baa;color:#fff;border:none;padding:12px 22px;border-radius:24px;box-shadow:0 2px 8px rgba(0,0,0,0.12);font-size:1.1em;">¿Necesitas ayuda?</button>
+    <div id="chat-area" style="display:none;background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.18);width:340px;max-height:420px;overflow:auto;padding:18px;margin-top:8px;">
+      <div id="chat-messages" style="font-size:1em;max-height:260px;overflow-y:auto;margin-bottom:8px;"></div>
+      <input id="chat-input" type="text" placeholder="Escribe tu pregunta..." style="width:90%;padding:8px;margin-top:12px;border-radius:8px;border:1px solid #ccc;" onkeydown="if(event.key==='Enter'){sendChat();}">
+      <button onclick="sendChat()" style="margin-top:8px;background:#43b047;color:#fff;border:none;padding:8px 18px;border-radius:8px;">Enviar</button>
+    </div>
+  </div>
+  <script>
+    // Chatbot script universal con sessionStorage
+    function toggleChat() {
+      const area = document.getElementById('chat-area');
+      area.style.display = area.style.display === 'none' ? 'block' : 'none';
+      if (area.style.display === 'block') {
+        loadChatHistory();
+      }
+    }
+    function sendChat() {
+      const input = document.getElementById('chat-input');
+      const msg = input.value.trim();
+      if (!msg) return;
+      appendMessage('Tú', msg);
+      input.value = '';
+      fetch('https://eo7ohudbylfinm5.m.pipedream.net', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({question: msg}) // Este formato es correcto
+      })
+      .then(r=>r.json())
+      .then(data=>{
+        appendMessage('Guía', data.answer);
+      })
+      .catch(()=>{
+        appendMessage('Guía', 'Error de conexión');
+      });
+    }
+    function appendMessage(sender, text) {
+      const chatMessages = document.getElementById('chat-messages');
+      chatMessages.innerHTML += `<div style='margin-bottom:6px;'><b>${sender}:</b> ${text}</div>`;
+      saveChatHistory();
+    }
+    function saveChatHistory() {
+      const chatMessages = document.getElementById('chat-messages').innerHTML;
+      sessionStorage.setItem('chatHistory', chatMessages);
+    }
+    function loadChatHistory() {
+      const chatMessages = document.getElementById('chat-messages');
+      chatMessages.innerHTML = sessionStorage.getItem('chatHistory') || '';
+    }
+    window.addEventListener('unload', function() {
+      sessionStorage.removeItem('chatHistory');
+    });
+  </script>
+
+</body>
+</html>

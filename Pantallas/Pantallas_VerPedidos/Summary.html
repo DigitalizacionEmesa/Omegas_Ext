@@ -210,7 +210,16 @@
         
         function setupPageLogic() {
             autoUpdateSummary(false);
-            setInterval(() => autoUpdateSummary(true), 5000);
+            setInterval(() => {
+                if (!document.hidden) {
+                    autoUpdateSummary(true);
+                }
+            }, 10000);
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    autoUpdateSummary(true);
+                }
+            });
             document.getElementById('search-sequence').addEventListener('input', applyFiltersAndSort);
             document.getElementById('search-salesorder').addEventListener('input', applyFiltersAndSort);
             document.getElementById('search-date-from').addEventListener('change', applyFiltersAndSort);

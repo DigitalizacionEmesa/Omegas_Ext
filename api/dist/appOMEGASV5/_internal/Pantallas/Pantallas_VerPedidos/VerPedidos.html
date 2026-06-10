@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+  <title data-translate-key="page_title_view_orders">Ver Pedidos - General</title>
+  <link rel="stylesheet" href="../../assets/styles.css">
+  <link rel="stylesheet" href="/assets/loginModal.css">
+</head>
+<body>
+  <!-- Header generado por globalHeader.js -->
+<div class="main-grid">
+    <div class="card" onclick="window.location.href='OB_C.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="card_sequenced_c">Pedidos Secuenciados C</div>
+    </div>
+        <div class="card" onclick="window.location.href='OB_W.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="card_sequenced_w">Pedidos Secuenciados W</div>
+    </div>
+
+    <div class="card" onclick="window.location.href='OB_C_Trazabilidad.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="card_traceability_c">Pedidos Secuenciados C CLINCHADAS</div>
+    </div>
+
+    
+
+    <div class="card" onclick="window.location.href='Picking.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="card_picking_orders">Pedidos Picking</div>
+    </div>
+
+    <div class="card" onclick="window.location.href='Tie_Brackets.html'" style="display: flex; align-items: center; justify-content: center; cursor:pointer;">
+      <div class="card-title" style="text-align: center; width: 100%;" data-translate-key="card_tie_brackets">Tie Brackets</div>
+    </div>
+    
+</div>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA'));
+            
+            if (!usuarioSGA) {
+                // No redirigimos, loginModal.js mostrará el modal
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+            
+            const nivelUsuario = usuarioSGA.nivel;
+            const nivelRequerido = 1; // Nivel requerido para pantallas de ver pedidos
+            
+            if (nivelUsuario < nivelRequerido) {
+                alert('No tienes permisos para acceder a esta pantalla');
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+            
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+        }
+    }
+
+    // Ejecutar al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+    
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+    
+      
+      let currentTranslations = {};
+      function getTranslation(key) { return currentTranslations[key] || key; }
+      function applyTranslations(translations) {
+          currentTranslations = translations;
+          document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+          document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+      }
+      async function loadTranslations(lang) {
+          try {
+              const response = await fetch(`/translations/translation_${lang}.json`);
+              if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+              const translations = await response.json();
+              applyTranslations(translations);
+              document.documentElement.lang = lang;
+              localStorage.setItem('language', lang);
+              // Sincronizar ambos selectores
+              const selector = document.getElementById('language-selector');
+              const headerSelector = document.getElementById('header-language-selector');
+              if (selector) selector.value = lang;
+              if (headerSelector) headerSelector.value = lang;
+          } catch (error) { console.error("Error al cargar traducciones:", error); }
+      }
+      function changeLanguage(lang) {
+          loadTranslations(lang);
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+          const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+          loadTranslations(lang);
+      });
+  </script>
+  <script src="/assets/globalHeader.js" data-title="VER PEDIDOS" data-title-key="header_view_orders"></script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

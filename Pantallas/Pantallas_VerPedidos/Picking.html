@@ -75,14 +75,44 @@
     window.addEventListener('userLoggedIn', verificarPermisos);
     
     let pedidosCache = [];
+    let lastRenderedPedidosSignature = '';
+    const VIEW_REFRESH_INTERVAL_MS = 10000;
 
     async function getPedidosPicking() {
-      const res = await fetch('/api/pedidos_picking');
-      if (!res.ok) return [];
-      return await res.json();
+      try {
+        const res = await fetch('/api/pedidos_picking');
+        if (!res.ok) return [];
+        return await res.json();
+      } catch (error) {
+        console.error('Error fetching picking orders:', error);
+        return [];
+      }
     }
 
-function renderCards(pedidos) {
+function buildPedidosSignature(pedidos) {
+  return JSON.stringify((pedidos || []).map(pedido => ({
+    SalesOrder: pedido.SalesOrder || '',
+    Sequence: pedido.Sequence || '',
+    Assy: pedido.Assy || '',
+    Qty: pedido.Qty ?? 0,
+    DeliveryDate: pedido.DeliveryDate || '',
+    Picking: pedido.Picking || '',
+    UniValMapex: pedido.UniValMapex ?? 0,
+    CWT: pedido.CWT || '',
+    MS: pedido.MS || '',
+    WCType: pedido.WCType || ''
+  })));
+}
+
+function renderCards(pedidos, options = {}) {
+  const { force = false } = options;
+  const nextSignature = buildPedidosSignature(pedidos);
+
+  if (!force && nextSignature === lastRenderedPedidosSignature) {
+    return;
+  }
+
+  lastRenderedPedidosSignature = nextSignature;
   pedidosCache = pedidos;
   const grid = document.getElementById('cardsGrid');
   grid.innerHTML = '';
@@ -129,35 +159,35 @@ function renderCards(pedidos) {
     const bgColor = empezado ? '#e7fbe7' : '#f4f8ff';
     const borderColor = empezado ? '#43a047' : '#1976d2';
     const headerBg = empezado ? '#43a047' : '#1976d2';
-    card.style = `background: ${bgColor}; border-radius: 22px; box-shadow: 0 8px 32px rgba(0,91,170,0.18); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 80px; font-size: 1.5rem; font-weight: 600; position:relative; border-left: 14px solid ${borderColor}; margin: 0; width: 100%; max-width: 1700px;`;
+    card.style = `background: ${bgColor}; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid ${borderColor}; margin: 0; width: 100%; max-width: 1800px;`;
     // Si está empezado, solo mostrar la cabecera
     if (empezado) {
       card.innerHTML = `
-        <div style="background:${headerBg};color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_order')} ${order}</span>
+        <div class="picking-card-header" style="background:${headerBg};">
+          <span class="picking-card-title">${getTranslation('card_label_order')} ${order}</span>
         </div>
       `;
     } else {
       card.innerHTML = `
-        <div style="background:${headerBg};color:white;padding:28px 48px 18px 48px;border-radius:10px 22px 0 0;display:flex;align-items:center;justify-content:space-between;">
-          <span style="font-size:2.2rem;font-weight:700;letter-spacing:2px;">${getTranslation('card_label_order')} ${order}</span>
+        <div class="picking-card-header" style="background:${headerBg};">
+          <span class="picking-card-title">${getTranslation('card_label_order')} ${order}</span>
         </div>
-        <div style="display:flex;flex-direction:column;gap:0;padding:0 0 28px 0;">
+        <div class="picking-card-rows">
           ${pedidosGrupo.map(pedido => {
             console.log('DeliveryDate:', pedido.DeliveryDate, 'Format:', formatDate(pedido.DeliveryDate));
             const pickingVal = String(pedido.Picking).trim().toUpperCase();
             const pickingOk = pickingVal === 'SI' || pickingVal === 'YES' || pickingVal === '1' || pickingVal === 'TRUE';
             const uniVal = parseFloat(pedido.UniValMapex);
             const pintarAmarillo = pickingOk && !isNaN(uniVal) && uniVal >= 1;
-            const rowBg = pintarAmarillo ? 'background: #fff9c4;' : '';
+            const rowClass = pintarAmarillo ? 'picking-order-row picking-order-row--highlight' : 'picking-order-row';
             return `
-              <div style="display:flex;flex-wrap:nowrap;gap:38px;padding:28px 64px 0 64px;justify-content:center;border-bottom:1px solid #e0e0e0;${rowBg}">
-                <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:120px;max-width:180px;">
-                  <span style="font-size:2rem;font-weight:600;color:${headerBg};">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
-                </div>
-                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
-                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
-                <div class="pedido-info-container pedido-info-top"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+              <div class="${rowClass}">
+                <div class="picking-sequence-pill" style="color:${headerBg};">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</div>
+                <div class="pedido-info-container picking-info-cell"><span>${pedido.WCType === 'W' ? 'OB-W' : 'OB-C'}</span><div>${pedido.Assy || ''}</div></div>
+                <div class="pedido-info-container picking-info-cell picking-info-cell--mini"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+                <div class="pedido-info-container picking-info-cell"><span>${getTranslation('table_header_cwt')}</span><div>${pedido.CWT || ''}</div></div>
+                <div class="pedido-info-container picking-info-cell"><span>${getTranslation('table_header_ms') || 'MS'}</span><div>${pedido.MS || ''}</div></div>
+                <div class="pedido-info-container picking-info-cell"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
               </div>
             `;
           }).join('')}
@@ -171,6 +201,9 @@ function renderCards(pedidos) {
     function setupPageLogic() {
         async function cargarPicking() {
             try {
+          if (document.hidden) {
+            return;
+          }
                 const pedidos = await getPedidosPicking();
                 renderCards(pedidos);
             } catch (err) {
@@ -179,13 +212,20 @@ function renderCards(pedidos) {
             }
         }
         cargarPicking();
-        setInterval(cargarPicking, 5000);
+      setInterval(cargarPicking, VIEW_REFRESH_INTERVAL_MS);
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          cargarPicking();
+        }
+      });
     }
   </script>
   
   <style>
-    /* Tus estilos originales se mantienen intactos */
-    .pedido-info-container{align-self:center;background:#fff;border:2.5px solid #e3eafc;border-radius:14px;min-width:180px;max-width:200px;height:100px;margin:0;display:flex;flex-direction:column;padding-left:10px;padding-right:10px;align-items:center;box-shadow:0 4px 16px rgba(0,91,170,.1);font-size:1.5rem;font-weight:600}.pedido-info-top{font-size:1.5rem}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:1.8rem;margin-bottom:10px;letter-spacing:2px}.pedido-info-container div{color:#3456a1;font-size:1.6rem;font-weight:700;letter-spacing:1px;text-align:center}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 32px rgba(0,91,170,.22);border-left:10px solid #005baa}@media (max-width:900px){.main-grid{padding:20px 0}.secuenciacion-card>div{padding-left:16px!important;padding-right:16px!important}.pedido-info-container{min-width:100px;padding:8px;font-size:.95rem}}@media (max-width:600px){.main-grid{padding:10px 0}.secuenciacion-card>div{padding-left:8px!important;padding-right:8px!important}.pedido-info-container{min-width:80px;padding:6px;font-size:.92rem}}
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:64px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.96rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.2;overflow-wrap:anywhere}.secuenciacion-card{transition:box-shadow .2s,border-color .2s}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}.main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}.picking-card-header{color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.picking-card-title{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.picking-card-rows{display:flex;flex-direction:column;padding:8px 10px 10px;gap:8px}.picking-order-row{display:grid;grid-template-columns:minmax(110px,.8fr) minmax(140px,1.2fr) minmax(72px,.55fr) minmax(120px,.9fr) minmax(120px,.9fr) minmax(130px,.9fr);gap:8px;align-items:stretch;padding:0}.picking-order-row--highlight{background:#fff9c4;border-radius:12px;padding:8px}.picking-sequence-pill{display:flex;align-items:center;justify-content:center;background:#eef4ff;border:1px solid #d3e3ff;border-radius:10px;padding:8px 10px;font-size:.94rem;font-weight:700;text-align:center;line-height:1.2}.picking-info-cell--mini{min-width:0}.picking-info-cell--status{min-width:0}
+    @media (max-width:1100px){.picking-order-row{grid-template-columns:repeat(4,minmax(110px,1fr));}.picking-sequence-pill{min-height:64px}}
+    @media (max-width:700px){.main-grid{padding:14px 10px 20px}.picking-card-header{padding:10px 14px}.picking-card-title{font-size:.96rem}.picking-card-rows{padding:8px}.picking-order-row{grid-template-columns:repeat(2,minmax(110px,1fr));}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}
+    @media (max-width:420px){.picking-card-header{padding:8px 10px}.picking-card-title{font-size:.88rem}.picking-order-row{grid-template-columns:1fr}.picking-order-row--highlight{padding:6px}.pedido-info-container{min-height:60px}}
   </style>
 
   <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
