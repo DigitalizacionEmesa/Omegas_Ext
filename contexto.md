@@ -1,32 +1,31 @@
-
-⚠️ Diferencias detectadas entre Stock SAP y Aplicación
-Fecha: 09/06/2026 11:09:56
-Se han detectado 26 omega(s) con diferencia de stock entre la aplicación y SAP.
-Omega	Stock App	Stock SAP	Diferencia
-S0PF56225796	0	1	+1
-S0PF56225799	0	1	+1
-S0PF56225805	0	1	+1
-S0PF56225813	0	9	+9
-S0PF56225824	0	9	+9
-S0PF56225828	71	66	-5
-S0PF56225829	32	34	+2
-S0PF56225840	39	70	+31
-S0PF56225841	11	16	+5
-S0PF56225843	0	4	+4
-S0PF56225850	1	0	-1
-S0PF56225853	2	0	-2
-S0PF56225857	2	0	-2
-S0PF56225861	2	0	-2
-S0PF56225864	41	43	+2
-S0PF56225876	8	7	-1
-S0PF56225883	0	26	+26
-S0PF56225891	13	29	+16
-S0PF56225898	59	16	-43
-S0PF56225933	49	46	-3
-S0PF56226281	0	1	+1
-S0PF56226400	8	3	-5
-S0PFA6225947	65	54	-11
-S0PFA6225975	6	0	-6
-S0PFA6225979	0	1	+1
-S0PFA6225985	0	21	+21
-Sistema de Gestión Omegas
+┌─────────────────────────────────────────────────────────────────────┐
+│                     FLUJO DE IMPORTACIÓN                            │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  1️⃣ MAPEX (mapexbp)                                                │
+│     ├─ his_wam_pedido_cliente  →  cabeceras de pedidos              │
+│     └─ his_wam_linea_pedido_cliente + V_Cfg_producto → líneas      │
+│                                                                     │
+│  2️⃣ sync_pending_orders() — Clasificación de líneas               │
+│     ┌──────────────────────────────────────────────────────────┐   │
+│     │ Para cada línea, se busca su W/C en OB.Omegas:           │   │
+│     │   W/C='CWT' → PedidosCabecera.CWT = Cod_Producto         │   │
+│     │   W/C='DS'  → PedidosCabecera.DS  = Cod_Producto         │   │
+│     │   W/C='EX'  → PedidosCabecera.EX  = Cod_Producto  ⬅️    │   │
+│     │   W/C='TB'  → PedidosCabecera.TB  = Cod_Producto         │   │
+│     │   W/C='CWI' → PedidosCabecera.CWI = Cod_Producto         │   │
+│     │   (resto)   → Solo se guarda en PedidosLineas            │   │
+│     └──────────────────────────────────────────────────────────┘   │
+│                                                                     │
+│  3️⃣ Inserción en DataLakeSCCZ:                                     │
+│     ├─ OB.PedidosCabecera (1 fila por pedido)                       │
+│     └─ OB.PedidosLineas (N filas, todas las líneas)                 │
+│                                                                     │
+│  4️⃣ Secuenciación (manual o auto) → OB.PedidosSecuenciados         │
+│     └─ Se asigna Sequence, Assembly ('Yes C'/'Yes W')               │
+│                                                                     │
+│  5️⃣ Pantalla OB_C / OB_W                                           │
+│     └─ endpoint consulta V_PedidosSummary_Secuenciados_Full         │
+│        + 3 OUTER APPLYs para resolver Extender                      │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘

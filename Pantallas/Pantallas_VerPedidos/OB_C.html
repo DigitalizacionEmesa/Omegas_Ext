@@ -94,6 +94,8 @@
         IFQty: pedido.IFQty ?? 0,
         Extender: pedido.Extender || '',
         ExtenderQuantity: pedido.ExtenderQuantity ?? null,
+        PitBracket: pedido.PitBracket || '',
+        PitBracketQty: pedido.PitBracketQty ?? null,
         DeliveryDate: pedido.DeliveryDate || '',
         TieBracket: pedido.TieBracket || '',
         TieBracketQty: pedido.TieBracketQty ?? null,
@@ -109,7 +111,8 @@
     }
 
     async function getPedidosSecuenciadosC() {
-      const res = await fetch('/api/pedidos_secuenciados_c');
+      // No conservar en el navegador órdenes que ya hayan sido cerradas en MAPEX.
+      const res = await fetch('/api/pedidos_secuenciados_c', { cache: 'no-store' });
       if (!res.ok) return [];
       return await res.json();
     }
@@ -164,6 +167,7 @@
         const ifValue = pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2
           ? `${pedido.IF1} / ${pedido.IF2}`
           : (pedido.IF1 || pedido.IF2 || '');
+        const extQty = pedido.ExtenderQuantity;
         const tieBracket = String(pedido.TieBracket || '').trim();
         const hasTieRowData = !!(
           tieBracket
@@ -173,8 +177,8 @@
         const tieRowHtml = hasTieRowData ? `
           <div class="trace-card-secondary">
             <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_tie_bracket')}</span><div>${tieBracket || '-'}</div></div>
-            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
             <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_qty')}</span><div>${formatOptionalQuantity(pedido.TieBracketQty)}</div></div>
+            <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
             <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatOptionalQuantity(pedido.TieExtenderQty)}</div></div>
           </div>
         ` : '';
@@ -195,7 +199,8 @@
             </div>
             <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_wall_int_qty')}</span><div>${formatComponentQuantity(pedido.IFQty)}</div></div>
             <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
-            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(extQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_label_qty')}</span><div>${formatOptionalQuantity(pedido.PitBracketQty)}</div></div>
             <div class="pedido-info-container trace-card-cell trace-card-cell--date"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
             <div class="pedido-info-container trace-card-cell trace-card-cell--wide">
               <span>${getTranslation('card_label_wo')}</span>
@@ -256,7 +261,7 @@
   <style>
     .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:72px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.2;overflow-wrap:anywhere}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18);border-left:8px solid #005baa}
     .main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}
-    .trace-card-header{background:#1976d2;color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.trace-card-meta{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-body{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}.trace-card-secondary{display:grid;grid-template-columns:minmax(180px,1.15fr) minmax(180px,1.15fr) minmax(90px,.55fr) minmax(120px,.7fr);gap:10px;padding:0 14px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--micro{min-width:0;padding:6px 6px}.trace-card-cell--micro span{font-size:.74rem;letter-spacing:.02em}.trace-card-cell--micro div{font-size:.94rem}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-secondary-cell--wide{min-width:0}.trace-card-secondary-cell--compact{min-width:0}.trace-card-barcode{padding:6px 8px}.trace-card-barcode-frame{width:100%;min-height:46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:54px;width:100%;max-width:240px;object-fit:contain;object-position:center;display:block;background:#fff}
+    .trace-card-header{background:#1976d2;color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.trace-card-meta{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-body{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}.trace-card-secondary{display:grid;grid-template-columns:minmax(180px,1.15fr) minmax(90px,.55fr) minmax(180px,1.15fr) minmax(120px,.7fr);gap:10px;padding:0 14px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--micro{min-width:0;padding:6px 6px}.trace-card-cell--micro span{font-size:.74rem;letter-spacing:.02em}.trace-card-cell--micro div{font-size:.94rem}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-secondary-cell--wide{min-width:0}.trace-card-secondary-cell--compact{min-width:0}.trace-card-barcode{padding:6px 8px}.trace-card-barcode-frame{width:100%;min-height:46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:54px;width:100%;max-width:240px;object-fit:contain;object-position:center;display:block;background:#fff}
     @media (max-width:1440px){.trace-card-body{grid-template-columns:repeat(6,minmax(100px,1fr));}.trace-card-barcode{grid-column:span 2}.trace-card-secondary{grid-template-columns:repeat(4,minmax(120px,1fr));}.pedido-info-container{min-height:68px}}
     @media (max-width:900px){.main-grid{padding:14px 10px 20px}.trace-card-header{padding:10px 14px}.trace-card-meta{font-size:.96rem}.trace-card-body{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr));padding:0 10px 10px}.trace-card-barcode{grid-column:span 3}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}}
     @media (max-width:640px){.trace-card-body{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:64px;padding:7px 8px}}

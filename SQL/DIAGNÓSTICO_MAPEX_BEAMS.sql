@@ -32,23 +32,21 @@ GO
 -- Intentar acceder a MAPEX directamente
 -- Buscar producciones de Beams desde el 28-MAY
 BEGIN TRY
-    PRINT '🔍 Buscando datos en MAPEX.dbo.F_HIS_CT...';
+    PRINT '🔍 Buscando datos en MAPEX.dbo.V_His_Prod...';
     PRINT '  • Rango: 28-MAY-2026 a HOY';
-    PRINT '  • WorkGroup1: 50 Assembly';
+    PRINT '  • Cod_area: 50 Assembly';
     PRINT '';
 
     SELECT TOP 50
         f.Cod_producto,
-        f.WorkGroup1 AS WorkGroup,
-        f.Fecha_inicio,
+        f.Cod_area AS WorkGroup,
+        f.Fecha_ini,
         f.Fecha_fin,
         f.Unidades_OK,
         DATEDIFF(DAY, f.Fecha_fin, GETDATE()) AS 'Días desde este registro'
-    FROM mapexbp.dbo.F_HIS_CT(
-        'WORKCENTER', 'DETAIL', 'PRODUCT',
-        '2026-05-28', GETDATE(), 2
-    ) f
-    WHERE f.WorkGroup1 = '50 Assembly'
+    FROM mapexbp.dbo.V_His_Prod f
+    WHERE f.Dia_productivo BETWEEN '2026-05-28' AND GETDATE()
+      AND f.Cod_area = '50 Assembly'
       AND f.Unidades_OK > 0
     ORDER BY f.Fecha_fin DESC;
 
@@ -57,7 +55,7 @@ BEGIN TRY
         PRINT '❌ NO SE ENCONTRARON DATOS EN MAPEX';
         PRINT '   Posibles razones:';
         PRINT '   1. MAPEX no tiene datos desde 28-MAY';
-        PRINT '   2. La función F_HIS_CT está vacía';
+        PRINT '   2. La vista V_His_Prod no devuelve filas';
         PRINT '   3. Los datos fueron borrados de MAPEX';
     END
     ELSE
@@ -122,11 +120,9 @@ SELECT @ConsLocal = COUNT(*) FROM OB.Beams_Consumos;
 
 BEGIN TRY
     SELECT @ProdMapex = COUNT(*)
-    FROM mapexbp.dbo.F_HIS_CT(
-        'WORKCENTER', 'DETAIL', 'PRODUCT',
-        '2026-05-28', GETDATE(), 2
-    ) f
-    WHERE f.WorkGroup1 = '50 Assembly'
+    FROM mapexbp.dbo.V_His_Prod f
+    WHERE f.Dia_productivo BETWEEN '2026-05-28' AND GETDATE()
+      AND f.Cod_area = '50 Assembly'
       AND f.Unidades_OK > 0;
 END TRY
 BEGIN CATCH

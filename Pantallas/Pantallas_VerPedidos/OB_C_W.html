@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" href="/IMAGENES/favicon_omega.svg" type="image/svg+xml">
+    <title data-translate-key="page_title_sequenced_cw">Pedidos Secuenciados C + W</title>
+    <link rel="stylesheet" href="../../assets/styles.css">
+    <link rel="stylesheet" href="/assets/loginModal.css">
+</head>
+<body>
+  <!-- Header generado por globalHeader.js -->
+  <div class="main-grid" id="cardsGrid" style="display: flex; flex-direction: column; gap: 28px; padding: 40px 0; max-width: 1840px; margin: 0 auto;">
+    <!-- Cards se insertan por JS -->
+  </div>
+
+  <script>
+    // ===== CÓDIGO DE VALIDACIÓN DE PERMISOS =====
+    async function verificarPermisos() {
+        try {
+            // Obtener datos del usuario desde localStorage
+            const usuarioSGA = JSON.parse(localStorage.getItem('usuarioSGA') || '{}');
+
+            if (!usuarioSGA.id || !usuarioSGA.nivel) {
+                console.log('No hay sesión activa, esperando login...');
+                return;
+            }
+
+            const nivelUsuario = usuarioSGA.nivel;
+
+            console.log(`🔍 Verificando permisos - Usuario: ${usuarioSGA.nombre}, Nivel: ${nivelUsuario}`);
+
+            // Esta pantalla requiere nivel 1 (acceso básico)
+            if (nivelUsuario < 1) {
+                alert(`❌ Acceso denegado.\n\nNecesitas nivel 1 o superior para acceder a esta sección.\nTu nivel actual: ${nivelUsuario}`);
+                window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+                return;
+            }
+
+            console.log(`✅ Acceso permitido - OB C + W`);
+
+        } catch (error) {
+            console.error('Error verificando permisos:', error);
+            alert('Error al verificar permisos. Redirigiendo al inicio...');
+            window.location.href = '/Pantallas/Pantallas_Generales/Pantalla_INICIO.html';
+        }
+    }
+
+    // Ejecutar verificación al cargar la página
+    document.addEventListener('DOMContentLoaded', verificarPermisos);
+
+    // Escuchar evento de login exitoso
+    window.addEventListener('userLoggedIn', verificarPermisos);
+
+    let pedidosCache = [];
+    let lastRenderedPedidosSignature = '';
+    const VIEW_REFRESH_INTERVAL_MS = 10000;
+
+    function formatDate(dateStr) {
+      if (!dateStr) return '';
+      let dateValue = new Date(dateStr);
+      if (isNaN(dateValue.getTime())) {
+        dateValue = new Date(String(dateStr).replace(/,/g, ''));
+        if (isNaN(dateValue.getTime())) return dateStr;
+      }
+      const day = String(dateValue.getDate()).padStart(2, '0');
+      const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+      const year = dateValue.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+
+    function formatExtenderQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function formatComponentQuantity(value) {
+      return value === null || value === undefined || value === '' ? 0 : value;
+    }
+
+    function formatOptionalQuantity(value) {
+      return value === null || value === undefined || value === '' ? '-' : value;
+    }
+
+    function buildBarcodeUrl(value) {
+      if (!value) return '';
+      return `https://bwipjs-api.metafloor.com/?bcid=code39&text=${encodeURIComponent(value)}&scale=4&height=18`;
+    }
+
+    function buildPedidosSignature(pedidos) {
+      return JSON.stringify((pedidos || []).map(pedido => ({
+        tipo: pedido.tipo || '',
+        SalesOrder: pedido.SalesOrder || '',
+        Sequence: pedido.Sequence || pedido.SequenceValue || '',
+        Assy: pedido.Assy || '',
+        Qty: pedido.Qty || 0,
+        DoneQty: pedido.DoneQty ?? 0,
+        Beam: pedido.Beam || '',
+        BeamQty: pedido.BeamQty ?? 0,
+        IF1: pedido.IF1 || '',
+        IF2: pedido.IF2 || '',
+        IFQty: pedido.IFQty ?? 0,
+        Extender: pedido.Extender || '',
+        ExtenderQuantity: pedido.ExtenderQuantity ?? null,
+        DeliveryDate: pedido.DeliveryDate || '',
+        TieBracket: pedido.TieBracket || '',
+        TieBracketQty: pedido.TieBracketQty ?? null,
+        TieExtenderQty: pedido.TieExtenderQty ?? null,
+        PitBracket: pedido.PitBracket || '',
+        PitBracketQty: pedido.PitBracketQty ?? null,
+        WO: pedido.WO || '',
+        PriorityOrder: pedido.PriorityOrder ?? null
+      })));
+    }
+
+    async function getPedidosCombinados() {
+      let cRes, wRes;
+      try {
+        [cRes, wRes] = await Promise.all([
+          fetch('/api/pedidos_secuenciados_c', { cache: 'no-store' }),
+          fetch('/api/pedidos_secuenciados_w', { cache: 'no-store' })
+        ]);
+      } catch (error) {
+        console.error('Error al obtener pedidos C/W:', error);
+        return [];
+      }
+
+      const cPedidos = (cRes && cRes.ok) ? await cRes.json().catch(() => []) : [];
+      const wPedidos = (wRes && wRes.ok) ? await wRes.json().catch(() => []) : [];
+
+      const items = [
+        ...(Array.isArray(cPedidos) ? cPedidos : []).map(p => ({ ...p, tipo: 'C' })),
+        ...(Array.isArray(wPedidos) ? wPedidos : []).map(p => ({ ...p, tipo: 'W' }))
+      ];
+
+      // Orden estable: PriorityOrder asc si existe; si no, por parte numérica de Sequence asc
+      function parseSeq(val) {
+        if (val === null || val === undefined) return Number.POSITIVE_INFINITY;
+        const m = String(val).match(/\d+/g);
+        if (!m || m.length === 0) return Number.POSITIVE_INFINITY;
+        return parseInt(m[m.length - 1], 10);
+      }
+      function compareOrders(a, b) {
+        const pa = (typeof a.PriorityOrder === 'number') ? a.PriorityOrder : null;
+        const pb = (typeof b.PriorityOrder === 'number') ? b.PriorityOrder : null;
+        if (pa !== null && pb !== null) return pa - pb;
+        const sa = parseSeq(a.Sequence || a.SequenceValue);
+        const sb = parseSeq(b.Sequence || b.SequenceValue);
+        if (sa !== sb) return sa - sb;
+        const tipoOrder = { C: 0, W: 1 };
+        const ta = tipoOrder[a.tipo] ?? 2;
+        const tb = tipoOrder[b.tipo] ?? 2;
+        return ta - tb;
+      }
+
+      return items.sort(compareOrders);
+    }
+
+    function groupBySalesOrder(items) {
+      const groups = [];
+      const groupMap = new Map();
+
+      for (const item of items) {
+        const key = String(item.SalesOrder || item.Sequence || '').trim() || `seq-${item.Sequence || ''}`;
+        let group = groupMap.get(key);
+        if (!group) {
+          group = { salesOrder: key, items: [] };
+          groupMap.set(key, group);
+          groups.push(group);
+        }
+        group.items.push(item);
+      }
+
+      // Dentro de cada grupo: C primero, luego W, manteniendo el orden por secuencia
+      const tipoOrder = { C: 0, W: 1 };
+      for (const group of groups) {
+        group.items.sort((a, b) => {
+          const ta = tipoOrder[a.tipo] ?? 2;
+          const tb = tipoOrder[b.tipo] ?? 2;
+          if (ta !== tb) return ta - tb;
+          const sa = String(a.Sequence || '').localeCompare(String(b.Sequence || ''), undefined, { numeric: true });
+          return sa;
+        });
+      }
+
+      return groups;
+    }
+
+    function buildCard(pedido, idx) {
+      const card = document.createElement('div');
+      card.className = 'secuenciacion-card';
+      const borderColor = pedido.tipo === 'W' ? '#2e7d32' : '#1976d2';
+      card.style = `background: #f4f8ff; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid ${borderColor}; margin: 0; width: 100%; max-width: 1800px;`;
+
+      const barcodeImgId = `barcodeimg_${idx}_${String(pedido.SalesOrder || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+      const ifValue = pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2
+        ? `${pedido.IF1} / ${pedido.IF2}`
+        : (pedido.IF1 || pedido.IF2 || '');
+      const tieBracket = String(pedido.TieBracket || '').trim();
+      const hasTieRowData = !!(
+        tieBracket
+        || pedido.TieBracketQty !== null && pedido.TieBracketQty !== undefined
+        || pedido.TieExtenderQty !== null && pedido.TieExtenderQty !== undefined
+      );
+      const tieRowHtml = hasTieRowData ? `
+        <div class="trace-card-secondary">
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_tie_bracket')}</span><div>${tieBracket || '-'}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_qty')}</span><div>${formatOptionalQuantity(pedido.TieBracketQty)}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatOptionalQuantity(pedido.TieExtenderQty)}</div></div>
+        </div>
+      ` : '';
+
+      const badgeClass = pedido.tipo === 'W' ? 'trace-card-badge--w' : 'trace-card-badge--c';
+      const badgeText = pedido.tipo === 'W' ? getTranslation('badge_ob_w') : getTranslation('badge_ob_c');
+
+      card.innerHTML = `
+        <div class="trace-card-header">
+          <span class="trace-card-meta">${getTranslation('card_label_sequence')} ${pedido.Sequence || ''}</span>
+          <span class="trace-card-meta">${getTranslation('card_label_order')} ${pedido.SalesOrder || ''}</span>
+          <span class="trace-card-badge ${badgeClass}">${badgeText}</span>
+        </div>
+        <div class="trace-card-body">
+          <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_sub_omega')}</span><div>${pedido.Beam || ''}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_sub_omega_qty')}</span><div>${formatComponentQuantity(pedido.BeamQty)}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--narrow">
+            <span>${getTranslation('card_label_wall_int')}</span>
+            <div>${ifValue}</div>
+          </div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_wall_int_qty')}</span><div>${formatComponentQuantity(pedido.IFQty)}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(pedido.ExtenderQuantity)}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_label_qty')}</span><div>${formatOptionalQuantity(pedido.PitBracketQty)}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--date"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+          <div class="pedido-info-container trace-card-cell trace-card-cell--wide">
+            <span>${getTranslation('card_label_wo')}</span>
+            <div>${(pedido.WO || '').replace(/,/g, ', ')}</div>
+          </div>
+          <div class="pedido-info-container trace-card-cell trace-card-barcode">
+            <span>${getTranslation('barcode_label')}</span>
+            <div class="trace-card-barcode-frame">
+              <img id="${barcodeImgId}" class="trace-card-barcode-image" alt="barcode" src="" />
+            </div>
+          </div>
+        </div>
+        ${tieRowHtml}
+      `;
+
+      let firstWO = '';
+      if (pedido.WO) {
+        const woArr = String(pedido.WO).split(',').map(w => w.trim()).filter(w => w);
+        if (woArr.length > 0) firstWO = woArr[0];
+      }
+      const img = card.querySelector(`#${barcodeImgId}`);
+      if (img) {
+        img.dataset.barcodeValue = firstWO;
+        img.src = firstWO ? buildBarcodeUrl(firstWO) : '';
+      }
+
+      return card;
+    }
+
+    function buildCombinedCard(items, idx) {
+      const itemsArr = Array.isArray(items) ? items : [items];
+      const hasC = itemsArr.some(i => i.tipo === 'C');
+      const hasW = itemsArr.some(i => i.tipo === 'W');
+      const isBoth = hasC && hasW;
+      const isOnlyC = hasC && !hasW;
+      const isOnlyW = hasW && !hasC;
+      const headerRef = itemsArr[0] || {};
+
+      const card = document.createElement('div');
+      card.className = 'secuenciacion-card secuenciacion-card--combined';
+      const borderColor = isOnlyC ? '#9e9e9e' : (isOnlyW ? '#2e7d32' : '#1976d2');
+      card.style = `background: #f4f8ff; border-radius: 18px; box-shadow: 0 6px 24px rgba(0,91,170,0.15); display: flex; flex-direction: column; gap: 0; padding: 0; min-height: 0; font-size: 1rem; font-weight: 600; position:relative; border-left: 8px solid ${borderColor}; margin: 0; width: 100%; max-width: 1800px;`;
+
+      // ---- Header (secuencia izq., orden en medio, origen a la derecha con color de tarjeta) ----
+      const badgeClass = isBoth ? 'trace-card-badge--src' : (isOnlyC ? 'trace-card-badge--c-src' : 'trace-card-badge--w-src');
+      const badgeText = isBoth ? 'OB-C / OB-W' : (isOnlyC ? getTranslation('badge_ob_c') : getTranslation('badge_ob_w'));
+      const badgeHtml = `<span class="trace-card-badge ${badgeClass}">${badgeText}</span>`;
+      const headerHtml = `
+        <div class="trace-card-header">
+          <span class="trace-card-meta trace-card-meta--left">${getTranslation('card_label_sequence')} ${headerRef.Sequence || ''}</span>
+          <span class="trace-card-meta trace-card-meta--center">${getTranslation('card_label_order')} ${headerRef.SalesOrder || ''}</span>
+          ${badgeHtml}
+        </div>
+      `;
+
+      // ---- Toques en la esquina superior derecha: gris C, verde W, naranja conjunto ----
+      const cornerHtml = isOnlyC
+        ? `<span class="trace-card-corner-c" aria-hidden="true"></span>`
+        : (isOnlyW
+            ? `<span class="trace-card-corner-w" aria-hidden="true"></span>`
+            : `<span class="trace-card-corner-cw" aria-hidden="true"></span>`);
+
+      // ---- Helper: genera la fila de cuerpo de un pedido (C o W) ----
+      const buildBodyHtml = (pedido) => {
+        const ifValue = pedido.IF1 && pedido.IF2 && pedido.IF1 !== pedido.IF2
+          ? `${pedido.IF1} / ${pedido.IF2}`
+          : (pedido.IF1 || pedido.IF2 || '');
+        const imgId = `barcodeimg_${idx}_${pedido.tipo}_${String(pedido.SalesOrder || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+        const rowClass = pedido.tipo === 'W' ? 'cw-body-row cw-body-row--w' : 'cw-body-row cw-body-row--c';
+        const extQty = pedido.ExtenderQuantity;
+        return `
+          <div class="${rowClass}">
+            <div class="trace-card-body-grid">
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('table_header_assy')}</span><div>${pedido.Assy || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_qty')}</span><div>${pedido.Qty || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_done_qty')}</span><div>${(pedido.DoneQty === 0 || pedido.DoneQty === '0' || pedido.DoneQty === null || pedido.DoneQty === undefined || pedido.DoneQty === '') ? 0 : pedido.DoneQty}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_sub_omega')}</span><div>${pedido.Beam || ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_sub_omega_qty')}</span><div>${formatComponentQuantity(pedido.BeamQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow">
+              <span>${getTranslation('card_label_wall_int')}</span>
+              <div>${ifValue}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_wall_int_qty')}</span><div>${formatComponentQuantity(pedido.IFQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--narrow"><span>${getTranslation('card_label_extender')}</span><div>${pedido.Extender || '-'}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatExtenderQuantity(extQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--micro"><span>${getTranslation('card_label_label_qty')}</span><div>${formatOptionalQuantity(pedido.PitBracketQty)}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--date"><span>${getTranslation('card_label_delivery_date')}</span><div>${pedido.DeliveryDate ? formatDate(pedido.DeliveryDate) : ''}</div></div>
+            <div class="pedido-info-container trace-card-cell trace-card-cell--wide">
+              <span>${getTranslation('card_label_wo')}</span>
+              <div>${(pedido.WO || '').replace(/,/g, ', ')}</div>
+            </div>
+            <div class="pedido-info-container trace-card-cell trace-card-barcode">
+              <span>${getTranslation('barcode_label')}</span>
+              <div class="trace-card-barcode-frame">
+                <img id="${imgId}" class="trace-card-barcode-image" alt="barcode" src="" />
+              </div>
+            </div>
+            </div>
+          </div>
+        `;
+      };
+
+      // ---- Secondary compartido (usa el primer item con datos de TB; componentes a nivel de pedido) ----
+      const secondaryRef = itemsArr.find(i => {
+        const tb = String(i.TieBracket || '').trim();
+        return !!(tb || (i.TieBracketQty !== null && i.TieBracketQty !== undefined) || (i.TieExtenderQty !== null && i.TieExtenderQty !== undefined));
+      }) || headerRef;
+      const tieBracket = String(secondaryRef.TieBracket || '').trim();
+      const hasTieRowData = !!(
+        tieBracket
+        || secondaryRef.TieBracketQty !== null && secondaryRef.TieBracketQty !== undefined
+        || secondaryRef.TieExtenderQty !== null && secondaryRef.TieExtenderQty !== undefined
+      );
+      const secondaryHtml = hasTieRowData ? `
+        <div class="trace-card-secondary trace-card-secondary--shared">
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_tie_bracket')}</span><div>${tieBracket || '-'}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_qty')}</span><div>${formatOptionalQuantity(secondaryRef.TieBracketQty)}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--wide"><span>${getTranslation('card_label_extender')}</span><div>${secondaryRef.Extender || '-'}</div></div>
+          <div class="pedido-info-container trace-card-secondary-cell trace-card-secondary-cell--compact"><span>${getTranslation('card_label_extender_qty')}</span><div>${formatOptionalQuantity(secondaryRef.TieExtenderQty)}</div></div>
+        </div>
+      ` : '';
+
+      const bodyItems = [...itemsArr].sort((a, b) => {
+        const order = { W: 0, C: 1 };
+        return (order[a.tipo] ?? 2) - (order[b.tipo] ?? 2);
+      });
+
+      card.innerHTML = `
+        ${cornerHtml}
+        ${headerHtml}
+        <div class="trace-card-body trace-card-body--combined">
+          ${bodyItems.map(p => buildBodyHtml(p)).join('')}
+        </div>
+        ${secondaryHtml}
+      `;
+
+      // ---- Barcodes ----
+      itemsArr.forEach((pedido) => {
+        let firstWO = '';
+        if (pedido.WO) {
+          const woArr = String(pedido.WO).split(',').map(w => w.trim()).filter(w => w);
+          if (woArr.length > 0) firstWO = woArr[0];
+        }
+        const imgId = `barcodeimg_${idx}_${pedido.tipo}_${String(pedido.SalesOrder || '').replace(/[^a-zA-Z0-9]/g, '')}`;
+        const img = card.querySelector(`#${imgId}`);
+        if (img) {
+          img.dataset.barcodeValue = firstWO;
+          img.src = firstWO ? buildBarcodeUrl(firstWO) : '';
+        }
+      });
+
+      return card;
+    }
+
+    async function renderCards(pedidos, options = {}) {
+      const { force = false } = options;
+      const sorted = Array.isArray(pedidos) ? [...pedidos] : [];
+      const nextSignature = buildPedidosSignature(sorted);
+
+      if (!force && nextSignature === lastRenderedPedidosSignature) {
+        return;
+      }
+
+      lastRenderedPedidosSignature = nextSignature;
+      pedidosCache = sorted;
+      const grid = document.getElementById('cardsGrid');
+      grid.innerHTML = '';
+
+      if (!sorted.length) {
+        const vacio = document.createElement('div');
+        vacio.textContent = getTranslation('text_no_cw_orders');
+        vacio.style.textAlign = 'center';
+        vacio.style.color = '#3456a1';
+        vacio.style.marginTop = '40px';
+        grid.appendChild(vacio);
+        return;
+      }
+
+      const groups = groupBySalesOrder(sorted);
+      let idxCounter = 0;
+
+      for (const group of groups) {
+        // Siempre usamos la tarjeta combinada: filas coloreadas por tipo (C verde / W gris)
+        // y fila inferior compartida, tanto si hay C+W como si hay solo uno.
+        grid.appendChild(buildCombinedCard(group.items, idxCounter++));
+      }
+    }
+
+    function setupPageLogic() {
+        let autoUpdateInFlight = false;
+
+        async function autoUpdate() {
+            // La consulta C/W puede tardar más que el intervalo de refresco.
+            // No iniciar otra pareja de peticiones mientras la anterior está en curso:
+            // de lo contrario cada pestaña acumula consultas SQL idénticas.
+            if (document.hidden || autoUpdateInFlight) {
+              return;
+            }
+            autoUpdateInFlight = true;
+            try {
+              const pedidos = await getPedidosCombinados();
+              await renderCards(pedidos);
+            } finally {
+              autoUpdateInFlight = false;
+            }
+        }
+        autoUpdate();
+        setInterval(autoUpdate, VIEW_REFRESH_INTERVAL_MS);
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) {
+            autoUpdate();
+          }
+        });
+    }
+  </script>
+
+  <!-- ESTILOS ADICIONALES -->
+  <style>
+    .pedido-info-container{align-self:stretch;background:#fff;border:1px solid #dce7fb;border-radius:10px;margin:0;display:flex;flex-direction:column;justify-content:center;padding:8px 10px;align-items:center;box-shadow:0 2px 8px rgba(0,91,170,.08);font-size:1rem;font-weight:600;min-height:72px;min-width:0}.pedido-info-container span{color:#1976d2;font-weight:700;font-size:.82rem;margin-bottom:4px;letter-spacing:.04em;text-align:center;line-height:1.15}.pedido-info-container div{color:#3456a1;font-size:.98rem;font-weight:700;letter-spacing:.01em;text-align:center;line-height:1.2;overflow-wrap:anywhere}.secuenciacion-card{transition:box-shadow .2s,border-color .2s;display:flex;flex-direction:column}.secuenciacion-card:hover{box-shadow:0 8px 28px rgba(0,91,170,.18)}
+    .main-grid{display:flex;flex-direction:column;gap:14px;padding:14px clamp(8px,2vw,24px) 24px;max-width:100%;margin:0 auto}
+    .trace-card-header{background:#1976d2;color:#fff;padding:10px 18px;border-radius:10px 18px 0 0;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px}.trace-card-meta{font-size:1.02rem;font-weight:700;letter-spacing:.02em;line-height:1.2}.trace-card-meta--left{justify-self:start}.trace-card-meta--center{justify-self:center;text-align:center}.trace-card-header .trace-card-badge{justify-self:end}.trace-card-body{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}.trace-card-secondary{display:grid;grid-template-columns:minmax(180px,1.15fr) minmax(90px,.55fr) minmax(180px,1.15fr) minmax(120px,.7fr);gap:10px;padding:0 14px 14px;align-items:stretch}.trace-card-cell--narrow{min-width:0}.trace-card-cell--mini{min-width:0}.trace-card-cell--micro{min-width:0;padding:6px 6px}.trace-card-cell--micro span{font-size:.74rem;letter-spacing:.02em}.trace-card-cell--micro div{font-size:.94rem}.trace-card-cell--wide{min-width:0}.trace-card-cell--date{min-width:0}.trace-card-cell--date div{font-size:.92rem}.trace-card-secondary-cell--wide{min-width:0}.trace-card-secondary-cell--compact{min-width:0}.trace-card-barcode{padding:6px 8px}.trace-card-barcode-frame{width:100%;min-height:46px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff}.trace-card-barcode-image{height:54px;width:100%;max-width:240px;object-fit:contain;object-position:center;display:block;background:#fff}
+    .trace-card-badge{align-self:center;padding:4px 12px;border-radius:999px;font-size:.8rem;font-weight:800;letter-spacing:.04em;color:#fff;background:#455a64}.trace-card-badge--c{background:#1976d2}.trace-card-badge--w{background:#2e7d32}
+    .cw-group{display:flex;flex-direction:column;gap:10px;border:2px solid #b7cbea;border-radius:18px;padding:10px;background:#eef4ff;box-shadow:0 4px 16px rgba(0,91,170,.10)}.cw-group-header{background:#3456a1;color:#fff;padding:8px 16px;border-radius:10px 10px 0 0;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:1rem;font-weight:700;letter-spacing:.02em}
+    @media (max-width:1440px){.trace-card-body{grid-template-columns:repeat(6,minmax(100px,1fr));}.trace-card-barcode{grid-column:span 2}.trace-card-secondary{grid-template-columns:repeat(4,minmax(120px,1fr));}.pedido-info-container{min-height:68px}}
+    @media (max-width:900px){.main-grid{padding:14px 10px 20px}.trace-card-header{padding:10px 14px}.trace-card-meta{font-size:.96rem}.trace-card-body{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr));padding:0 10px 10px}.trace-card-barcode{grid-column:span 3}.pedido-info-container span{font-size:.78rem}.pedido-info-container div{font-size:.92rem}.cw-group-header{font-size:.92rem}}
+    @media (max-width:640px){.trace-card-body{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-secondary{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-barcode{grid-column:span 2}.pedido-info-container{min-height:64px;padding:7px 8px}}
+    @media (max-width:420px){.trace-card-header{padding:8px 10px}.trace-card-meta{font-size:.88rem}.trace-card-body{grid-template-columns:1fr;padding:8px}.trace-card-barcode{grid-column:auto}.pedido-info-container{min-height:60px}.trace-card-barcode-image{max-width:100%}.cw-group-header{padding:8px 10px}}
+    /* ===== Tarjetas combinadas C + W ===== */
+    /* ===== Toque verde en esquina superior derecha (solo tarjetas OB-C) ===== */
+    .trace-card-corner-c{position:absolute;top:0;right:0;width:0;height:0;border-top:38px solid #9e9e9e;border-left:38px solid transparent;border-top-right-radius:16px;z-index:2;box-shadow:-2px 2px 4px rgba(158,158,158,.25)}
+    /* ===== Toque verde en esquina superior derecha (solo tarjetas OB-W) ===== */
+    .trace-card-corner-w{position:absolute;top:0;right:0;width:0;height:0;border-top:38px solid #2e7d32;border-left:38px solid transparent;border-top-right-radius:16px;z-index:2;box-shadow:-2px 2px 4px rgba(46,125,50,.25)}
+    /* ===== Toque naranja en esquina superior derecha (tarjetas conjunto OB-C / OB-W) ===== */
+    .trace-card-corner-cw{position:absolute;top:0;right:0;width:0;height:0;border-top:38px solid #f57c00;border-left:38px solid transparent;border-top-right-radius:16px;z-index:2;box-shadow:-2px 2px 4px rgba(245,124,0,.30)}
+    /* ===== Badge de origen (a la derecha en el header): color por tarjeta ===== */
+    .trace-card-badge--c-src{background:#9e9e9e}
+    .trace-card-badge--w-src{background:#2e7d32}
+    .trace-card-badge--src{background:#f57c00}
+    /* ===== Celdas por tipo dentro de la tarjeta combinada ===== */
+    .cw-body-row--c .pedido-info-container{background:#f1f1f1!important;border-color:#e0e0e0!important}
+    .cw-body-row--w .pedido-info-container{background:#e8f5e9!important;border-color:#c8e6c9!important}
+    .trace-card-badge--cw{background:linear-gradient(135deg,#1976d2,#2e7d32)}
+    .trace-card-body--combined{display:flex;flex-direction:column;padding:0}
+    .trace-card-body--combined .trace-card-body-grid{display:grid;grid-template-columns:minmax(112px,1.1fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(112px,1.08fr) minmax(58px,.42fr) minmax(110px,.95fr) minmax(58px,.42fr) minmax(92px,.78fr) minmax(58px,.42fr) minmax(58px,.42fr) minmax(110px,.84fr) minmax(190px,1.28fr) minmax(220px,1.35fr);gap:10px;padding:10px 14px 12px;align-items:stretch}
+    .cw-body-row + .cw-body-row{border-top:1px solid #dce7fb;margin-top:8px;padding-top:8px}
+    .trace-card-secondary--shared{border-top:1px solid #dce7fb;padding-top:12px}
+    @media (max-width:1440px){.trace-card-body--combined .trace-card-body-grid{grid-template-columns:repeat(6,minmax(100px,1fr))}.trace-card-body--combined .trace-card-barcode{grid-column:span 2}}
+    @media (max-width:900px){.trace-card-body--combined .trace-card-body-grid{grid-template-columns:repeat(3,minmax(110px,1fr));padding:10px}.trace-card-body--combined .trace-card-barcode{grid-column:span 3}}
+    @media (max-width:640px){.trace-card-body--combined .trace-card-body-grid{grid-template-columns:repeat(2,minmax(110px,1fr))}.trace-card-body--combined .trace-card-barcode{grid-column:span 2}}
+    @media (max-width:420px){.trace-card-body--combined .trace-card-body-grid{grid-template-columns:1fr}.trace-card-body--combined .trace-card-barcode{grid-column:auto}}
+  </style>
+
+  <!-- ======================= INICIO DEL SCRIPT DE TRADUCCIÓN ======================= -->
+  <script>
+
+      let currentTranslations = {};
+      function getTranslation(key) { return currentTranslations[key] || key; }
+      function applyTranslations(translations) {
+          currentTranslations = translations;
+          document.querySelectorAll('[data-translate-key]').forEach(el => { if (translations[el.getAttribute('data-translate-key')]) el.innerHTML = translations[el.getAttribute('data-translate-key')]; });
+          document.querySelectorAll('[data-translate-key-title]').forEach(el => { if (translations[el.getAttribute('data-translate-key-title')]) el.setAttribute('title', translations[el.getAttribute('data-translate-key-title')]); });
+      }
+      async function loadTranslations(lang) {
+          try {
+              const response = await fetch(`/translations/translation_${lang}.json`);
+              if (!response.ok) { if (lang !== 'es') await loadTranslations('es'); return; }
+              const translations = await response.json();
+              applyTranslations(translations);
+              document.documentElement.lang = lang;
+              localStorage.setItem('language', lang);
+              // Sincronizar ambos selectores
+              const selector = document.getElementById('language-selector');
+              const headerSelector = document.getElementById('header-language-selector');
+              if (selector) selector.value = lang;
+              if (headerSelector) headerSelector.value = lang;
+          } catch (error) { console.error("Error al cargar traducciones:", error); }
+      }
+      function changeLanguage(lang) {
+          loadTranslations(lang).then(async () => {
+              // Re-renderizar las tarjetas con el nuevo idioma usando la caché de datos
+              if (typeof renderCards === 'function' && typeof pedidosCache !== 'undefined') {
+                  await renderCards(pedidosCache, { force: true });
+              }
+          });
+      }
+      document.addEventListener('DOMContentLoaded', () => {
+          const lang = localStorage.getItem('language') || navigator.language.split('-')[0] || 'es';
+          loadTranslations(lang).then(() => {
+              if (typeof setupPageLogic === 'function') {
+                  setupPageLogic();
+              }
+          });
+      });
+  </script>
+  <script src="/assets/globalHeader.js" data-title="PEDIDOS SECUENCIADOS C + W" data-title-key="header_sequenced_cw"></script>
+  <!-- ======================= FIN DEL SCRIPT DE TRADUCCIÓN ======================= -->
+</body>
+</html>

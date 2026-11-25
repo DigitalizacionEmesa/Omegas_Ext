@@ -26,6 +26,24 @@ BEGIN
 
     SET @MinProdDateFloor = DATEADD(DAY, DATEDIFF(DAY, 0, @MinProdDate), 0);
 
+    ;WITH ProduccionMapexNeta AS (
+        -- V_His_Prod expone las correcciones como filas independientes (también negativas).
+        -- F_HIS_CT en modo DAY las compensa por producto, máquina y día productivo.
+        SELECT
+            f.Cod_producto,
+            REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)) AS WorkGroup,
+            MIN(f.Fecha_ini) AS Fecha_inicio,
+            MAX(f.Fecha_fin) AS Fecha_fin,
+            CAST(SUM(CAST(f.Unidades_OK AS BIGINT)) AS INT) AS Unidades_OK
+        FROM mapexbp.dbo.V_His_Prod f
+        WHERE f.Cod_area = '50 Assembly'
+          AND f.Dia_productivo BETWEEN @MinProdDateFloor AND @CurrentTime
+        GROUP BY
+            f.Cod_producto,
+            REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)),
+            f.Dia_productivo
+        HAVING SUM(CAST(f.Unidades_OK AS BIGINT)) > 0
+    )
     MERGE OB.Omegas_Produccion AS Target
     USING (
         SELECT
@@ -33,23 +51,17 @@ BEGIN
             f.WorkGroup,
             f.Fecha_inicio,
             f.Fecha_fin,
-            CAST(f.Unidades_OK AS INT) AS Unidades_OK
-        FROM mapexbp.dbo.F_HIS_CT(
-            'WORKCENTER', 'DAY', 'PRODUCT',
-            @MinProdDateFloor, @CurrentTime, 2
-        ) f
+            f.Unidades_OK
+        FROM ProduccionMapexNeta f
         INNER JOIN OB.Last_Sync_omegas lso
             ON f.Cod_producto = lso.Cod_producto
             AND lso.Fuente = 'PROD'
         WHERE (
-            f.WorkGroup1 = '50 Assembly'
-            AND f.Unidades_OK > 0
-            AND f.Fecha_inicio >= lso.Last_Sync_Date
-        )
-        OR (
-            f.WorkGroup1 = '50 Assembly'
-            AND f.Fecha_fin > lso.Last_Sync_Date
-            AND f.Fecha_inicio < lso.Last_Sync_Date
+            f.Fecha_inicio >= lso.Last_Sync_Date
+            OR (
+                f.Fecha_fin > lso.Last_Sync_Date
+                AND f.Fecha_inicio < lso.Last_Sync_Date
+            )
         )
     ) AS Source
     ON (

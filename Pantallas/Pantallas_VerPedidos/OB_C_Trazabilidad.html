@@ -87,7 +87,7 @@
 
     async function getPedidosSecuenciadosC() {
       try {
-        const res = await fetch('/api/pedidos_secuenciados_c_trazabilidad');
+        const res = await fetch('/api/pedidos_secuenciados_c_trazabilidad', { cache: 'no-store' });
         if (!res.ok) return [];
         return await res.json();
       } catch (error) {

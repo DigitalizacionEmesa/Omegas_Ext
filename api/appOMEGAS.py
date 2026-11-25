@@ -6,6 +6,7 @@ import sys
 import io
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 import hashlib
 import pyodbc
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, send_from_directory
@@ -38,11 +39,14 @@ if sys.platform == 'win32':
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 
-# Configuración de conexión al servicio ICF de SAP
-SAP_STOCK_URL = 'http://EMESApprdapp:8000/sap/bc/z_ordenes_stock'
-SAP_CLIENT    = '100'
-SAP_USER      = 'EMESA.MM'
-SAP_PASSWORD  = 'EMESA1234'
+# Consulta SAP temporalmente desactivada.
+# Se conserva la caché local (endpoint /api/stock_sap_cached) para mostrar el
+# último resultado disponible. Para reactivar la integración, descomentar esta
+# configuración y el bloque requests.post de get_stock_sap_omegas().
+# SAP_STOCK_URL = 'http://EMESApprdapp:8000/sap/bc/z_ordenes_stock'
+# SAP_CLIENT    = '100'
+# SAP_USER      = 'EMESA.MM'
+# SAP_PASSWORD  = 'EMESA1234'
 
 # ----- CORREO (cargado desde OB.Notificaciones en DataLakeSCCZ al arrancar) -----
 SMTP_SERVIDOR         = None
@@ -117,7 +121,21 @@ def configure_logging():
 
 configure_logging()
 
-PEDIDOS_DB_LOCK = threading.Lock()
+# ====================================================================================
+# LOGGER ESPECÍFICO PARA EL STOCK WATCHDOG
+# ====================================================================================
+stock_logger = logging.getLogger("StockWatchdog")
+stock_logger.setLevel(logging.WARNING)
+stock_watchdog_log_file = os.path.join(LOGS_DIR, 'stock_watchdog.log')
+try:
+    watchdog_handler = RotatingFileHandler(stock_watchdog_log_file, maxBytes=10*1024*1024, backupCount=5, encoding='utf-8')
+    watchdog_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    stock_logger.addHandler(watchdog_handler)
+except Exception:
+    pass
+
+PEDIDOS_DB_LOCK = threading.RLock()
+SEQUENCED_CLEANUP_LOCK = threading.Lock()
 ENDPOINT_RESPONSE_CACHE_LOCK = threading.Lock()
 ENDPOINT_RESPONSE_CACHE = {}
 ENDPOINT_RESPONSE_CACHE_TTL_SECONDS = max(3, int(os.getenv('OMEGAS_VIEW_CACHE_TTL_SECONDS', '15')))
@@ -142,14 +160,45 @@ MANUAL_SYNC_STATE = {
     'error': None,
 }
 
+SEQUENCED_SYNC_STATUS_LOCK = threading.Lock()
+SEQUENCED_SYNC_STATUS = {
+    'running': False,
+    'last_started_at': None,
+    'last_completed_at': None,
+    'last_error': None,
+    'processed_lines': 0,
+    'updated_lines': 0,
+    'terminal_lines': 0,
+    'mapex_updates': 0,
+}
 
-def get_cached_endpoint_response(cache_key):
+
+def is_terminal_mapex_order(estado_erp, estado_wam, unidades_pedidas, unidades_servidas=0):
+    """Indica si el pedido ya se puede retirar también de la cola de Picking.
+
+    La producción completa retira la línea de Assembly, pero se conserva en
+    PedidosSecuenciados hasta que MAPEX confirme que se ha servido/recogido.
+    """
+    estado_erp = estado_erp if estado_erp is not None else 0
+    estado_wam = estado_wam if estado_wam is not None else 0
+    unidades_pedidas = unidades_pedidas if unidades_pedidas is not None else 0
+    unidades_servidas = unidades_servidas if unidades_servidas is not None else 0
+
+    return (
+        estado_erp == 4  # cfg_mnt_estadopedido: 4=CANCELADO; 1 y 2 siguen activos
+        or estado_wam == 4  # 4=CANCELADO; 2=EN CURSO y 3=FINALIZADA
+        or (unidades_pedidas > 0 and unidades_servidas >= unidades_pedidas)
+    )
+
+
+def get_cached_endpoint_response(cache_key, max_age_seconds=None):
     now = time.time()
     with ENDPOINT_RESPONSE_CACHE_LOCK:
         cache_entry = ENDPOINT_RESPONSE_CACHE.get(cache_key)
         if not cache_entry:
             return None
-        if now - cache_entry['timestamp'] > ENDPOINT_RESPONSE_CACHE_TTL_SECONDS:
+        ttl_seconds = ENDPOINT_RESPONSE_CACHE_TTL_SECONDS if max_age_seconds is None else max_age_seconds
+        if now - cache_entry['timestamp'] > ttl_seconds:
             ENDPOINT_RESPONSE_CACHE.pop(cache_key, None)
             return None
         return cache_entry['payload']
@@ -685,6 +734,7 @@ def _manual_sync_state_response():
 def run_manual_full_sync_background():
     try:
         resultado_sync = sync_pending_orders(lookback_days=1, log_prefix='[MANUAL SYNC]')
+        resultado_sync['stock_assignment'] = recalculate_assigned_stock_once()
         with MANUAL_SYNC_STATE_LOCK:
             MANUAL_SYNC_STATE['running'] = False
             MANUAL_SYNC_STATE['finished_at'] = datetime.now().isoformat(timespec='seconds')
@@ -736,152 +786,249 @@ def run_scheduler():
 import threading
 import time
 
-# --- FUNCIÓN auto_sync_sequenced CON ORDEN DE PRIORIDAD MANUAL AÑADIDO ---
+# --- FUNCIÓN DE ASIGNACIÓN DE STOCK DE PEDIDOS SECUENCIADOS ---
+def _update_sequenced_sync_status(**values):
+    with SEQUENCED_SYNC_STATUS_LOCK:
+        SEQUENCED_SYNC_STATUS.update(values)
+
+
+def recalculate_assigned_stock_once():
+    """Recalcula AssignedStock/AssignedStockBeam usando conexiones activas.
+
+    La función es deliberadamente síncrona para que el worker, el arranque y
+    las sincronizaciones manuales compartan exactamente el mismo cálculo.
+    Todas las operaciones que usan un cursor permanecen dentro de su ``with``;
+    esto evita reutilizar un cursor después de cerrar la conexión ODBC.
+    """
+    started_at = time.time()
+
+    with PEDIDOS_DB_LOCK:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+            if conn_main is None:
+                raise RuntimeError('No se pudo conectar a DataLakeSCCZ para leer pedidos secuenciados')
+
+            cursor_main = conn_main.cursor()
+            cursor_main.execute("""
+                SELECT
+                    ps.NumeroPedido,
+                    ps.Assy,
+                    ps.Beam,
+                    pl.UnidadesPedidas,
+                    pl.UniValMapex,
+                    ps.AssignedStock,
+                    ps.AssignedStockBeam,
+                    pl.ID_PedidoLinea_Externa,
+                    ps.SequenceValue,
+                    ps.PriorityOrder
+                FROM OB.PedidosSecuenciados ps
+                INNER JOIN OB.PedidosCabecera pc
+                    ON ps.NumeroPedido = pc.NumeroPedido
+                INNER JOIN OB.PedidosLineas pl
+                    ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                   AND ps.Assy = pl.Cod_Producto_Externo
+                ORDER BY
+                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                    ps.PriorityOrder ASC,
+                    TRY_CONVERT(int, SUBSTRING(
+                        ps.SequenceValue,
+                        CHARINDEX('-', ps.SequenceValue) + 1,
+                        100
+                    )) ASC,
+                    ps.SequenceValue ASC
+            """)
+            pedidos_actuales = cursor_main.fetchall()
+
+        # MAPEX se consulta con otra conexión; nunca se mantiene abierto el
+        # cursor de DataLake mientras se recorren las líneas de MAPEX.
+        updates_univalmapex = []
+        mapex_values = {}
+        pedidos_terminales = set()
+        with ConexionODBCCZ(database='mapexbp') as conn_cz:
+            if conn_cz is None:
+                raise RuntimeError('No se pudo conectar a mapexbp para actualizar UniValMapex')
+
+            cursor_cz = conn_cz.cursor()
+            for pedido in pedidos_actuales:
+                numero_pedido = pedido.NumeroPedido
+                assy = pedido.Assy
+                cursor_cz.execute("""
+                    WITH UltimaCabecera AS (
+                        SELECT TOP 1
+                            A.id_his_wam_pedido_cliente,
+                            A.EstadoERP,
+                            A.Id_wam_estado_pedido_cliente
+                        FROM his_wam_pedido_cliente A
+                        WHERE A.NumeroPedido = ?
+                        ORDER BY A.id_his_wam_pedido_cliente DESC
+                    )
+                    SELECT TOP 1
+                        uc.EstadoERP,
+                        uc.Id_wam_estado_pedido_cliente,
+                        SUM(ISNULL(B.UniValMapex, 0)) AS UniValMapex,
+                        SUM(ISNULL(B.UnidadesPedidas, 0)) AS UnidadesPedidas,
+                        SUM(ISNULL(B.UnidadesServidas, 0)) AS UnidadesServidas
+                    FROM UltimaCabecera uc
+                    JOIN his_wam_linea_pedido_cliente B
+                        ON B.id_his_wam_pedido_cliente = uc.id_his_wam_pedido_cliente
+                    JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
+                    WHERE C.Cod_producto = ?
+                    GROUP BY uc.EstadoERP, uc.Id_wam_estado_pedido_cliente
+                """, (numero_pedido, assy))
+                row = cursor_cz.fetchone()
+                if not row:
+                    continue
+
+                mapex_key = (str(numero_pedido).strip(), str(assy).strip())
+                estado_erp = row.EstadoERP
+                estado_wam = row.Id_wam_estado_pedido_cliente
+                uni_val_mapex = row.UniValMapex or 0
+                unidades_pedidas_mapex = row.UnidadesPedidas or 0
+                unidades_servidas = row.UnidadesServidas or 0
+                mapex_values[mapex_key] = uni_val_mapex
+
+                if is_terminal_mapex_order(
+                    estado_erp,
+                    estado_wam,
+                    unidades_pedidas_mapex,
+                    unidades_servidas,
+                ):
+                    pedidos_terminales.add((numero_pedido, assy))
+                    continue
+
+                if pedido.UniValMapex != uni_val_mapex:
+                    updates_univalmapex.append((uni_val_mapex, pedido.ID_PedidoLinea_Externa))
+
+        pedidos_actuales = [
+            pedido for pedido in pedidos_actuales
+            if (pedido.NumeroPedido, pedido.Assy) not in pedidos_terminales
+        ]
+
+        updates_necesarios = []
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+            if conn_main is None:
+                raise RuntimeError('No se pudo conectar a DataLakeSCCZ para actualizar stock asignado')
+
+            cursor_main = conn_main.cursor()
+
+            if pedidos_terminales:
+                cursor_main.executemany(
+                    "DELETE FROM OB.PedidosSecuenciados WHERE NumeroPedido = ? AND Assy = ?",
+                    list(pedidos_terminales),
+                )
+
+            if updates_univalmapex:
+                cursor_main.executemany(
+                    "UPDATE OB.PedidosLineas SET UniValMapex = ? WHERE ID_PedidoLinea_Externa = ?",
+                    updates_univalmapex,
+                )
+
+            cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
+            stock_disponible = {
+                str(row.Cod_producto).strip(): (row.StockActual or 0)
+                for row in cursor_main.fetchall()
+            }
+
+            cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
+            stock_beams = {
+                str(row.Cod_producto).strip(): (row.StockActual or 0)
+                for row in cursor_main.fetchall()
+            }
+
+            for pedido in pedidos_actuales:
+                assy_key = str(pedido.Assy).strip()
+                beam_key = str(pedido.Beam).strip() if pedido.Beam else ''
+                uni_val_mapex = mapex_values.get(
+                    (str(pedido.NumeroPedido).strip(), assy_key),
+                    pedido.UniValMapex or 0,
+                )
+                stock_actual_para_assy = stock_disponible.get(assy_key, 0)
+                stock_actual_para_beam = stock_beams.get(beam_key, 0) if beam_key else 0
+                cantidad_necesaria = (pedido.UnidadesPedidas or 0) - uni_val_mapex
+                cantidad_necesaria_beam = pedido.UnidadesPedidas or 0
+
+                nuevo_stock_asignado_assy = 0
+                if cantidad_necesaria > 0 and stock_actual_para_assy > 0:
+                    nuevo_stock_asignado_assy = min(cantidad_necesaria, stock_actual_para_assy)
+                    stock_disponible[assy_key] = max(0, stock_actual_para_assy - nuevo_stock_asignado_assy)
+
+                nuevo_stock_asignado_beam = 0
+                if beam_key and cantidad_necesaria_beam > 0 and stock_actual_para_beam > 0:
+                    nuevo_stock_asignado_beam = min(cantidad_necesaria_beam, stock_actual_para_beam)
+                    stock_beams[beam_key] = max(0, stock_actual_para_beam - nuevo_stock_asignado_beam)
+
+                viejo_assy = pedido.AssignedStock if pedido.AssignedStock is not None else 0
+                viejo_beam = pedido.AssignedStockBeam if pedido.AssignedStockBeam is not None else 0
+                if nuevo_stock_asignado_assy != viejo_assy or nuevo_stock_asignado_beam != viejo_beam:
+                    updates_necesarios.append((
+                        nuevo_stock_asignado_assy,
+                        nuevo_stock_asignado_beam,
+                        pedido.NumeroPedido,
+                        pedido.Assy,
+                    ))
+
+            if updates_necesarios:
+                cursor_main.executemany(
+                    """UPDATE OB.PedidosSecuenciados
+                       SET AssignedStock = ?, AssignedStockBeam = ?
+                       WHERE NumeroPedido = ? AND Assy = ?""",
+                    updates_necesarios,
+                )
+
+    if pedidos_terminales or updates_univalmapex or updates_necesarios:
+        clear_endpoint_response_cache(
+            'pedidos_secuenciados_c',
+            'pedidos_secuenciados_c_trazabilidad',
+            'pedidos_secuenciados_w',
+            'pedidos_picking',
+            'pedidos_tb',
+        )
+
+    result = {
+        'processed_lines': len(pedidos_actuales),
+        'updated_lines': len(updates_necesarios),
+        'terminal_lines': len(pedidos_terminales),
+        'mapex_updates': len(updates_univalmapex),
+        'duration_seconds': round(time.time() - started_at, 3),
+    }
+    logging.info(
+        '[AUTO-SYNC] Stock asignado: procesadas=%s actualizadas=%s terminales=%s mapex=%s duración=%.3fs',
+        result['processed_lines'], result['updated_lines'], result['terminal_lines'],
+        result['mapex_updates'], result['duration_seconds'],
+    )
+    return result
+
+
 def auto_sync_sequenced():
     print('[AUTO-SYNC] Servicio de actualización incremental de pedidos secuenciados iniciado.')
     while True:
+        started_at = time.time()
+        _update_sequenced_sync_status(running=True, last_started_at=started_at, last_error=None)
         try:
-            with PEDIDOS_DB_LOCK:
-                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                    cursor_main = conn_main.cursor()
+            result = recalculate_assigned_stock_once()
+            _update_sequenced_sync_status(
+                running=False,
+                last_completed_at=time.time(),
+                **{key: result[key] for key in (
+                    'processed_lines', 'updated_lines', 'terminal_lines', 'mapex_updates'
+                )},
+            )
+        except Exception as error:
+            _update_sequenced_sync_status(
+                running=False,
+                last_completed_at=time.time(),
+                last_error=type(error).__name__,
+            )
+            logging.exception('[AUTO-SYNC] Error en el recálculo de stock asignado.')
 
-                # ==========================================================
-                # === ÚNICO CAMBIO: SE MODIFICA ESTA CONSULTA Y SU ORDER BY ===
-                # ==========================================================
-                # Ahora la consulta ordena primero por la prioridad manual (PriorityOrder)
-                # y luego usa la secuencia original como desempate.
-                # FILTRO CRÍTICO: Solo pedidos PENDIENTES (UniValMapex < UnidadesPedidas)
-                query_pedidos_ordenados = """
-                    SELECT 
-                        ps.NumeroPedido, 
-                        ps.Assy,
-                        ps.Beam,
-                        pl.UnidadesPedidas, 
-                        pl.UniValMapex, 
-                        ps.AssignedStock,
-                        ps.AssignedStockBeam,
-                        pl.ID_PedidoLinea_Externa, 
-                        ps.SequenceValue,
-                        ps.PriorityOrder -- Traemos la nueva columna de prioridad
-                    FROM OB.PedidosSecuenciados ps
-                    INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
-                    INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
-                    WHERE ISNULL(pl.UniValMapex, 0) < pl.UnidadesPedidas  -- Solo pedidos pendientes
-                    ORDER BY 
-                        -- 1. Prioridad: el orden manual (los NULLs van al final).
-                        CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                        ps.PriorityOrder ASC,
-                        -- 2. Desempate: la secuencia original.
-                        ps.SequenceValue ASC;
-                """
-                cursor_main.execute(query_pedidos_ordenados)
-                pedidos_actuales = cursor_main.fetchall()
-                
-                # Actualizar UniValMapex desde MAPEX solo si cambia
-                updates_univalmapex = []
-                with ConexionODBCCZ(database='mapexbp') as conn_cz:
-                    cursor_cz = conn_cz.cursor()
-                    for pedido in pedidos_actuales:
-                        numero_pedido = pedido.NumeroPedido
-                        assy = pedido.Assy
-                        id_pedido_linea_externa = pedido.ID_PedidoLinea_Externa
-                        uni_val_actual = pedido.UniValMapex
-                        cursor_cz.execute("""
-                            SELECT TOP 1 B.UniValMapex
-                            FROM his_wam_pedido_cliente A
-                            JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = A.id_his_wam_pedido_cliente
-                            JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
-                            WHERE A.NumeroPedido = ? AND C.Cod_producto = ?
-                        """, (numero_pedido, assy))
-                        row = cursor_cz.fetchone()
-                        if row:
-                            uni_val_mapex = row.UniValMapex
-                            if uni_val_actual != uni_val_mapex:
-                                updates_univalmapex.append((uni_val_mapex, id_pedido_linea_externa))
-                if updates_univalmapex:
-                    cursor_main.executemany("UPDATE OB.PedidosLineas SET UniValMapex = ? WHERE ID_PedidoLinea_Externa = ?", updates_univalmapex)
-                    print(f"[AUTO-SYNC] Actualizados {len(updates_univalmapex)} UniValMapex de pedidos secuenciados.")
-                else:
-                    print("[AUTO-SYNC] No hay cambios en UniValMapex para actualizar.")
-                
-                # Obtener stock actual (nueva arquitectura: Stock_Omegas_New)
-                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
-                stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                
-                # Obtener stock de Beams
-                cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
-                stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                
-                # Log de stock inicial de beams para diagnóstico
-                beams_con_stock = {k: v for k, v in stock_beams.items() if v > 0}
-                if beams_con_stock:
-                    print(f"[AUTO-SYNC] Beams con stock disponible: {len(beams_con_stock)} ({', '.join(list(beams_con_stock.keys())[:3])}...)")
-                
-                updates_necesarios = []
-                
-                # El bucle de asignación ahora respeta el nuevo orden automáticamente
-                primer_pedido_procesado = False  # Para log de diagnóstico
-                pedidos_con_beam_count = 0
-                for pedido in pedidos_actuales:
-                    assy = pedido.Assy
-                    beam = pedido.Beam
-                    
-                    if beam:
-                        pedidos_con_beam_count += 1
-                    
-                    stock_actual_para_assy = stock_disponible.get(assy, 0)
-                    stock_actual_para_beam = stock_beams.get(beam, 0) if beam else 0
-                    cantidad_necesaria = (pedido.UnidadesPedidas or 0) - (pedido.UniValMapex or 0)
-                    cantidad_necesaria_beam = pedido.UnidadesPedidas or 0  # Para Beam: no restamos UniValMapex
-                    
-                    # Log del PRIMER pedido procesado
-                    if not primer_pedido_procesado:
-                        print(f"[AUTO-SYNC DEBUG] PRIMER PEDIDO PROCESADO:")
-                        print(f"  Pedido: {pedido.NumeroPedido}, Assy: {assy}, Beam: {beam}")
-                        print(f"  UnidadesPedidas: {pedido.UnidadesPedidas}, UniValMapex: {pedido.UniValMapex}")
-                        print(f"  Cantidad necesaria ASSY: {cantidad_necesaria}")
-                        print(f"  Cantidad necesaria BEAM: {cantidad_necesaria_beam} (sin restar UniValMapex)")
-                        print(f"  beam is None: {beam is None}, beam value: '{beam}'")
-                        print(f"  Stock beam disponible: {stock_actual_para_beam}")
-                        print(f"  Condiciones: beam={bool(beam)}, cantidad_necesaria_beam>0={cantidad_necesaria_beam>0}, stock>0={stock_actual_para_beam>0}")
-                        print(f"  AssignedStockBeam en BD: {pedido.AssignedStockBeam} (tipo: {type(pedido.AssignedStockBeam)})")
-                        primer_pedido_procesado = True
-                    
-                    # Calcular AssignedStock (Assy)
-                    nuevo_stock_asignado_assy = 0
-                    if cantidad_necesaria > 0 and stock_actual_para_assy > 0:
-                        nuevo_stock_asignado_assy = min(cantidad_necesaria, stock_actual_para_assy)
-                        stock_disponible[assy] = max(0, stock_actual_para_assy - nuevo_stock_asignado_assy)
-                    
-                    # Calcular AssignedStockBeam
-                    nuevo_stock_asignado_beam = 0
-                    if beam and cantidad_necesaria_beam > 0 and stock_actual_para_beam > 0:
-                        nuevo_stock_asignado_beam = min(cantidad_necesaria_beam, stock_actual_para_beam)
-                        stock_beams[beam] = max(0, stock_actual_para_beam - nuevo_stock_asignado_beam)
-                    
-                    viejo_assy = pedido.AssignedStock if pedido.AssignedStock is not None else 0
-                    viejo_beam = pedido.AssignedStockBeam if pedido.AssignedStockBeam is not None else 0
-                    
-                    if nuevo_stock_asignado_assy != viejo_assy or nuevo_stock_asignado_beam != viejo_beam:
-                        updates_necesarios.append((nuevo_stock_asignado_assy, nuevo_stock_asignado_beam, pedido.NumeroPedido, pedido.Assy))
-                
-                print(f"[AUTO-SYNC] Total pedidos procesados: {len(pedidos_actuales)}, con Beam: {pedidos_con_beam_count}")
-                
-                if updates_necesarios:
-                    sql_update = "UPDATE OB.PedidosSecuenciados SET AssignedStock = ?, AssignedStockBeam = ? WHERE NumeroPedido = ? AND Assy = ?"
-                    cursor_main.executemany(sql_update, updates_necesarios)
-                    print(f"[AUTO-SYNC] Actualizados {len(updates_necesarios)} pedidos secuenciados (AssignedStock y AssignedStockBeam).")
-                    # Log de ejemplo de actualización
-                    if len(updates_necesarios) > 0:
-                        ejemplo = updates_necesarios[0]
-                        print(f"[AUTO-SYNC] Ejemplo: Pedido {ejemplo[2]}, Assy={ejemplo[3]}, AssignedStock={ejemplo[0]}, AssignedStockBeam={ejemplo[1]}")
-                else:
-                    print("[AUTO-SYNC] No hay pedidos que actualizar AssignedStock/AssignedStockBeam.")
-
-        except Exception as e:
-            print(f"[AUTO-SYNC] ERROR: {str(e)}")
-        
         time.sleep(AUTO_SYNC_SEQUENCED_INTERVAL_SECONDS)
+
+
+@app.route('/api/diagnostics/sequenced-sync', methods=['GET'])
+@cross_origin()
+def sequenced_sync_diagnostics():
+    """Estado no sensible del worker de asignación de stock."""
+    with SEQUENCED_SYNC_STATUS_LOCK:
+        return jsonify(dict(SEQUENCED_SYNC_STATUS)), 200
 
 # La función para iniciar el hilo no cambia
 def start_auto_sync_thread():
@@ -904,16 +1051,140 @@ def auto_sync_beams_stock():
 
     while True:
         try:
-            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                if conn_main is None:
-                    raise Exception('No se pudo conectar a DataLakeSCCZ')
+            # Serializar la sincronización de movimientos de Beam con el
+            # recálculo de AssignedStock para evitar leer un stock intermedio.
+            with PEDIDOS_DB_LOCK:
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    if conn_main is None:
+                        raise Exception('No se pudo conectar a DataLakeSCCZ')
 
-                cursor_main = conn_main.cursor()
-                cursor_main.execute("{CALL OB.sp_Sync_Beams_RawData}")
+                    cursor_main = conn_main.cursor()
+                    cursor_main.execute("{CALL OB.sp_Sync_Beams_RawData}")
 
             print(f"[AUTO-SYNC BEAMS] {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: sincronización SQL completada.")
         except Exception as e:
-            print(f"[AUTO-SYNC BEAMS] [ERROR] Falló la ejecución de OB.sp_Sync_Beams_RawData: {e}")
+            logging.exception('[AUTO-SYNC BEAMS] Falló la ejecución de OB.sp_Sync_Beams_RawData.')
+
+        time.sleep(intervalo_segundos)
+
+
+# ====================================================================================
+# NUEVA FUNCIÓN: STOCK WATCHDOG — Detecta stock negativo en tiempo real
+# ====================================================================================
+def stock_watchdog_loop():
+    """
+    Hilo de vigilancia que inspecciona periódicamente las vistas de stock.
+    Si detecta stock negativo, registra un snapshot completo del contexto
+    (últimas producciones, últimos consumos, marcas de agua) para diagnóstico.
+    """
+    intervalo_segundos = 30
+    stock_logger.info("Iniciando Watchdog de Stock...")
+    print("[STOCK-WATCHDOG] Servicio de vigilancia de stock iniciado (intervalo: 30s).")
+
+    while True:
+        try:
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                if conn_main is None:
+                    time.sleep(intervalo_segundos)
+                    continue
+
+                cursor = conn_main.cursor()
+
+                # ─── 1. Comprobar Beams negativos ───
+                cursor.execute("""
+                    SELECT Cod_producto, StockActual, Entradas, Salidas
+                    FROM OB.Stock_Beams_New
+                    WHERE StockActual < 0
+                """)
+                beams_negativos = cursor.fetchall()
+
+                for row in beams_negativos:
+                    cod_producto = row.Cod_producto
+                    stock_actual = row.StockActual
+                    entradas = row.Entradas
+                    salidas = row.Salidas
+
+                    # Extraer el contexto de este Beam específico
+                    cursor.execute("""
+                        SELECT TOP 3 WorkGroup, Fecha_inicio, Fecha_fin, Unidades_OK
+                        FROM OB.Beams_Produccion
+                        WHERE Cod_producto = ? ORDER BY Fecha_fin DESC
+                    """, (cod_producto,))
+                    ultimas_prods = cursor.fetchall()
+
+                    cursor.execute("""
+                        SELECT TOP 3 WorkGroup, Fecha_inicio, Fecha_fin, Unidades_OK
+                        FROM OB.Beams_Consumos
+                        WHERE Cod_producto = ? ORDER BY Fecha_fin DESC
+                    """, (cod_producto,))
+                    ultimos_cons = cursor.fetchall()
+
+                    cursor.execute("""
+                        SELECT Fuente, Last_Sync_Date
+                        FROM OB.Last_Sync_Beams
+                        WHERE Cod_producto = ?
+                    """, (cod_producto,))
+                    last_syncs = cursor.fetchall()
+
+                    stock_logger.error(
+                        f"ANOMALÍA DETECTADA (BEAM): '{cod_producto}' tiene stock {stock_actual} "
+                        f"(Entradas: {entradas} | Salidas: {salidas}).\n"
+                        f"    Últimas producciones: {[(p.WorkGroup, p.Fecha_inicio, p.Fecha_fin, p.Unidades_OK) for p in ultimas_prods]}\n"
+                        f"    Últimos consumos:     {[(c.WorkGroup, c.Fecha_inicio, c.Fecha_fin, c.Unidades_OK) for c in ultimos_cons]}\n"
+                        f"    Marcas Last_Sync:     {[(s.Fuente, s.Last_Sync_Date) for s in last_syncs]}"
+                    )
+
+                # ─── 2. Comprobar Omegas negativos ───
+                cursor.execute("""
+                    SELECT Cod_producto, StockActual
+                    FROM OB.Stock_Omegas_New
+                    WHERE StockActual < 0
+                """)
+                omegas_negativos = cursor.fetchall()
+
+                for row in omegas_negativos:
+                    cod_producto = row.Cod_producto
+                    stock_actual = row.StockActual
+
+                    # Investigar si la lectura ocurrió antes que la producción
+                    cursor.execute("""
+                        SELECT TOP 3 fecha, numero_serie, id_operario
+                        FROM OB.Omegas_Lecturas
+                        WHERE producto = ? ORDER BY fecha DESC
+                    """, (cod_producto,))
+                    ultimas_lec = cursor.fetchall()
+
+                    cursor.execute("""
+                        SELECT TOP 3 WorkGroup, Fecha_inicio, Fecha_fin, Unidades_OK
+                        FROM OB.Omegas_Produccion
+                        WHERE Cod_producto = ? ORDER BY Fecha_fin DESC
+                    """, (cod_producto,))
+                    ultimas_prod = cursor.fetchall()
+
+                    cursor.execute("""
+                        SELECT Fuente, Last_Sync_Date
+                        FROM OB.Last_Sync_omegas
+                        WHERE Cod_producto = ?
+                    """, (cod_producto,))
+                    last_syncs = cursor.fetchall()
+
+                    # Detectar patrón: consumo antes que producción
+                    fecha_ultima_lec = ultimas_lec[0].fecha if ultimas_lec else None
+                    fecha_ultima_prod = ultimas_prod[0].Fecha_fin if ultimas_prod else None
+                    desfase = ""
+                    if fecha_ultima_lec and fecha_ultima_prod and fecha_ultima_lec > fecha_ultima_prod:
+                        desfase = f" (LECTURA {fecha_ultima_lec} POSTERIOR a PRODUCCIÓN {fecha_ultima_prod} — posible consumo antes de reportar producción)"
+
+                    stock_logger.error(
+                        f"ANOMALÍA DETECTADA (OMEGA): '{cod_producto}' tiene stock {stock_actual}.\n"
+                        f"    Últimas lecturas:   {[(l.fecha, l.numero_serie) for l in ultimas_lec]}\n"
+                        f"    Últimas producciones: {[(p.WorkGroup, p.Fecha_inicio, p.Fecha_fin, p.Unidades_OK) for p in ultimas_prod]}\n"
+                        f"    Marcas Last_Sync:    {[(s.Fuente, s.Last_Sync_Date) for s in last_syncs]}"
+                        f"{desfase}"
+                    )
+
+        except Exception as e:
+            stock_logger.exception(f"Error en la ejecución del bucle Watchdog: {str(e)}")
 
         time.sleep(intervalo_segundos)
 
@@ -921,7 +1192,7 @@ def auto_sync_beams_stock():
 # ====================================================================================
 # NUEVA FUNCIÓN: LIMPIAR PEDIDOS SECUENCIADOS QUE YA NO CUMPLEN CRITERIOS
 # ====================================================================================
-def cleanup_sequenced_orders():
+def cleanup_sequenced_orders_legacy():
     """
     Función que elimina de PedidosSecuenciados los registros cuyo estado ha cambiado
     en MAPEX (ya no son pendientes o han sido completados).
@@ -972,12 +1243,13 @@ def cleanup_sequenced_orders():
                             SELECT TOP 1
                                 uc.EstadoERP,
                                 uc.Id_wam_estado_pedido_cliente,
-                                ISNULL(B.UniValMapex, 0) AS UniValMapex,
-                                ISNULL(B.UnidadesPedidas, 0) AS UnidadesPedidas
+                                SUM(ISNULL(B.UnidadesPedidas, 0)) AS UnidadesPedidas,
+                                SUM(ISNULL(B.UnidadesServidas, 0)) AS UnidadesServidas
                             FROM UltimaCabecera uc
                             JOIN his_wam_linea_pedido_cliente B ON B.id_his_wam_pedido_cliente = uc.id_his_wam_pedido_cliente
                             JOIN V_Cfg_producto C ON C.Id_producto = B.Id_producto
                             WHERE C.Cod_producto = ?
+                            GROUP BY uc.EstadoERP, uc.Id_wam_estado_pedido_cliente
                         """, (numero_pedido, assy))
                         row = cursor_cz.fetchone()
                         
@@ -988,23 +1260,22 @@ def cleanup_sequenced_orders():
 
                         estado_erp = row[0] if row[0] is not None else 0
                         estado_wam = row[1] if row[1] is not None else 0
-                        uni_val_mapex = row[2] if row[2] is not None else 0
-                        unidades_pedidas_mapex = row[3] if row[3] is not None else 0
+                        unidades_pedidas_mapex = row[2] if row[2] is not None else 0
+                        unidades_servidas = row[3] if row[3] is not None else 0
 
                         # Si la última cabecera ya no está pendiente en MAPEX, debemos retirar la secuencia.
-                        if estado_erp != 0 or estado_wam in (2, 3, 4):
+                        if is_terminal_mapex_order(
+                            estado_erp,
+                            estado_wam,
+                            unidades_pedidas_mapex,
+                            unidades_servidas,
+                        ):
                             print(
                                 f"[CLEANUP] ⚠ Pedido {numero_pedido}/{assy} con estado final en MAPEX "
                                 f"(EstadoERP={estado_erp}, WAM={estado_wam}) - Se eliminará"
                             )
                             pedidos_a_eliminar.append((numero_pedido, assy))
                             continue
-
-                        # ÚNICO CRITERIO DE ELIMINACIÓN: unidades ensambladas reales en MAPEX >= pedidas
-                        if unidades_pedidas_mapex > 0 and uni_val_mapex >= unidades_pedidas_mapex:
-                            print(f"[CLEANUP] ⚠ Pedido {numero_pedido}/{assy} completado en MAPEX "
-                                  f"({uni_val_mapex}/{unidades_pedidas_mapex} uds) - Se eliminará")
-                            pedidos_a_eliminar.append((numero_pedido, assy))
                 
                 # 3. Eliminar los pedidos que ya no cumplen criterios
                 if pedidos_a_eliminar:
@@ -1031,6 +1302,227 @@ def cleanup_sequenced_orders():
 # ====================================================================================
 # NUEVO WORKER: LIMPIAR PEDIDOS VIEJOS NO SECUENCIADOS (>7 días y EstadoERP != 0)
 # ====================================================================================
+_sequenced_cleanup_status_lock = threading.Lock()
+_sequenced_cleanup_status = {
+    'running': False,
+    'last_started_at': None,
+    'last_completed_at': None,
+    'last_error': None,
+    'checked_lines': 0,
+    'terminal_lines_found': 0,
+    'deleted_lines': 0,
+}
+
+
+def _update_sequenced_cleanup_status(**values):
+    """Store a non-sensitive health snapshot for the cleanup worker."""
+    with _sequenced_cleanup_status_lock:
+        _sequenced_cleanup_status.update(values)
+
+
+def _get_latest_mapex_line_states(cursor, order_numbers, batch_size=250):
+    """Fetch current MAPEX order/product states in batches instead of per line."""
+    states = {}
+    for start in range(0, len(order_numbers), batch_size):
+        batch = order_numbers[start:start + batch_size]
+        placeholders = ','.join('?' for _ in batch)
+        cursor.execute(f"""
+            WITH LatestOrder AS (
+                SELECT A.NumeroPedido, A.id_his_wam_pedido_cliente, A.EstadoERP,
+                       A.Id_wam_estado_pedido_cliente,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY A.NumeroPedido
+                           ORDER BY A.id_his_wam_pedido_cliente DESC
+                       ) AS RowNumber
+                FROM his_wam_pedido_cliente A
+                WHERE A.NumeroPedido IN ({placeholders})
+            )
+            SELECT LTRIM(RTRIM(lo.NumeroPedido)) AS NumeroPedido,
+                   LTRIM(RTRIM(product.Cod_producto)) AS Assy,
+                   lo.EstadoERP, lo.Id_wam_estado_pedido_cliente,
+                   SUM(ISNULL(line.UnidadesPedidas, 0)) AS UnidadesPedidas,
+                   SUM(ISNULL(line.UnidadesServidas, 0)) AS UnidadesServidas
+            FROM LatestOrder lo
+            INNER JOIN his_wam_linea_pedido_cliente line
+                ON line.id_his_wam_pedido_cliente = lo.id_his_wam_pedido_cliente
+            INNER JOIN V_Cfg_producto product ON product.Id_producto = line.Id_producto
+            WHERE lo.RowNumber = 1
+            GROUP BY LTRIM(RTRIM(lo.NumeroPedido)),
+                     LTRIM(RTRIM(product.Cod_producto)),
+                     lo.EstadoERP, lo.Id_wam_estado_pedido_cliente
+        """, batch)
+        for row in cursor.fetchall():
+            key = (str(row.NumeroPedido).strip(), str(row.Assy).strip())
+            current = (row.EstadoERP, row.Id_wam_estado_pedido_cliente,
+                       row.UnidadesPedidas, row.UnidadesServidas)
+            previous = states.get(key)
+            # After aggregation, keep only the first row defensively.
+            if previous is None:
+                states[key] = current
+    return states
+
+
+def audit_sequenced_orders_against_mapex(detail_limit=0):
+    """Classify the current sequencer contents using the same MAPEX logic.
+
+    This is deliberately read-only: it is suitable for local verification
+    against real databases and shares the production cleanup decision path.
+    """
+    with PEDIDOS_DB_LOCK:
+        with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+            cursor_main = conn_main.cursor()
+            cursor_main.execute("""
+                SELECT LTRIM(RTRIM(NumeroPedido)) AS NumeroPedido,
+                       LTRIM(RTRIM(Assy)) AS Assy
+                FROM OB.PedidosSecuenciados
+            """)
+            sequenced_lines = cursor_main.fetchall()
+
+        order_numbers = sorted({str(row.NumeroPedido).strip() for row in sequenced_lines})
+        mapex_states = {}
+        if order_numbers:
+            with ConexionODBCCZ(database='mapexbp') as conn_mapex:
+                mapex_states = _get_latest_mapex_line_states(
+                    conn_mapex.cursor(), order_numbers
+                )
+
+    terminal_lines = []
+    pending_lines = []
+    missing_lines = []
+    for line in sequenced_lines:
+        key = (str(line.NumeroPedido).strip(), str(line.Assy).strip())
+        state = mapex_states.get(key)
+        if state is None:
+            missing_lines.append(key)
+        elif is_terminal_mapex_order(*state):
+            terminal_lines.append(key)
+        else:
+            pending_lines.append(key)
+
+    result = {
+        'mode': 'read_only',
+        'checked_lines': len(sequenced_lines),
+        'checked_orders': len(order_numbers),
+        'terminal_lines_would_delete': len(terminal_lines),
+        'pending_lines': len(pending_lines),
+        'missing_in_mapex_lines': len(missing_lines),
+    }
+    if detail_limit:
+        limit = max(1, min(int(detail_limit), 100))
+        result['terminal_line_samples'] = [
+            {'sales_order': order_number, 'assy': assy}
+            for order_number, assy in terminal_lines[:limit]
+        ]
+        result['pending_line_samples'] = [
+            {'sales_order': order_number, 'assy': assy}
+            for order_number, assy in pending_lines[:limit]
+        ]
+    return result
+
+
+def cleanup_sequenced_orders():
+    """Remove MAPEX-terminal sequenced lines with observable batch processing."""
+    logging.info('[CLEANUP] Sequenced-order cleanup worker started.')
+    while True:
+        # El lector de la pantalla, las sincronizaciones y el limpiador antiguo
+        # pueden mantener PEDIDOS_DB_LOCK durante bastante tiempo. La limpieza
+        # solo borra por clave exacta líneas ya terminales en MAPEX, por lo que no
+        # debe quedar bloqueada detrás de esos procesos durante todo su ciclo.
+        if not SEQUENCED_CLEANUP_LOCK.acquire(blocking=False):
+            logging.info('[CLEANUP] Previous cleanup cycle is still active; skipping overlap.')
+            time.sleep(CLEANUP_SEQUENCED_INTERVAL_SECONDS)
+            continue
+
+        started_at = time.time()
+        _update_sequenced_cleanup_status(running=True, last_started_at=started_at,
+                                         last_error=None)
+        try:
+            with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                cursor_main = conn_main.cursor()
+                cursor_main.execute("""
+                    SELECT LTRIM(RTRIM(NumeroPedido)) AS NumeroPedido,
+                           LTRIM(RTRIM(Assy)) AS Assy
+                    FROM OB.PedidosSecuenciados WITH (NOLOCK)
+                """)
+                sequenced_lines = cursor_main.fetchall()
+
+            terminal_lines = []
+            missing_lines = 0
+            if sequenced_lines:
+                order_numbers = sorted({str(row.NumeroPedido).strip() for row in sequenced_lines})
+                with ConexionODBCCZ(database='mapexbp') as conn_mapex:
+                    mapex_states = _get_latest_mapex_line_states(
+                        conn_mapex.cursor(), order_numbers
+                    )
+                for line in sequenced_lines:
+                    key = (str(line.NumeroPedido).strip(), str(line.Assy).strip())
+                    state = mapex_states.get(key)
+                    if state is None:
+                        missing_lines += 1
+                    elif is_terminal_mapex_order(*state):
+                        terminal_lines.append(key)
+
+            deleted_lines = 0
+            if terminal_lines:
+                # La PK es (NumeroPedido, Assy). executemany limita el tramo de
+                # escritura a una operación corta y no bloquea la consulta MAPEX.
+                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
+                    cursor_main = conn_main.cursor()
+                    cursor_main.executemany(
+                        'DELETE FROM OB.PedidosSecuenciados WHERE NumeroPedido = ? AND Assy = ?',
+                        terminal_lines,
+                    )
+                    deleted_lines = len(terminal_lines)
+                clear_endpoint_response_cache()
+
+            completed_at = time.time()
+            _update_sequenced_cleanup_status(
+                running=False, last_completed_at=completed_at,
+                checked_lines=len(sequenced_lines),
+                terminal_lines_found=len(terminal_lines),
+                deleted_lines=deleted_lines,
+            )
+            logging.info(
+                '[CLEANUP] Cycle complete: checked=%s terminal=%s deleted=%s missing_in_mapex=%s duration=%.2fs',
+                len(sequenced_lines), len(terminal_lines), deleted_lines,
+                missing_lines, completed_at - started_at,
+            )
+        except Exception as error:
+            _update_sequenced_cleanup_status(
+                running=False, last_completed_at=time.time(), last_error=type(error).__name__,
+            )
+            logging.exception('[CLEANUP] Cycle failed before completion.')
+        finally:
+            SEQUENCED_CLEANUP_LOCK.release()
+        time.sleep(CLEANUP_SEQUENCED_INTERVAL_SECONDS)
+
+
+@app.route('/api/diagnostics/sequenced-cleanup', methods=['GET'])
+@cross_origin()
+def sequenced_cleanup_diagnostics():
+    """Expose a non-sensitive cleanup health snapshot for monitoring."""
+    with _sequenced_cleanup_status_lock:
+        return jsonify(dict(_sequenced_cleanup_status)), 200
+
+
+@app.route('/api/diagnostics/sequenced-cleanup/audit', methods=['GET'])
+@cross_origin()
+def sequenced_cleanup_audit():
+    """Run the MAPEX cleanup decision path without deleting any line."""
+    try:
+        detail_limit = request.args.get('detail_limit', default=0, type=int)
+        result = audit_sequenced_orders_against_mapex(detail_limit=detail_limit)
+        logging.info(
+            '[CLEANUP-AUDIT] checked=%s terminal=%s pending=%s missing=%s',
+            result['checked_lines'], result['terminal_lines_would_delete'],
+            result['pending_lines'], result['missing_in_mapex_lines'],
+        )
+        return jsonify(result), 200
+    except Exception as error:
+        logging.exception('[CLEANUP-AUDIT] Read-only audit failed.')
+        return jsonify({'error': 'sequenced_cleanup_audit_failed', 'type': type(error).__name__}), 503
+
+
 def cleanup_old_unsequenced_orders():
     """
     Elimina de PedidosCabecera y PedidosLineas los pedidos que:
@@ -1168,8 +1660,9 @@ def cleanup_old_unsequenced_orders():
                         if not estado:
                             continue
                         estado_erp, estado_wam = estado
-                        # Estados WAM considerados "finalizados": 2=servido, 3=entregado, 4=cancelado
-                        if estado_erp != 0 or estado_wam in (2, 3, 4):
+                        # ERP: 3=COMPLETADO, 4=CANCELADO. WAM: 3=FINALIZADA,
+                        # 4=CANCELADO. El estado 2 es EN CURSO y sigue activo.
+                        if estado_erp in (3, 4) or estado_wam in (3, 4):
                             if numero_pedido not in pedidos_secuenciados:
                                 print(f"[CLEANUP-OLD] Pedido {numero_pedido} completado en MAPEX "
                                       f"(EstadoERP={estado_erp}, WAM={estado_wam}) - Se eliminará")
@@ -1939,6 +2432,54 @@ def enrich_orders_with_mapex_quantities(items):
     return items
 
 
+def get_mapex_served_quantities_by_order_assy(items):
+    """Devuelve las unidades servidas en MAPEX por pedido y producto Omega.
+
+    UnidadesServidas es el avance de picking/servicio; UniValMapex representa
+    producción y no debe usarse para retirar filas de la pantalla de Picking.
+    """
+    order_numbers = sorted({
+        str(item.get('SalesOrder') or '').strip()
+        for item in (items or [])
+        if str(item.get('SalesOrder') or '').strip()
+    })
+    if not order_numbers:
+        return {}
+
+    served_by_order_assy = {}
+    with ConexionODBCCZ(database='mapexbp') as conn:
+        if conn is None:
+            raise RuntimeError('No se pudo conectar a MAPEX para consultar unidades servidas')
+        cursor = conn.cursor()
+        for start in range(0, len(order_numbers), 250):
+            batch = order_numbers[start:start + 250]
+            placeholders = ','.join('?' for _ in batch)
+            cursor.execute(f"""
+                WITH LatestOrder AS (
+                    SELECT A.NumeroPedido, A.id_his_wam_pedido_cliente,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY A.NumeroPedido
+                               ORDER BY A.id_his_wam_pedido_cliente DESC
+                           ) AS RowNumber
+                    FROM his_wam_pedido_cliente A
+                    WHERE A.NumeroPedido IN ({placeholders})
+                )
+                SELECT LTRIM(RTRIM(lo.NumeroPedido)) AS SalesOrder,
+                       LTRIM(RTRIM(product.Cod_producto)) AS Assy,
+                       SUM(ISNULL(line.UnidadesServidas, 0)) AS UnidadesServidas
+                FROM LatestOrder lo
+                INNER JOIN his_wam_linea_pedido_cliente line
+                    ON line.id_his_wam_pedido_cliente = lo.id_his_wam_pedido_cliente
+                INNER JOIN V_Cfg_producto product ON product.Id_producto = line.Id_producto
+                WHERE lo.RowNumber = 1
+                GROUP BY LTRIM(RTRIM(lo.NumeroPedido)), LTRIM(RTRIM(product.Cod_producto))
+            """, batch)
+            for row in cursor.fetchall():
+                key = (str(row.SalesOrder).strip(), str(row.Assy).strip())
+                served_by_order_assy[key] = max(0, int(row.UnidadesServidas or 0))
+    return served_by_order_assy
+
+
 @app.route('/api/pedidos_secuenciados_c', methods=['GET'])
 @cross_origin()
 def get_pedidos_secuenciados_c():
@@ -1964,39 +2505,16 @@ def get_pedidos_secuenciados_c():
                 VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
-            query = '''
-                SELECT 
-                    ps.Sequence AS Sequence,
-                    ps.NumeroPedido AS SalesOrder,
-                    ps.UnidadesPedidas AS Qty,
-                    ISNULL(ps.UniValMapex,0) + ISNULL(ps.AssignedStock,0) AS DoneQty,
-                    ps.Assy,
-                    ps.Beam,
-                    o.IF1,
-                    o.IF2,
-                    ISNULL(ps.TB, '') AS TieBracket,
-                    ISNULL(pc.CWT, '') AS CWT,
-                    ISNULL(pc.DS, '') AS MS,
-                    pc.FechaEntrega AS DeliveryDate,
-                    ''' + build_pedidos_cabecera_optional_select_sql('CWI') + ''',
-                    ps.OFs AS WO,
-                    ''' + build_extender_resolved_value_sql('ps') + ''' AS Extender,
-                    ps.PriorityOrder,
-''' + build_tb_cards_quantity_case_sql('ps', False, 'TieBracketQty') + ''',
-''' + build_tb_cards_quantity_case_sql('ps', True, 'TieExtenderQty') + ''',
-''' + build_extender_resolved_quantity_sql('ps') + '''
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
-                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
-                LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
-''' + build_extender_line_apply_sql('ps') + '''
-''' + build_extender_derived_apply_sql('ps') + '''
-''' + build_extender_target_apply_sql('ps') + '''
-                WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
-                ORDER BY 
-                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                    ps.PriorityOrder ASC,
-                    ps.Sequence ASC
-            '''
+            cursor.execute(build_sequenced_orders_cards_prepare_query(
+                'YES C',
+                "ISNULL(ps.UniValMapex,0)",
+                include_c_fields=True,
+            ))
+            query = build_sequenced_orders_cards_query(
+                'YES C',
+                "ISNULL(ps.UniValMapex,0)",
+                include_c_fields=True,
+            )
             query_inicio = time.time()
             cursor.execute(query)
             rows = cursor.fetchall()
@@ -2065,15 +2583,20 @@ def get_pedidos_secuenciados_c_trazabilidad():
                 SELECT 
                     ps.Sequence AS Sequence,
                     ps.NumeroPedido AS SalesOrder,
-                    ps.UnidadesPedidas AS Qty,
+                    CASE
+                        WHEN ISNULL(ps.UnidadesPedidas, 0) - ISNULL(ps.UniValMapex, 0) > 0
+                            THEN ISNULL(ps.UnidadesPedidas, 0) - ISNULL(ps.UniValMapex, 0)
+                        ELSE 0
+                    END AS Qty,
+                    ISNULL(ps.UniValMapex, 0) AS ProducedQty,
                     ISNULL(ps.AssignedStockBeam,0) AS DoneQty,
                     ps.Assy,
                     ps.Beam,
                     pc.FechaEntrega AS DeliveryDate
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                 LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
-                WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES C'
-                  AND ps.UnidadesPedidas > ISNULL(ps.AssignedStockBeam,0)
+                WHERE UPPER(LTRIM(RTRIM(ps.[C/W]))) = 'C'
+                  AND ISNULL(ps.UnidadesPedidas, 0) > ISNULL(ps.UniValMapex, 0)
                 ORDER BY 
                     CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
                     ps.PriorityOrder ASC,
@@ -2135,35 +2658,14 @@ def get_pedidos_secuenciados_w():
                 VIEW_LOGGER.error("No se pudo conectar a la base de datos")
                 return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
             cursor = conn.cursor()
-            query = '''
-                SELECT 
-                    ps.Sequence AS Sequence,
-                    ps.NumeroPedido AS SalesOrder,
-                    ps.UnidadesPedidas AS Qty,
-                    ISNULL(ps.UniValMapex,0) + ISNULL(ps.AssignedStock,0) AS DoneQty,
-                    ps.Assy,
-                    ps.Beam,
-                    o.IF1,
-                    o.IF2,
-                    ISNULL(ps.TB, '') AS TieBracket,
-                    pc.FechaEntrega AS DeliveryDate,
-                    ps.OFs AS WO,
-                    ''' + build_extender_resolved_value_sql('ps') + ''' AS Extender,
-''' + build_tb_cards_quantity_case_sql('ps', False, 'TieBracketQty') + ''',
-''' + build_tb_cards_quantity_case_sql('ps', True, 'TieExtenderQty') + ''',
-''' + build_extender_resolved_quantity_sql('ps') + '''
-                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
-                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
-                LEFT JOIN OB.Omegas o ON ps.Assy = o.Assy
-''' + build_extender_line_apply_sql('ps') + '''
-''' + build_extender_derived_apply_sql('ps') + '''
-''' + build_extender_target_apply_sql('ps') + '''
-                WHERE UPPER(LTRIM(RTRIM(ps.Assembly))) = 'YES W'
-                ORDER BY 
-                    CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                    ps.PriorityOrder ASC,
-                    ps.Sequence ASC
-            '''
+            cursor.execute(build_sequenced_orders_cards_prepare_query(
+                'YES W',
+                "ISNULL(ps.UniValMapex,0)",
+            ))
+            query = build_sequenced_orders_cards_query(
+                'YES W',
+                "ISNULL(ps.UniValMapex,0)",
+            )
             query_inicio = time.time()
             cursor.execute(query)
             rows = cursor.fetchall()
@@ -2236,6 +2738,7 @@ def get_pedidos_tb():
 ''' + build_tb_cards_quantity_case_sql('ps', True) + '''
                 FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
                                 LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
+''' + build_wc_line_apply_sql('ps', 'tbext', 'TB') + '''
                 WHERE ps.TB IS NOT NULL AND LTRIM(RTRIM(ps.TB)) != ''
                   AND (
 ''' + build_tb_cards_quantity_predicate_sql('ps') + '''
@@ -2281,7 +2784,7 @@ def get_pedidos_picking():
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_picking ===")
     cache_key = 'pedidos_picking'
 
-    cached_result = get_cached_endpoint_response(cache_key)
+    cached_result = get_cached_endpoint_response(cache_key, max_age_seconds=3)
     if cached_result is not None:
         VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
         VIEW_LOGGER.info("=== FIN: GET /api/pedidos_picking ===\n")
@@ -2303,19 +2806,44 @@ def get_pedidos_picking():
                     ps.FechaEntrega AS DeliveryDate,
                     ps.Picking,
                     ps.UniValMapex,
+                    ISNULL(ps.AssignedStock, 0) AS AssignedStock,
                     ISNULL(pc.CWT, '') AS CWT,
                     ISNULL(pc.DS, '') AS MS,
                     ''' + build_pedidos_cabecera_optional_select_sql('CWI') + ''',
-                    ISNULL(o.[W/C], '') AS WCType
+                    ISNULL(o.[W/C], '') AS WCType,
+                    ''' + build_pit_bracket_quantity_value_sql('ps', 'o') + ''' AS LabelQty
                 FROM OB.V_PedidosSummary_Secuenciados ps WITH (NOLOCK)
                 LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK) ON pc.NumeroPedido = ps.NumeroPedido
                 LEFT JOIN OB.Omegas o WITH (NOLOCK) ON o.Assy = ps.Assy
-                WHERE UPPER(LTRIM(RTRIM(ps.Picking))) = 'YES'
+                WHERE UPPER(LTRIM(RTRIM(ps.[C/W]))) IN ('C', 'W')
+                  AND ISNULL(ps.UnidadesPedidas, 0) > 0
             '''
             cursor.execute(query)
             rows = cursor.fetchall()
             columns = [desc[0] for desc in cursor.description]
-            result = [dict(zip(columns, row)) for row in rows]
+            candidates = [dict(zip(columns, row)) for row in rows]
+            served_by_order_assy = get_mapex_served_quantities_by_order_assy(candidates)
+            result = []
+            for item in candidates:
+                ordered_qty = max(0, int(item.get('Qty') or 0))
+                produced_qty = max(0, int(item.get('UniValMapex') or 0))
+                assigned_stock = max(0, int(item.get('AssignedStock') or 0))
+                served_qty = served_by_order_assy.get((
+                    str(item.get('SalesOrder') or '').strip(),
+                    str(item.get('Assy') or '').strip(),
+                ), 0)
+                # La vista decide qué líneas están listas para Picking. No volver
+                # a incluir líneas con Picking='No' solo porque ya estén producidas.
+                # Se conserva una recogida parcial mientras MAPEX registre avance.
+                picking_value = str(item.get('Picking') or '').strip().upper()
+                is_pickable = picking_value in ('SI', 'SÍ', 'YES', '1', 'TRUE')
+                remaining_to_pick = max(0, ordered_qty - served_qty)
+                if not remaining_to_pick or (served_qty <= 0 and not is_pickable):
+                    continue
+                item['OrderedQty'] = ordered_qty
+                item['PickedQty'] = served_qty
+                item['Qty'] = remaining_to_pick
+                result.append(item)
             set_cached_endpoint_response(cache_key, result)
             
             duracion = time.time() - inicio
@@ -2445,62 +2973,20 @@ def incremental_sync():
                     if updates_univalmapex:
                         cursor_main.executemany("UPDATE OB.PedidosLineas SET UniValMapex = ? WHERE ID_PedidoLinea_Externa = ?", updates_univalmapex)
             except Exception:
-                pass
+                logging.exception('[INCREMENTAL SYNC] Error actualizando UniValMapex desde MAPEX.')
 
-            # Recalcular AssignedStock para TODOS los pedidos secuenciados
+            # Recalcular AssignedStock para TODOS los pedidos secuenciados con
+            # la misma función que usa el worker periódico.
             try:
-                with ConexionODBCCZ(database='DataLakeSCCZ') as conn_main:
-                    cursor_main = conn_main.cursor()
-                    cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Omegas_New")
-                    stock_disponible = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                    cursor_main.execute("SELECT Cod_producto, StockActual FROM OB.Stock_Beams_New")
-                    stock_beams = {row.Cod_producto: row.StockActual for row in cursor_main.fetchall()}
-                    cursor_main.execute("""
-                        SELECT ps.NumeroPedido, ps.Assy, ps.Beam, pl.UnidadesPedidas, pl.UniValMapex, ps.SequenceValue, ps.AssignedStock, ps.AssignedStockBeam, ps.PriorityOrder
-                        FROM OB.PedidosSecuenciados ps
-                        INNER JOIN OB.PedidosCabecera pc ON ps.NumeroPedido = pc.NumeroPedido
-                        INNER JOIN OB.PedidosLineas pl ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa AND ps.Assy = pl.Cod_Producto_Externo
-                        WHERE ISNULL(pl.UniValMapex, 0) < pl.UnidadesPedidas
-                        ORDER BY
-                            CASE WHEN ps.PriorityOrder IS NULL THEN 1 ELSE 0 END,
-                            ps.PriorityOrder ASC,
-                            ps.SequenceValue ASC
-                    """)
-                    pedidos_a_actualizar = cursor_main.fetchall()
-                    updates_necesarios = []
-                    for pedido in pedidos_a_actualizar:
-                        assy = pedido.Assy
-                        beam = pedido.Beam
-                        stock_actual_para_assy = stock_disponible.get(assy, 0)
-                        stock_actual_para_beam = stock_beams.get(beam, 0) if beam else 0
-                        cantidad_necesaria = (pedido.UnidadesPedidas or 0) - (pedido.UniValMapex or 0)
-                        cantidad_necesaria_beam = pedido.UnidadesPedidas or 0
-
-                        nuevo_stock_asignado_assy = 0
-                        if cantidad_necesaria > 0 and stock_actual_para_assy > 0:
-                            nuevo_stock_asignado_assy = min(cantidad_necesaria, stock_actual_para_assy)
-                            stock_disponible[assy] = max(0, stock_actual_para_assy - nuevo_stock_asignado_assy)
-
-                        nuevo_stock_asignado_beam = 0
-                        if beam and cantidad_necesaria_beam > 0 and stock_actual_para_beam > 0:
-                            nuevo_stock_asignado_beam = min(cantidad_necesaria_beam, stock_actual_para_beam)
-                            stock_beams[beam] = max(0, stock_actual_para_beam - nuevo_stock_asignado_beam)
-
-                        viejo_assy = pedido.AssignedStock if pedido.AssignedStock is not None else 0
-                        viejo_beam = pedido.AssignedStockBeam if pedido.AssignedStockBeam is not None else 0
-
-                        if nuevo_stock_asignado_assy != viejo_assy or nuevo_stock_asignado_beam != viejo_beam:
-                            updates_necesarios.append((nuevo_stock_asignado_assy, nuevo_stock_asignado_beam, pedido.NumeroPedido, pedido.Assy))
-
-                    if updates_necesarios:
-                        sql_update = "UPDATE OB.PedidosSecuenciados SET AssignedStock = ?, AssignedStockBeam = ? WHERE NumeroPedido = ? AND Assy = ?"
-                        cursor_main.executemany(sql_update, updates_necesarios)
-            except Exception:
-                pass
+                stock_assignment = recalculate_assigned_stock_once()
+            except Exception as error:
+                logging.exception('[INCREMENTAL SYNC] Error recalculando stock asignado.')
+                stock_assignment = {'error': type(error).__name__}
 
         return jsonify({
             "message": "Actualización incremental completada exitosamente",
-            "periodo": "Todos los pedidos secuenciados recalculados"
+            "periodo": "Todos los pedidos secuenciados recalculados",
+            "stock_assignment": stock_assignment,
         }), 200
     except Exception as e:
         print(f"[INCREMENTAL SYNC] ERROR GENERAL: {str(e)}")
@@ -2991,22 +3477,31 @@ def verificar_password_usuario(stored_password, plain_password):
 # ====================================================================================
 # ENDPOINTS DE LA API
 # ====================================================================================
-def build_extender_line_apply_sql(order_alias='ps', apply_alias='extline'):
-    """Recupera el EX real desde las líneas del pedido cuando la cabecera no lo materializó."""
+def build_wc_line_apply_sql(order_alias='ps', apply_alias='wcline', wc_value='EX'):
+    """OUTER APPLY genérico: resuelve cualquier W/C desde PedidosLineas + OB.Omegas.
+    Esto evita depender de PedidosCabecera (que solo se actualiza al importar).
+    Si un producto se añade al catálogo OB.Omegas después de importar el pedido,
+    este OUTER APPLY lo encontrará igualmente en la siguiente consulta."""
+    safe_wc = str(wc_value).strip().replace("'", "''")
     return f"""
                 OUTER APPLY (
                     SELECT TOP 1
-                        LTRIM(RTRIM(pl.Cod_Producto_Externo)) AS LineExtender
+                        LTRIM(RTRIM(pl.Cod_Producto_Externo)) AS WCLine
                     FROM OB.PedidosCabecera pc WITH (NOLOCK)
                     INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
                         ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
                     INNER JOIN OB.Omegas o_line WITH (NOLOCK)
                         ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
                     WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
-                      AND LTRIM(RTRIM(o_line.[W/C])) = 'EX'
+                      AND LTRIM(RTRIM(o_line.[W/C])) = '{safe_wc}'
                     ORDER BY pl.UnidadesPedidas DESC, pl.Cod_Producto_Externo ASC
                 ) {apply_alias}
     """
+
+
+def build_extender_line_apply_sql(order_alias='ps', apply_alias='extline'):
+    """Recupera el EX real desde las líneas del pedido cuando la cabecera no lo materializó."""
+    return build_wc_line_apply_sql(order_alias, apply_alias, 'EX')
 
 
 def build_extender_derived_apply_sql(order_alias='ps', apply_alias='extderived'):
@@ -3014,7 +3509,7 @@ def build_extender_derived_apply_sql(order_alias='ps', apply_alias='extderived')
     return f"""
                 OUTER APPLY (
                     SELECT TOP 1
-                        LTRIM(RTRIM(pe_tsd.characteristic_value)) AS DerivedExtender
+                        LTRIM(RTRIM(o_tsd.Assy)) AS DerivedExtender
                     FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
                     INNER JOIN OB.pedidos_exportados pe_tsd WITH (NOLOCK)
                         ON LTRIM(RTRIM(pe_tsd.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
@@ -3070,7 +3565,7 @@ def build_extender_target_apply_sql(order_alias='ps', apply_alias='exttarget'):
 
 def build_extender_resolved_value_sql(order_alias='ps', line_alias='extline', derived_alias='extderived'):
     """Devuelve EX persistido, EX real en líneas o el extensor derivado ya calculado por OUTER APPLY."""
-    return f"COALESCE(NULLIF(LTRIM(RTRIM({order_alias}.EX)), ''), {line_alias}.LineExtender, {derived_alias}.DerivedExtender)"
+    return f"COALESCE(NULLIF(LTRIM(RTRIM({order_alias}.EX)), ''), {line_alias}.WCLine, {derived_alias}.DerivedExtender)"
 
 
 def build_extender_resolved_quantity_sql(order_alias='ps', line_alias='extline', derived_alias='extderived', target_alias='exttarget', alias_name='ExtenderQuantity'):
@@ -3086,6 +3581,380 @@ def build_extender_resolved_quantity_sql(order_alias='ps', line_alias='extline',
                         ELSE NULL
                     END AS {alias_name}
     """
+
+
+def build_sequenced_orders_cards_prepare_query(assembly_value, done_qty_sql, include_c_fields=False):
+    """Materializa el conjunto pequeño de la tarjeta y sus datos auxiliares.
+
+    Los CTE de SQL Server no se materializan: al reutilizar ``base`` muchas veces,
+    el optimizador podía volver a expandir la vista pesada. Estas tablas temporales
+    viven solo durante la petición ODBC y evitan ese trabajo repetido.
+    """
+    if assembly_value not in ('YES C', 'YES W'):
+        raise ValueError('Tipo de assembly no permitido para la tarjeta secuenciada')
+
+    c_base_fields = ''
+    if include_c_fields:
+        c_base_fields = """
+                    ISNULL(pc.CWT, '') AS CWT,
+                    ISNULL(pc.DS, '') AS MS,
+                    """ + build_pedidos_cabecera_optional_select_sql('CWI') + ","
+
+    return f'''
+                SELECT
+                    ps.Sequence AS Sequence,
+                    ps.NumeroPedido AS SalesOrder,
+                    LTRIM(RTRIM(ps.NumeroPedido)) AS NumeroPedido,
+                    CASE
+                        WHEN ISNULL(ps.UnidadesPedidas, 0) - ISNULL(ps.UniValMapex, 0) > 0
+                            THEN ISNULL(ps.UnidadesPedidas, 0) - ISNULL(ps.UniValMapex, 0)
+                        ELSE 0
+                    END AS Qty,
+                    ps.UnidadesPedidas AS OrderedQty,
+                    ISNULL(ps.UniValMapex, 0) AS ProducedQty,
+                    ps.UnidadesPedidas AS UnidadesPedidas,
+                    {done_qty_sql} AS DoneQty,
+                    ps.Assy,
+                    ps.Beam,
+                    o.IF1,
+                    o.IF2,
+                    pc.FechaEntrega AS DeliveryDate,
+{c_base_fields}
+                    ps.OFs AS WO,
+                    ps.EX AS RawEX,
+                    ps.TB AS RawTB,
+                    ps.PriorityOrder
+                INTO #seq_cards_base
+                FROM OB.V_PedidosSummary_Secuenciados_Full ps WITH (NOLOCK)
+                LEFT JOIN OB.PedidosCabecera pc WITH (NOLOCK)
+                    ON pc.NumeroPedido = ps.NumeroPedido
+                LEFT JOIN OB.Omegas o WITH (NOLOCK)
+                    ON ps.Assy = o.Assy
+                WHERE UPPER(LTRIM(RTRIM(ps.[C/W]))) = '{assembly_value[-1]}'
+                  AND ISNULL(ps.UniValMapex, 0) < ISNULL(ps.UnidadesPedidas, 0);
+
+                CREATE CLUSTERED INDEX IX_seq_cards_base
+                    ON #seq_cards_base (NumeroPedido, Assy);
+
+                ;WITH ranked_chars AS (
+                    SELECT
+                        LTRIM(RTRIM(pe.sales_document)) AS doc,
+                        pe.characteristic_name,
+                        LTRIM(RTRIM(pe.characteristic_value)) AS val,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY LTRIM(RTRIM(pe.sales_document)), pe.characteristic_name
+                            ORDER BY pe.fecha_importacion DESC, pe.id_importacion DESC
+                        ) AS row_num
+                    FROM OB.pedidos_exportados pe WITH (NOLOCK)
+                    INNER JOIN (SELECT DISTINCT NumeroPedido FROM #seq_cards_base) b
+                        ON b.NumeroPedido = LTRIM(RTRIM(pe.sales_document))
+                    WHERE pe.characteristic_name IN (
+                        'GRP_HSK_TYPE',
+                        'GRP_OMEGA_BRACKET_TYPE_TSD',
+                        'GRP_OMEGA_BRACKET_TYPE_HEAD',
+                        'GRP_OMEGA_BRACKET_TYPE_TRAV',
+                        'GRP_OMEGA_BRACKET_TYPE_PIT',
+                        'GRP_OMEGA_BRACKET_QTY_PIT',
+                        'GRP_TIE_BRACKET_OPT',
+                        'GRP_TIE_BRACKET_TYPE',
+                        'GRP_TIE_BRACKET_QTY'
+                    )
+                )
+                SELECT doc, characteristic_name, val
+                INTO #seq_cards_chars
+                FROM ranked_chars
+                WHERE row_num = 1;
+
+                CREATE INDEX IX_seq_cards_chars
+                    ON #seq_cards_chars (doc, characteristic_name)
+                    INCLUDE (val);
+
+                SELECT
+                    LTRIM(RTRIM(pc.NumeroPedido)) AS doc,
+                    LTRIM(RTRIM(pl.Cod_Producto_Externo)) AS WCLine,
+                    pl.UnidadesPedidas AS Qty,
+                    LTRIM(RTRIM(o_line.[W/C])) AS WorkCenter
+                INTO #seq_cards_lines
+                FROM (SELECT DISTINCT NumeroPedido FROM #seq_cards_base) b
+                INNER JOIN OB.PedidosCabecera pc WITH (NOLOCK)
+                    ON b.NumeroPedido = LTRIM(RTRIM(pc.NumeroPedido))
+                INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                    ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                    ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                WHERE LTRIM(RTRIM(o_line.[W/C])) IN ('TB', 'EX');
+
+                CREATE INDEX IX_seq_cards_lines
+                    ON #seq_cards_lines (doc, WorkCenter, Qty DESC);
+    '''
+
+
+def build_sequenced_orders_cards_query(assembly_value, done_qty_sql, include_c_fields=False):
+    """Consulta set-based para las tarjetas C/W.
+
+    La consulta anterior ejecutaba varios OUTER APPLY y subconsultas correlacionadas
+    por cada fila de la vista.  Con varios cientos de pedidos eso multiplicaba las
+    lecturas de PedidosLineas y pedidos_exportados.  Esta variante calcula cada
+    relación una única vez y solo para los pedidos visibles en la tarjeta.
+    """
+    if assembly_value not in ('YES C', 'YES W'):
+        raise ValueError('Tipo de assembly no permitido para la tarjeta secuenciada')
+
+    c_base_fields = ''
+    c_result_fields = ''
+    c_result_after_delivery = ''
+    if include_c_fields:
+        c_base_fields = """
+                        ISNULL(pc.CWT, '') AS CWT,
+                        ISNULL(pc.DS, '') AS MS,
+                        """ + build_pedidos_cabecera_optional_select_sql('CWI') + ","
+        c_result_fields = """
+                    b.CWT,
+                    b.MS,"""
+        c_result_after_delivery = """
+                    b.CWI,"""
+
+    return f'''
+                WITH base AS (
+                    SELECT * FROM #seq_cards_base
+                ),
+                lh_docs AS (
+                    SELECT DISTINCT pe.doc
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_HSK_TYPE'
+                      AND UPPER(pe.val) = 'LH'
+                ),
+                tsd_map AS (
+                    SELECT pe.doc, pe.val
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_TSD'
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                head_trav_map AS (
+                    SELECT pe.doc, pe.val
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name IN ('GRP_OMEGA_BRACKET_TYPE_HEAD', 'GRP_OMEGA_BRACKET_TYPE_TRAV')
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                pit_map AS (
+                    SELECT pe.doc, pe.val
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_PIT'
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                pit_qty_map AS (
+                    SELECT pe.doc, TRY_CAST(pe.val AS INT) AS qty
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_OMEGA_BRACKET_QTY_PIT'
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                pit_qty_value AS (
+                    SELECT doc, MIN(qty) AS qty
+                    FROM pit_qty_map
+                    WHERE qty IS NOT NULL
+                    GROUP BY doc
+                ),
+                tb_opt_y_docs AS (
+                    SELECT DISTINCT pe.doc
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_TIE_BRACKET_OPT'
+                      AND UPPER(pe.val) = 'Y'
+                ),
+                tb_type_map AS (
+                    SELECT pe.doc, pe.val
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_TIE_BRACKET_TYPE'
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                tb_qty_map AS (
+                    SELECT pe.doc, TRY_CAST(pe.val AS INT) AS qty
+                    FROM #seq_cards_chars pe
+                    WHERE pe.characteristic_name = 'GRP_TIE_BRACKET_QTY'
+                      AND pe.val IS NOT NULL AND pe.val <> ''
+                ),
+                wc_tb AS (
+                    SELECT line.doc,
+                           line.WCLine,
+                           line.Qty,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY line.doc
+                               ORDER BY line.Qty DESC, line.WCLine ASC
+                           ) AS rn
+                    FROM #seq_cards_lines line
+                    WHERE line.WorkCenter = 'TB'
+                ),
+                wc_ex AS (
+                    SELECT line.doc,
+                           line.WCLine,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY line.doc
+                               ORDER BY line.Qty DESC, line.WCLine ASC
+                           ) AS rn
+                    FROM #seq_cards_lines line
+                    WHERE line.WorkCenter = 'EX'
+                ),
+                has_ex_line AS (
+                    SELECT DISTINCT doc FROM wc_ex
+                ),
+                ext_derived AS (
+                    SELECT DISTINCT b.NumeroPedido, b.Assy, b.Assy AS DerivedExtender
+                    FROM base b
+                    INNER JOIN lh_docs lh ON lh.doc = b.NumeroPedido
+                    INNER JOIN tsd_map t ON t.doc = b.NumeroPedido
+                    INNER JOIN OB.Omegas o_tsd WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_tsd.Assy)) = LTRIM(RTRIM(b.Assy))
+                       AND LTRIM(RTRIM(o_tsd.ExtenderVariable)) = t.val
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM has_ex_line hx WHERE hx.doc = b.NumeroPedido
+                    )
+                ),
+                ext_target AS (
+                    SELECT DISTINCT b.NumeroPedido, b.Assy, 1 AS IsTargetAssy
+                    FROM base b
+                    INNER JOIN lh_docs lh ON lh.doc = b.NumeroPedido
+                    INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM(b.Assy))
+                    WHERE EXISTS (
+                        SELECT 1 FROM head_trav_map ht
+                        WHERE ht.doc = b.NumeroPedido
+                          AND LTRIM(RTRIM(o_target.OmegaType)) = ht.val
+                    ) OR EXISTS (
+                        SELECT 1 FROM tsd_map t
+                        WHERE t.doc = b.NumeroPedido
+                          AND LTRIM(RTRIM(o_target.ExtenderVariable)) = t.val
+                    )
+                ),
+                pit_target_exists AS (
+                    SELECT DISTINCT b.NumeroPedido, b.Assy
+                    FROM base b
+                    INNER JOIN pit_map pm ON pm.doc = b.NumeroPedido
+                    INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                        ON REPLACE(UPPER(LTRIM(RTRIM(o_target.OmegaType))), ' LH', '')
+                         = REPLACE(UPPER(LTRIM(RTRIM(pm.val))), ' LH', '')
+                       AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM(b.Assy))
+                    WHERE EXISTS (
+                        SELECT 1 FROM lh_docs lh
+                        WHERE lh.doc = b.NumeroPedido
+                    ) OR EXISTS (
+                        SELECT 1 FROM head_trav_map ht
+                        WHERE ht.doc = b.NumeroPedido
+                          AND REPLACE(UPPER(LTRIM(RTRIM(ht.val))), ' LH', '')
+                              <> REPLACE(UPPER(LTRIM(RTRIM(pm.val))), ' LH', '')
+                    )
+                ),
+                tb_target_exists AS (
+                    SELECT DISTINCT b.NumeroPedido, b.Assy
+                    FROM base b
+                    INNER JOIN tb_opt_y_docs toy ON toy.doc = b.NumeroPedido
+                    INNER JOIN tb_type_map ttm ON ttm.doc = b.NumeroPedido
+                    INNER JOIN OB.Omegas o_target WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_target.OmegaType)) = ttm.val
+                       AND LTRIM(RTRIM(o_target.Assy)) = LTRIM(RTRIM(b.Assy))
+                ),
+                ext_value AS (
+                    SELECT b.NumeroPedido, b.Assy,
+                           COALESCE(NULLIF(LTRIM(RTRIM(b.RawEX)), ''), we.WCLine, ed.DerivedExtender) AS Extender
+                    FROM base b
+                    LEFT JOIN (SELECT doc, WCLine FROM wc_ex WHERE rn = 1) we
+                        ON we.doc = b.NumeroPedido
+                    LEFT JOIN ext_derived ed
+                        ON ed.NumeroPedido = b.NumeroPedido AND ed.Assy = b.Assy
+                ),
+                ext_qty AS (
+                    SELECT b.NumeroPedido, b.Assy,
+                           CASE
+                               WHEN ev.Extender IS NULL THEN NULL
+                               WHEN lh.doc IS NOT NULL
+                                    AND pte.NumeroPedido IS NOT NULL
+                                    AND pit_qty.qty IS NOT NULL
+                                    AND UPPER(LTRIM(RTRIM(o_ext_qty.[W/C]))) = 'W'
+                                   THEN b.UnidadesPedidas
+                               WHEN et.IsTargetAssy = 1 THEN CASE
+                                   -- En el objetivo de extensor se separan las etiquetas
+                                   -- PIT del total para que ambos valores sumen el Assy.
+                                   -- Mantener 2 para importaciones antiguas sin QTY_PIT.
+                                   WHEN b.UnidadesPedidas > COALESCE(pit_qty.qty, 2)
+                                       THEN b.UnidadesPedidas - COALESCE(pit_qty.qty, 2)
+                                   ELSE 0
+                               END
+                               ELSE NULL
+                           END AS ExtenderQuantity
+                    FROM base b
+                    LEFT JOIN ext_value ev
+                        ON ev.NumeroPedido = b.NumeroPedido AND ev.Assy = b.Assy
+                    LEFT JOIN ext_target et
+                        ON et.NumeroPedido = b.NumeroPedido AND et.Assy = b.Assy
+                    LEFT JOIN lh_docs lh
+                        ON lh.doc = b.NumeroPedido
+                    LEFT JOIN pit_target_exists pte
+                        ON pte.NumeroPedido = b.NumeroPedido AND pte.Assy = b.Assy
+                    LEFT JOIN OB.Omegas o_ext_qty WITH (NOLOCK)
+                        ON LTRIM(RTRIM(o_ext_qty.Assy)) = LTRIM(RTRIM(b.Assy))
+                    LEFT JOIN pit_qty_value pit_qty
+                        ON pit_qty.doc = b.NumeroPedido
+                )
+                SELECT
+                    b.Sequence,
+                    b.SalesOrder,
+                    b.Qty,
+                    b.DoneQty,
+                    b.Assy,
+                    b.Beam,
+                    b.IF1,
+                    b.IF2,
+                    COALESCE(NULLIF(LTRIM(RTRIM(b.RawTB)), ''), wtb.WCLine) AS TieBracket,
+{c_result_fields}
+                    b.DeliveryDate,
+{c_result_after_delivery}
+                    b.WO,
+                    ev.Extender,
+                    {"b.PriorityOrder," if include_c_fields else ""}
+                    pv.PitBracket,
+                    CASE WHEN pte.NumeroPedido IS NULL THEN NULL ELSE pq.qty END AS PitBracketQty,
+                    COALESCE(
+                        CASE
+                            WHEN COALESCE(NULLIF(LTRIM(RTRIM(b.RawTB)), ''), wtb.WCLine) IS NULL THEN NULL
+                            WHEN tte.NumeroPedido IS NULL THEN NULL
+                            ELSE tq.qty
+                        END,
+                        CASE
+                            WHEN COALESCE(NULLIF(LTRIM(RTRIM(b.RawTB)), ''), wtb.WCLine) IS NULL THEN NULL
+                            WHEN toy.doc IS NOT NULL THEN NULL
+                            WHEN eq.ExtenderQuantity IS NOT NULL THEN 1
+                            ELSE NULL
+                        END,
+                        tlq.Qty
+                    ) AS TieBracketQty,
+                    COALESCE(
+                        CASE
+                            WHEN COALESCE(NULLIF(LTRIM(RTRIM(b.RawTB)), ''), wtb.WCLine) IS NULL THEN NULL
+                            WHEN tte.NumeroPedido IS NULL THEN NULL
+                            ELSE tq.qty
+                        END,
+                        CASE
+                            WHEN COALESCE(NULLIF(LTRIM(RTRIM(b.RawTB)), ''), wtb.WCLine) IS NULL THEN NULL
+                            WHEN toy.doc IS NOT NULL THEN NULL
+                            WHEN eq.ExtenderQuantity IS NOT NULL THEN 1
+                            ELSE NULL
+                        END
+                    ) AS TieExtenderQty,
+                    eq.ExtenderQuantity
+                FROM base b
+                LEFT JOIN (SELECT doc, WCLine FROM wc_tb WHERE rn = 1) wtb ON wtb.doc = b.NumeroPedido
+                LEFT JOIN ext_value ev ON ev.NumeroPedido = b.NumeroPedido AND ev.Assy = b.Assy
+                LEFT JOIN ext_qty eq ON eq.NumeroPedido = b.NumeroPedido AND eq.Assy = b.Assy
+                LEFT JOIN (SELECT doc, MIN(val) AS PitBracket FROM pit_map GROUP BY doc) pv ON pv.doc = b.NumeroPedido
+                LEFT JOIN pit_target_exists pte ON pte.NumeroPedido = b.NumeroPedido AND pte.Assy = b.Assy
+                LEFT JOIN pit_qty_value pq ON pq.doc = b.NumeroPedido
+                LEFT JOIN tb_opt_y_docs toy ON toy.doc = b.NumeroPedido
+                LEFT JOIN tb_target_exists tte ON tte.NumeroPedido = b.NumeroPedido AND tte.Assy = b.Assy
+                LEFT JOIN (SELECT doc, MIN(qty) AS qty FROM tb_qty_map GROUP BY doc) tq ON tq.doc = b.NumeroPedido
+                LEFT JOIN (SELECT doc, Qty FROM wc_tb WHERE rn = 1) tlq ON tlq.doc = b.NumeroPedido
+                ORDER BY
+                    CASE WHEN b.PriorityOrder IS NULL THEN 1 ELSE 0 END,
+                    b.PriorityOrder ASC,
+                    b.Sequence ASC
+    '''
 
 
 def build_sequenced_orders_extender_query(assembly_value, done_qty_sql, extra_where_sql=''):
@@ -3124,7 +3993,7 @@ def build_sequenced_orders_extender_query(assembly_value, done_qty_sql, extra_wh
                     SELECT DISTINCT
                         b.NumeroPedido,
                         b.Assy,
-                        pe_tsd.characteristic_value AS DerivedExtender
+                        o_tsd.Assy AS DerivedExtender
                     FROM base b
                     INNER JOIN OB.pedidos_exportados pe_lh WITH (NOLOCK)
                         ON pe_lh.sales_document = b.NumeroPedido
@@ -3218,7 +4087,7 @@ def build_extender_value_case_sql(order_alias='ps'):
                             ORDER BY pl.UnidadesPedidas DESC, pl.Cod_Producto_Externo ASC
                         ),
                         (
-                            SELECT TOP 1 LTRIM(RTRIM(pe_tsd.characteristic_value))
+                            SELECT TOP 1 LTRIM(RTRIM(o_target.Assy))
                             FROM OB.pedidos_exportados pe_lh WITH (NOLOCK)
                             INNER JOIN OB.pedidos_exportados pe_tsd WITH (NOLOCK)
                                 ON LTRIM(RTRIM(pe_tsd.sales_document)) = LTRIM(RTRIM(pe_lh.sales_document))
@@ -3320,14 +4189,15 @@ def build_tie_bracket_target_quantity_value_sql(order_alias='ps'):
     """Construye la expresión SQL de cantidad TB sin alias para reutilizarla."""
     return f"""
                     CASE
-                        WHEN {order_alias}.TB IS NULL OR LTRIM(RTRIM({order_alias}.TB)) = '' THEN NULL
+                        WHEN COALESCE(NULLIF(LTRIM(RTRIM({order_alias}.TB)), ''), tbext.WCLine) IS NULL THEN NULL
                         WHEN EXISTS (
                             SELECT 1
                             FROM OB.pedidos_exportados pe_opt WITH (NOLOCK)
                             INNER JOIN OB.pedidos_exportados pe_type WITH (NOLOCK)
                                 ON LTRIM(RTRIM(pe_type.sales_document)) = LTRIM(RTRIM(pe_opt.sales_document))
                             INNER JOIN OB.Omegas o_target WITH (NOLOCK)
-                                ON LTRIM(RTRIM(o_target.OmegaType)) = LTRIM(RTRIM(pe_type.characteristic_value))
+                                ON REPLACE(UPPER(LTRIM(RTRIM(o_target.OmegaType))), ' LH', '')
+                                 = REPLACE(UPPER(LTRIM(RTRIM(pe_type.characteristic_value))), ' LH', '')
                             WHERE LTRIM(RTRIM(pe_opt.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
                               AND pe_opt.characteristic_name = 'GRP_TIE_BRACKET_OPT'
                               AND UPPER(LTRIM(RTRIM(pe_opt.characteristic_value))) = 'Y'
@@ -3353,7 +4223,7 @@ def build_tie_bracket_fallback_quantity_value_sql(order_alias='ps'):
     """Construye el fallback 1/1 para TB cuando no existan variables o OPT sea N."""
     return f"""
                     CASE
-                        WHEN {order_alias}.TB IS NULL OR LTRIM(RTRIM({order_alias}.TB)) = '' THEN NULL
+                        WHEN COALESCE(NULLIF(LTRIM(RTRIM({order_alias}.TB)), ''), tbext.WCLine) IS NULL THEN NULL
                         WHEN EXISTS (
                             SELECT 1
                             FROM OB.pedidos_exportados pe_opt_y WITH (NOLOCK)
@@ -3367,13 +4237,79 @@ def build_tie_bracket_fallback_quantity_value_sql(order_alias='ps'):
     """
 
 
+def build_tie_bracket_line_quantity_value_sql(order_alias='ps'):
+    """Obtiene la cantidad real de la línea TB del pedido.
+
+    Los pedidos que no son LH no siempre incluyen las variables
+    GRP_TIE_BRACKET_*. En esos casos la fuente fiable es la línea del pedido
+    identificada como W/C = TB en el maestro de Omegas.
+    """
+    return f"""
+                    (
+                        SELECT TOP 1 pl.UnidadesPedidas
+                        FROM OB.PedidosCabecera pc WITH (NOLOCK)
+                        INNER JOIN OB.PedidosLineas pl WITH (NOLOCK)
+                            ON pc.ID_PedidoCabecera_Externa = pl.ID_PedidoCabecera_Externa
+                        INNER JOIN OB.Omegas o_line WITH (NOLOCK)
+                            ON LTRIM(RTRIM(o_line.Assy)) = LTRIM(RTRIM(pl.Cod_Producto_Externo))
+                        WHERE LTRIM(RTRIM(pc.NumeroPedido)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                          AND LTRIM(RTRIM(o_line.[W/C])) = 'TB'
+                        ORDER BY pl.UnidadesPedidas DESC, pl.Cod_Producto_Externo ASC
+                    )
+    """
+
+
+def build_pit_bracket_value_sql(order_alias='ps'):
+    """Devuelve el valor del bracket PIT desde la característica GRP_OMEGA_BRACKET_TYPE_PIT."""
+    return f"""
+                (
+                    SELECT TOP 1 LTRIM(RTRIM(pe_pit.characteristic_value))
+                    FROM OB.pedidos_exportados pe_pit WITH (NOLOCK)
+                    WHERE LTRIM(RTRIM(pe_pit.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                      AND pe_pit.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_PIT'
+                      AND pe_pit.characteristic_value IS NOT NULL
+                      AND LTRIM(RTRIM(pe_pit.characteristic_value)) <> ''
+                )
+    """
+
+
+def build_pit_bracket_quantity_value_sql(order_alias='ps', omega_alias='o'):
+    """Devuelve la cantidad de etiquetas PIT solo para el Assy cuyo OmegaType
+    coincide con el último tipo PIT importado para el pedido."""
+    return f"""
+                    CASE
+                        WHEN REPLACE(UPPER(LTRIM(RTRIM({omega_alias}.OmegaType))), ' LH', '') = REPLACE(UPPER(LTRIM(RTRIM((
+                            SELECT TOP 1 pe_type.characteristic_value
+                            FROM OB.pedidos_exportados pe_type WITH (NOLOCK)
+                            WHERE LTRIM(RTRIM(pe_type.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_type.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_PIT'
+                              AND pe_type.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe_type.characteristic_value)) <> ''
+                            ORDER BY pe_type.fecha_importacion DESC, pe_type.id_importacion DESC
+                        )))), ' LH', '')
+                        THEN (
+                            SELECT TOP 1 TRY_CAST(LTRIM(RTRIM(pe_qty.characteristic_value)) AS INT)
+                            FROM OB.pedidos_exportados pe_qty WITH (NOLOCK)
+                            WHERE LTRIM(RTRIM(pe_qty.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                              AND pe_qty.characteristic_name = 'GRP_OMEGA_BRACKET_QTY_PIT'
+                              AND pe_qty.characteristic_value IS NOT NULL
+                              AND LTRIM(RTRIM(pe_qty.characteristic_value)) <> ''
+                            ORDER BY pe_qty.fecha_importacion DESC, pe_qty.id_importacion DESC
+                        )
+                        ELSE NULL
+                    END
+    """
+
+
 def build_tb_cards_quantity_case_sql(order_alias='ps', require_extender=False, alias_name=None):
     """Construye la cantidad a mostrar en tarjetas TB combinando objetivo TB y objetivo de extensor."""
     alias_name = alias_name or ('ExtenderQuantity' if require_extender else 'Qty')
+    line_quantity_fallback = '' if require_extender else f''',
+                        {build_tie_bracket_line_quantity_value_sql(order_alias).strip()}'''
     return f"""
                     COALESCE(
                         {build_tie_bracket_target_quantity_value_sql(order_alias).strip()},
-                        {build_tie_bracket_fallback_quantity_value_sql(order_alias).strip()}
+                        {build_tie_bracket_fallback_quantity_value_sql(order_alias).strip()}{line_quantity_fallback}
                     ) AS {alias_name}
     """
 
@@ -3383,6 +4319,7 @@ def build_tb_cards_quantity_predicate_sql(order_alias='ps'):
     return f"""
                         {build_tie_bracket_target_quantity_value_sql(order_alias).strip()} IS NOT NULL
                         OR {build_tie_bracket_fallback_quantity_value_sql(order_alias).strip()} IS NOT NULL
+                        OR {build_tie_bracket_line_quantity_value_sql(order_alias).strip()} IS NOT NULL
     """
 
 
@@ -3646,6 +4583,14 @@ def get_stock_sap_omegas():
     Consulta el stock de todas las Omegas en SAP (tabla MARD, centro 2000, sin almacén 2055).
     Guarda el resultado en stock_sap_omegas.json y lo devuelve como JSON.
     """
+    # Consulta SAP temporalmente desactivada para evitar llamadas externas.
+    # La interfaz seguirá cargando el último stock disponible mediante
+    # /api/stock_sap_cached al abrir la pantalla.
+    return jsonify({
+        "error": "La consulta de stock SAP está temporalmente desactivada."
+    }), 503
+
+    """Bloque conservado para reactivar la consulta SAP.
     try:
         # 1. Obtener todos los códigos de Omega de nuestra base de datos
         with ConexionODBCCZ(database='DataLakeSCCZ') as conn:
@@ -3695,6 +4640,7 @@ def get_stock_sap_omegas():
     except Exception as e:
         logging.error(f"[SAP STOCK] Error inesperado: {e}")
         return jsonify({"error": str(e)}), 500
+    """
 
 
 # ====================================================================================
@@ -4704,7 +5650,7 @@ def importar_pedidos():
     """
     Endpoint para importar pedidos desde archivos CSV o Excel.
     SOLO guarda líneas relevantes:
-    - GRP_HSK_TYPE = 'LH' (línea del tipo de ensamblaje LH)
+    - GRP_HSK_TYPE con su valor actual (para distinguir LH de no-LH)
     - GRP_OMEGA_BRACKET_TYPE_TSD con su valor (línea del bracket type)
     
     El resto de características se ignoran.
@@ -4815,19 +5761,24 @@ def importar_pedidos():
             """
             Determina si una característica es relevante para guardar.
             GUARDA:
-            - GRP_HSK_TYPE = 'LH'
+            - GRP_HSK_TYPE con valor (para conservar el estado LH/no-LH más reciente)
             - GRP_OMEGA_BRACKET_TYPE_TSD con cualquier valor
             - GRP_OMEGA_BRACKET_TYPE_HEAD con cualquier valor
             - GRP_OMEGA_BRACKET_TYPE_TRAV con cualquier valor
+            - GRP_OMEGA_BRACKET_TYPE_PIT con cualquier valor
+            - GRP_OMEGA_BRACKET_QTY_PIT con valor
             - GRP_TIE_BRACKET_OPT con valor Y/N
             - GRP_TIE_BRACKET_QTY con valor
             - GRP_TIE_BRACKET_TYPE con valor
             """
             char_upper = normalizar_valor(characteristic_name).upper()
             
-            # Relevante 1: GRP_HSK_TYPE = LH
-            if char_upper == 'GRP_HSK_TYPE' and normalizar_valor(characteristic_value).upper() == 'LH':
-                return True, 'GRP_HSK_TYPE=LH'
+            # Guardar todos los valores HSK para que una reimportación no-LH
+            # pueda reemplazar un LH antiguo en el histórico.
+            if char_upper == 'GRP_HSK_TYPE' and normalizar_valor(characteristic_value):
+                if normalizar_valor(characteristic_value).upper() == 'LH':
+                    return True, 'GRP_HSK_TYPE=LH'
+                return True, 'GRP_HSK_TYPE'
             
             # Relevante 2: GRP_OMEGA_BRACKET_TYPE_TSD con valor
             if char_upper == 'GRP_OMEGA_BRACKET_TYPE_TSD' and normalizar_valor(characteristic_value):
@@ -4852,6 +5803,14 @@ def importar_pedidos():
             # Relevante 7: GRP_TIE_BRACKET_TYPE con valor
             if char_upper == 'GRP_TIE_BRACKET_TYPE' and normalizar_valor(characteristic_value):
                 return True, 'GRP_TIE_BRACKET_TYPE'
+
+            # Relevante 8: GRP_OMEGA_BRACKET_TYPE_PIT con valor
+            if char_upper == 'GRP_OMEGA_BRACKET_TYPE_PIT' and normalizar_valor(characteristic_value):
+                return True, 'GRP_OMEGA_BRACKET_TYPE_PIT'
+
+            # Relevante 9: GRP_OMEGA_BRACKET_QTY_PIT con valor
+            if char_upper == 'GRP_OMEGA_BRACKET_QTY_PIT' and normalizar_valor(characteristic_value):
+                return True, 'GRP_OMEGA_BRACKET_QTY_PIT'
             
             # No relevante
             return False, None
@@ -4919,6 +5878,8 @@ def importar_pedidos():
                             'tb_opt': False,
                             'tb_qty': False,
                             'tb_type': False,
+                            'pit_type': False,
+                            'pit_qty': False,
                         }
                     
                     if tipo_relevancia == 'GRP_HSK_TYPE=LH':
@@ -4931,6 +5892,10 @@ def importar_pedidos():
                         resumen_por_pedido[clave_pedido]['tb_qty'] = True
                     elif tipo_relevancia == 'GRP_TIE_BRACKET_TYPE':
                         resumen_por_pedido[clave_pedido]['tb_type'] = True
+                    elif tipo_relevancia == 'GRP_OMEGA_BRACKET_TYPE_PIT':
+                        resumen_por_pedido[clave_pedido]['pit_type'] = True
+                    elif tipo_relevancia == 'GRP_OMEGA_BRACKET_QTY_PIT':
+                        resumen_por_pedido[clave_pedido]['pit_qty'] = True
 
                     logging.info(
                         f"[IMPORTAR-PEDIDOS] {origen} fila {idx_fila} GUARDADA ({tipo_relevancia}): "
@@ -5025,6 +5990,7 @@ def importar_pedidos():
                     f"[IMPORTAR-PEDIDOS] Confirmando transacción... Registros guardados: {registros_insertados}"
                 )
                 conn.commit()
+                clear_endpoint_response_cache()
                 logging.info("[IMPORTAR-PEDIDOS] Transacción confirmada exitosamente")
 
         except ValueError as e:
@@ -5055,6 +6021,8 @@ def importar_pedidos():
         pedidos_tb_opt = sum(1 for datos in resumen_por_pedido.values() if datos['tb_opt'])
         pedidos_tb_qty = sum(1 for datos in resumen_por_pedido.values() if datos['tb_qty'])
         pedidos_tb_type = sum(1 for datos in resumen_por_pedido.values() if datos['tb_type'])
+        pedidos_pit_type = sum(1 for datos in resumen_por_pedido.values() if datos['pit_type'])
+        pedidos_pit_qty = sum(1 for datos in resumen_por_pedido.values() if datos['pit_qty'])
 
         # Respuesta exitosa
         respuesta = {
@@ -5065,7 +6033,9 @@ def importar_pedidos():
                 f'Pedidos con GRP_OMEGA_BRACKET_TYPE_TSD: {pedidos_bracket}. '
                 f'Pedidos con TB OPT: {pedidos_tb_opt}. '
                 f'Pedidos con TB QTY: {pedidos_tb_qty}. '
-                f'Pedidos con TB TYPE: {pedidos_tb_type}.'
+                f'Pedidos con TB TYPE: {pedidos_tb_type}. '
+                f'Pedidos con PIT TYPE: {pedidos_pit_type}. '
+                f'Pedidos con PIT QTY: {pedidos_pit_qty}.'
             ),
             'registros_insertados': registros_insertados,
             'pedidos_lh': pedidos_lh,
@@ -5073,6 +6043,8 @@ def importar_pedidos():
             'pedidos_tb_opt': pedidos_tb_opt,
             'pedidos_tb_qty': pedidos_tb_qty,
             'pedidos_tb_type': pedidos_tb_type,
+            'pedidos_pit_type': pedidos_pit_type,
+            'pedidos_pit_qty': pedidos_pit_qty,
             'errores': errores if errores else None
         }
         
@@ -5354,6 +6326,7 @@ def exportar_ex():
                             
                             logging.info(f"[EXPORTAR-EX-TB] Confirmando transacción... Procesadas: {procesadas}, Actualizadas EX: {actualizado_ex}, Actualizadas TB: {actualizado_tb}")
                             conn.commit()
+                            clear_endpoint_response_cache()
                             logging.info("[EXPORTAR-EX-TB] Transacción confirmada exitosamente")
                     
                     finally:
@@ -5542,6 +6515,7 @@ def exportar_ex():
                     
                     logging.info(f"[EXPORTAR-EX-TB] Confirmando transacción CSV... Procesadas: {procesadas}, EX: {actualizado_ex}, TB: {actualizado_tb}")
                     conn.commit()
+                    clear_endpoint_response_cache()
                     logging.info("[EXPORTAR-EX-TB] Transacción CSV confirmada")
         
         except Exception as e:
@@ -5927,13 +6901,40 @@ def exportar_ex():
 # ====================================================================================
 # EJECUCIÓN DE LA APLICACIÓN E INICIO DE WORKERS (VERSIÓN CORREGIDA)
 # ====================================================================================
+def is_app_port_available(port):
+    """Return whether this process can own the HTTP port before starting workers."""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind(('0.0.0.0', port))
+        return True
+    except OSError:
+        return False
+    finally:
+        probe.close()
+
+
 if __name__ == '__main__':
     print("="*50)
     print("INICIALIZANDO API OMEGAS...")
     print("="*50)
 
+    # app.run() ocurre al final, pero los workers se crean antes. Comprobar el
+    # puerto aquí evita que una segunda instancia sin servidor deje workers
+    # duplicados ejecutándose en segundo plano.
+    if not is_app_port_available(APP_PORT):
+        logging.error('[MAIN] El puerto %s ya está ocupado. Instancia no iniciada.', APP_PORT)
+        print(f'[MAIN] El puerto {APP_PORT} ya está ocupado. Cierra la instancia anterior antes de abrir otra.')
+        raise SystemExit(1)
+
     # Cargar configuración SMTP desde BD (ahora ConexionODBCCZ ya está definida)
     cargar_config_smtp()
+
+    # Local audit mode exposes diagnostics without starting any worker that can
+    # change orders, reservations or stock. It is intentionally opt-in.
+    if os.environ.get('OMEGAS_AUDIT_ONLY', '').strip().lower() in ('1', 'true', 'yes'):
+        print('[MAIN] Modo auditoría: workers de escritura deshabilitados.')
+        app.run(host='0.0.0.0', port=APP_PORT, debug=DEV_MODE, use_reloader=False)
+        raise SystemExit(0)
 
     startup_sync_thread = threading.Thread(target=run_startup_sync, daemon=True, name="StartupSync")
     startup_sync_thread.start()
@@ -5963,6 +6964,13 @@ if __name__ == '__main__':
     beams_stock_thread.daemon = True
     beams_stock_thread.start()
     print("[MAIN] -> Hilo de stock de Beams iniciado (lógica en SQL).")
+
+    # --- INICIAR EL WATCHDOG DE DIAGNÓSTICO DE STOCK ---
+    print("[MAIN] Creando hilo para el Watchdog de stock...")
+    watchdog_thread = threading.Thread(target=stock_watchdog_loop, name="StockWatchdogSync")
+    watchdog_thread.daemon = True
+    watchdog_thread.start()
+    print("[MAIN] -> Hilo Watchdog de stock iniciado (logs en logs/stock_watchdog.log).")
     
     # --- STOCK DE OMEGAS: Ya no se ejecuta en hilo Python ---
     # La sincronización de stock de Omegas se gestiona ahora mediante SQL Server Agent Job

@@ -59,3 +59,40 @@
 2026-04-14 17:49:39 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
 2026-04-14 17:49:40 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
 2026-04-14 17:49:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:45 - root - INFO - [CONFIG] BASE_DIR: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI730722
+2026-11-25 09:32:45 - root - INFO - [CONFIG] APP_DIR: C:\Proyectos\Desarrollo_Omegas - copia\dist
+2026-11-25 09:32:45 - root - INFO - [CONFIG] DB_CONNECTION_CONFIG_FILE: C:\Proyectos\Desarrollo_Omegas - copia\dist\db_connection_config.json
+2026-11-25 09:32:45 - root - INFO - [CONFIG] RUTA_ASSETS: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI730722\assets -> Existe: True
+2026-11-25 09:32:45 - root - INFO - [CONFIG] RUTA_IMAGENES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI730722\IMAGENES -> Existe: True
+2026-11-25 09:32:45 - root - INFO - [CONFIG] RUTA_TRADUCCIONES: C:\Users\J0707~1.BAR\AppData\Local\Temp\_MEI730722\translations -> Existe: True
+2026-11-25 09:32:47 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:47 - root - INFO - [SMTP] Config cargada — servidor: smtp.gmail.com, origen: digitalizacionemesa@gmail.com, destinatarios: 3
+2026-11-25 09:32:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_secuenciados_c ===
+2026-11-25 09:32:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:49 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - DB: 0.451s | MAPEX: 0.038s
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 200 registros | Duración: 0.749s
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_secuenciados_c ===
+
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_secuenciados_w ===
+2026-11-25 09:32:49 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:49 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - DB: 0.302s | MAPEX: 0.014s
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 55 registros | Duración: 0.476s
+2026-11-25 09:32:49 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_secuenciados_w ===
+
+2026-11-25 09:46:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_secuenciados_c ===
+2026-11-25 09:46:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:46:29 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:46:29 - VIEW_DIAGNOSTICS - INFO - DB: 0.335s | MAPEX: 0.073s
+2026-11-25 09:46:29 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 109 registros | Duración: 1.056s
+2026-11-25 09:46:29 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_secuenciados_c ===
+
+2026-11-25 09:46:29 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_secuenciados_w ===
+2026-11-25 09:46:29 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:46:30 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 09:46:30 - VIEW_DIAGNOSTICS - INFO - DB: 0.250s | MAPEX: 0.019s
+2026-11-25 09:46:30 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 37 registros | Duración: 0.472s
+2026-11-25 09:46:30 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_secuenciados_w ===
+

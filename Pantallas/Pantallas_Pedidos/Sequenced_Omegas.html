@@ -1382,7 +1382,9 @@
                 summaryTable.style.display = 'none';
             }
             try {
-            const res = await fetch('/api/summary/sequenced');
+            // El secuenciador debe reflejar las retiradas de MAPEX de inmediato.
+            // No reutilizar una respuesta HTTP anterior del navegador.
+            const res = await fetch('/api/summary/sequenced', { cache: 'no-store' });
             if (!res.ok) { /* ... error handling ... */ }
             const data = await res.json();
             // Mantener el filtro de texto y fechas, el orden actual Y LAS AGRUPACIONES

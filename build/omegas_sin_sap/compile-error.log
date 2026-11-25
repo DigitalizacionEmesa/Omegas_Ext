@@ -1,0 +1,101 @@
+1126 INFO: PyInstaller: 6.19.0, contrib hooks: 2026.4
+1129 INFO: Python: 3.12.10
+1364 INFO: Platform: Windows-11-10.0.26200-SP0
+1365 INFO: Python environment: C:\Proyectos\Desarrollo_Omegas - copia\.venv-1
+1387 INFO: Module search paths (PYTHONPATH):
+['C:\\Proyectos\\Desarrollo_Omegas - copia\\api',
+ 'C:\\Program '
+ 'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\python312.zip',
+ 'C:\\Program '
+ 'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\DLLs',
+ 'C:\\Program '
+ 'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\\Lib',
+ 'C:\\Program '
+ 'Files\\WindowsApps\\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0',
+ 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1',
+ 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages',
+ 'C:\\Proyectos\\Desarrollo_Omegas - copia\\api']
+4946 INFO: Appending 'datas' from .spec
+4955 INFO: checking Analysis
+4956 INFO: Building Analysis because Analysis-00.toc is non existent
+4957 INFO: Looking for Python shared library...
+4959 INFO: Using Python shared library: C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.12_3.12.2800.0_x64__qbz5n2kfra8p0\python312.dll
+4960 INFO: Running Analysis Analysis-00.toc
+4961 INFO: Target bytecode optimization level: 0
+4961 INFO: Initializing module dependency graph...
+4971 INFO: Initializing module graph hook caches...
+5026 INFO: Analyzing modules for base_library.zip ...
+21919 INFO: Processing standard module hook 'hook-encodings.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+30312 INFO: Processing standard module hook 'hook-heapq.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+34195 INFO: Processing standard module hook 'hook-pickle.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+41722 INFO: Caching module dependency graph...
+41888 INFO: Analyzing C:\Proyectos\Desarrollo_Omegas - copia\api\appOMEGAS.py
+44085 INFO: Processing standard module hook 'hook-pyodbc.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+47923 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+47931 INFO: SetuptoolsInfo: initializing cached setuptools info...
+56447 INFO: Processing standard module hook 'hook-_ctypes.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+56498 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+67652 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+69270 INFO: Processing standard module hook 'hook-platform.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+69470 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+69915 INFO: Processing standard module hook 'hook-xml.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+71832 INFO: Processing standard module hook 'hook-sysconfig.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+73949 INFO: Processing standard module hook 'hook-difflib.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+75162 INFO: Processing standard module hook 'hook-jinja2.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+82954 INFO: Processing pre-safe-import-module hook 'hook-importlib_metadata.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+83000 INFO: Setuptools: 'importlib_metadata' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.importlib_metadata'!
+83031 INFO: Processing standard module hook 'hook-setuptools.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+83229 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+83570 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+83584 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.jaraco'!
+83638 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+83648 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.more_itertools'!
+85234 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+87730 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+87762 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+87910 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+87920 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 'setuptools._vendor.backports'!
+90140 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+90152 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.tomli'!
+93069 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+93102 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.wheel'!
+93566 INFO: Processing standard module hook 'hook-setuptools._vendor.importlib_metadata.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+93863 INFO: Processing pre-safe-import-module hook 'hook-zipp.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+93868 INFO: Setuptools: 'zipp' appears to be a setuptools-vendored copy - creating alias to 'setuptools._vendor.zipp'!
+94882 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+96995 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+97567 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+98245 INFO: Processing standard module hook 'hook-openpyxl.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+99486 INFO: Processing standard module hook 'hook-xml.etree.cElementTree.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks'
+103268 INFO: Processing module hooks (post-graph stage)...
+104480 INFO: Performing binary vs. data reclassification (66 entries)
+104671 INFO: Looking for ctypes DLLs
+104812 INFO: Analyzing run-time hooks ...
+104822 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+104831 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+104837 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+104844 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+104853 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Proyectos\\Desarrollo_Omegas - copia\\.venv-1\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+104901 INFO: Creating base_library.zip...
+104999 INFO: Looking for dynamic libraries
+114454 INFO: Extra DLL search directories (AddDllDirectory): []
+114454 INFO: Extra DLL search directories (PATH): []
+117587 INFO: Warnings written to C:\Proyectos\Desarrollo_Omegas - copia\build\omegas_sin_sap\omegas_sin_sap\warn-omegas_sin_sap.txt
+118045 INFO: Graph cross-reference written to C:\Proyectos\Desarrollo_Omegas - copia\build\omegas_sin_sap\omegas_sin_sap\xref-omegas_sin_sap.html
+118234 INFO: checking PYZ
+118349 INFO: checking PKG
+118366 INFO: Building because toc changed
+118368 INFO: Building PKG (CArchive) omegas_sin_sap.pkg
+133744 INFO: Building PKG (CArchive) omegas_sin_sap.pkg completed successfully.
+133768 INFO: Bootloader C:\Proyectos\Desarrollo_Omegas - copia\.venv-1\Lib\site-packages\PyInstaller\bootloader\Windows-64bit-intel\run.exe
+133768 INFO: checking EXE
+133786 INFO: Building because toc changed
+133786 INFO: Building EXE from EXE-00.toc
+133788 INFO: Copying bootloader EXE to C:\Proyectos\Desarrollo_Omegas - copia\dist\omegas_sin_sap.exe
+133817 INFO: Copying icon to EXE
+133841 INFO: Copying 0 resources to EXE
+133843 INFO: Embedding manifest in EXE
+133862 INFO: Appending PKG archive to EXE
+133932 INFO: Fixing EXE headers
+134570 INFO: Building EXE from EXE-00.toc completed successfully.
+134597 INFO: Build complete! The results are available in: C:\Proyectos\Desarrollo_Omegas - copia\dist

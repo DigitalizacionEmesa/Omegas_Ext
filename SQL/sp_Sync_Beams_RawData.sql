@@ -126,31 +126,43 @@ BEGIN
             AND lsb.Fuente = src.Fuente
       );
 
+    ;WITH ProduccionMapexNeta AS (
+        -- Compensa las rectificaciones positivas/negativas y reconstruye el resultado de F_HIS_CT.
+        SELECT
+            f.Cod_producto,
+            CAST(COALESCE(NULLIF(LTRIM(RTRIM(REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)))), ''), '50 Assembly') AS VARCHAR(100)) AS WorkGroup,
+            MIN(f.Fecha_ini) AS Fecha_inicio,
+            MAX(f.Fecha_fin) AS Fecha_fin,
+            CAST(SUM(CAST(f.Unidades_OK AS BIGINT)) AS INT) AS Unidades_OK
+        FROM mapexbp.dbo.V_His_Prod f
+        WHERE f.Dia_productivo BETWEEN DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0) AND @CurrentTime
+          AND f.Cod_area = '50 Assembly'
+        GROUP BY
+            f.Cod_producto,
+            CAST(COALESCE(NULLIF(LTRIM(RTRIM(REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)))), ''), '50 Assembly') AS VARCHAR(100)),
+            f.Dia_productivo
+        HAVING SUM(CAST(f.Unidades_OK AS BIGINT)) > 0
+    )
     MERGE OB.Beams_Produccion AS Target
     USING (
         SELECT
             f.Cod_producto,
-            CAST(COALESCE(NULLIF(LTRIM(RTRIM(f.WorkGroup)), ''), '50 Assembly') AS VARCHAR(100)) AS WorkGroup,
+            f.WorkGroup,
             f.Fecha_inicio,
             f.Fecha_fin,
-            CAST(f.Unidades_OK AS INT) AS Unidades_OK
-        FROM mapexbp.dbo.F_HIS_CT(
-            'WORKCENTER', 'DETAIL', 'PRODUCT',
-            DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0), @CurrentTime, 2
-        ) f
+            f.Unidades_OK
+        FROM ProduccionMapexNeta f
         INNER JOIN OB.Beams b
             ON b.BeamCode = f.Cod_producto
            AND b.IsActive = 1
         INNER JOIN OB.Last_Sync_Beams lsb
             ON lsb.Cod_producto = f.Cod_producto
            AND lsb.Fuente = 'PROD'
-        WHERE f.WorkGroup1 = '50 Assembly'
-          AND f.Unidades_OK > 0
-          AND (
+        WHERE (
                 f.Fecha_inicio >= lsb.Last_Sync_Date
                 OR (
                     f.Fecha_fin > lsb.Last_Sync_Date
-                    AND f.Fecha_inicio < lsb.Last_Sync_Date
+                AND f.Fecha_inicio < lsb.Last_Sync_Date
                 )
           )
     ) AS Source
@@ -183,6 +195,24 @@ BEGIN
     WHERE lsb.Fuente = 'PROD'
       AND prod.MaxFecha >= lsb.Last_Sync_Date;
 
+    ;WITH ConsumoMapexNeto AS (
+        -- Mantiene los ciclos por máquina y consolida sus rectificaciones antes de filtrar.
+        SELECT
+            f.Cod_producto,
+            REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)) AS Cod_maquina,
+            f.Dia_productivo,
+            MIN(f.Fecha_ini) AS Fecha_inicio,
+            MAX(f.Fecha_fin) AS Fecha_fin,
+            CAST(SUM(CAST(f.Unidades_OK AS BIGINT)) AS INT) AS Unidades_OK
+        FROM mapexbp.dbo.V_His_Prod f
+        WHERE f.Dia_productivo BETWEEN DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0) AND @CurrentTime
+          AND f.Cod_area = '50 Assembly'
+        GROUP BY
+            f.Cod_producto,
+            REPLACE(f.Cod_maquina, NCHAR(345), NCHAR(114)),
+            f.Dia_productivo
+        HAVING SUM(CAST(f.Unidades_OK AS BIGINT)) > 0
+    )
     MERGE OB.Beams_Consumos AS Target
     USING (
         SELECT
@@ -190,11 +220,8 @@ BEGIN
             CAST(omega.Assy AS VARCHAR(100)) AS WorkGroup,
             f.Fecha_inicio,
             f.Fecha_fin,
-            CAST(f.Unidades_OK AS INT) AS Unidades_OK
-        FROM mapexbp.dbo.F_HIS_CT(
-            'WORKCENTER', 'DETAIL', 'PRODUCT',
-            DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0), @CurrentTime, 2
-        ) f
+            f.Unidades_OK
+        FROM ConsumoMapexNeto f
         INNER JOIN OB.Omegas omega
             ON omega.Assy = f.Cod_producto
            AND omega.[W/C] = 'C'
@@ -205,13 +232,11 @@ BEGIN
         INNER JOIN OB.Last_Sync_Beams lsb
             ON lsb.Cod_producto = beam.BeamCode
            AND lsb.Fuente = 'CONS'
-        WHERE f.WorkGroup1 = '50 Assembly'
-          AND f.Unidades_OK > 0
-          AND (
+        WHERE (
                 f.Fecha_inicio >= lsb.Last_Sync_Date
                 OR (
                     f.Fecha_fin > lsb.Last_Sync_Date
-                    AND f.Fecha_inicio < lsb.Last_Sync_Date
+                AND f.Fecha_inicio < lsb.Last_Sync_Date
                 )
           )
     ) AS Source

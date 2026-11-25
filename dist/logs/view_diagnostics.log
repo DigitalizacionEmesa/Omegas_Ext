@@ -1,0 +1,20 @@
+2026-11-25 09:32:48 | INFO | === INICIO: GET /api/pedidos_secuenciados_c ===
+2026-11-25 09:32:49 | INFO | DB: 0.451s | MAPEX: 0.038s
+2026-11-25 09:32:49 | INFO | ✓ Vista retornó 200 registros | Duración: 0.749s
+2026-11-25 09:32:49 | INFO | === FIN: GET /api/pedidos_secuenciados_c ===
+
+2026-11-25 09:32:49 | INFO | === INICIO: GET /api/pedidos_secuenciados_w ===
+2026-11-25 09:32:49 | INFO | DB: 0.302s | MAPEX: 0.014s
+2026-11-25 09:32:49 | INFO | ✓ Vista retornó 55 registros | Duración: 0.476s
+2026-11-25 09:32:49 | INFO | === FIN: GET /api/pedidos_secuenciados_w ===
+
+2026-11-25 09:46:28 | INFO | === INICIO: GET /api/pedidos_secuenciados_c ===
+2026-11-25 09:46:29 | INFO | DB: 0.335s | MAPEX: 0.073s
+2026-11-25 09:46:29 | INFO | ✓ Vista retornó 109 registros | Duración: 1.056s
+2026-11-25 09:46:29 | INFO | === FIN: GET /api/pedidos_secuenciados_c ===
+
+2026-11-25 09:46:29 | INFO | === INICIO: GET /api/pedidos_secuenciados_w ===
+2026-11-25 09:46:30 | INFO | DB: 0.250s | MAPEX: 0.019s
+2026-11-25 09:46:30 | INFO | ✓ Vista retornó 37 registros | Duración: 0.472s
+2026-11-25 09:46:30 | INFO | === FIN: GET /api/pedidos_secuenciados_w ===
+

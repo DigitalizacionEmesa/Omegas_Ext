@@ -16,13 +16,11 @@ DECLARE @MinFechaMapex DATETIME;
 
 BEGIN TRY
     SELECT 
-        @MinFechaMapex = MIN(f.Fecha_inicio),
+        @MinFechaMapex = MIN(f.Fecha_ini),
         @MaxFechaMapex = MAX(f.Fecha_fin)
-    FROM mapexbp.dbo.F_HIS_CT(
-        'WORKCENTER', 'DETAIL', 'PRODUCT',
-        '2026-05-28', GETDATE(), 2
-    ) f
-    WHERE f.WorkGroup1 = '50 Assembly'
+    FROM mapexbp.dbo.V_His_Prod f
+    WHERE f.Dia_productivo BETWEEN '2026-05-28' AND GETDATE()
+      AND f.Cod_area = '50 Assembly'
       AND f.Unidades_OK > 0;
     
     PRINT 'Datos en MAPEX:';
@@ -67,13 +65,11 @@ SELECT TOP 20
         WHEN f.Fecha_fin > lsb.Last_Sync_Date THEN '✅ DEBERÍA actualizar'
         ELSE '❌ NO actualiza (fecha <= Last_Sync)'
     END AS 'Se actualiza?'
-FROM mapexbp.dbo.F_HIS_CT(
-    'WORKCENTER', 'DETAIL', 'PRODUCT',
-    DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0), GETDATE(), 2
-) f
+FROM mapexbp.dbo.V_His_Prod f
 INNER JOIN OB.Beams b ON b.BeamCode = f.Cod_producto AND b.IsActive = 1
 INNER JOIN OB.Last_Sync_Beams lsb ON lsb.Cod_producto = f.Cod_producto AND lsb.Fuente = 'CONS'
-WHERE f.WorkGroup1 = '50 Assembly'
+WHERE f.Dia_productivo BETWEEN DATEADD(DAY, DATEDIFF(DAY, 0, @BootstrapSyncDate), 0) AND GETDATE()
+  AND f.Cod_area = '50 Assembly'
   AND f.Unidades_OK > 0
 ORDER BY f.Fecha_fin DESC;
 
