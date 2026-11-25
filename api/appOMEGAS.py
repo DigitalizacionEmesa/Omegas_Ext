@@ -4281,7 +4281,7 @@ def build_pit_bracket_quantity_value_sql(order_alias='ps', omega_alias='o'):
                         WHEN REPLACE(UPPER(LTRIM(RTRIM({omega_alias}.OmegaType))), ' LH', '') = REPLACE(UPPER(LTRIM(RTRIM((
                             SELECT TOP 1 pe_type.characteristic_value
                             FROM OB.pedidos_exportados pe_type WITH (NOLOCK)
-                            WHERE LTRIM(RTRIM(pe_type.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                            WHERE pe_type.sales_document = LTRIM(RTRIM({order_alias}.NumeroPedido))
                               AND pe_type.characteristic_name = 'GRP_OMEGA_BRACKET_TYPE_PIT'
                               AND pe_type.characteristic_value IS NOT NULL
                               AND LTRIM(RTRIM(pe_type.characteristic_value)) <> ''
@@ -4290,7 +4290,7 @@ def build_pit_bracket_quantity_value_sql(order_alias='ps', omega_alias='o'):
                         THEN (
                             SELECT TOP 1 TRY_CAST(LTRIM(RTRIM(pe_qty.characteristic_value)) AS INT)
                             FROM OB.pedidos_exportados pe_qty WITH (NOLOCK)
-                            WHERE LTRIM(RTRIM(pe_qty.sales_document)) = LTRIM(RTRIM({order_alias}.NumeroPedido))
+                            WHERE pe_qty.sales_document = LTRIM(RTRIM({order_alias}.NumeroPedido))
                               AND pe_qty.characteristic_name = 'GRP_OMEGA_BRACKET_QTY_PIT'
                               AND pe_qty.characteristic_value IS NOT NULL
                               AND LTRIM(RTRIM(pe_qty.characteristic_value)) <> ''

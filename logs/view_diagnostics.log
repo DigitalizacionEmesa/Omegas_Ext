@@ -92484,3 +92484,223 @@
 2026-11-25 13:15:56 | INFO | ✓ Vista retornó 27 registros | Duración: 38.382s
 2026-11-25 13:15:56 | INFO | === FIN: GET /api/pedidos_picking ===
 
+2026-11-25 14:04:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:07 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:24 | INFO | ✓ Vista retornó 27 registros | Duración: 35.515s
+2026-11-25 14:05:24 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:05:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:53 | INFO | ✓ Vista retornó 27 registros | Duración: 45.178s
+2026-11-25 14:05:53 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:05:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:04 | INFO | ✓ Vista retornó 27 registros | Duración: 45.598s
+2026-11-25 14:06:04 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:08 | INFO | ✓ Vista retornó 27 registros | Duración: 39.767s
+2026-11-25 14:06:08 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:08 | INFO | ✓ Cache hit: pedidos_picking | Registros: 27
+2026-11-25 14:06:08 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:11 | INFO | ✓ Vista retornó 27 registros | Duración: 64.621s
+2026-11-25 14:06:11 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:19 | INFO | ✓ Vista retornó 28 registros | Duración: 40.518s
+2026-11-25 14:06:19 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:34 | INFO | ✓ Vista retornó 28 registros | Duración: 35.829s
+2026-11-25 14:06:34 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:50 | INFO | ✓ Vista retornó 28 registros | Duración: 31.243s
+2026-11-25 14:06:50 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:51 | INFO | ✓ Vista retornó 28 registros | Duración: 62.929s
+2026-11-25 14:06:51 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:13 | INFO | ✓ Vista retornó 28 registros | Duración: 34.789s
+2026-11-25 14:07:13 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:20 | INFO | ✓ Vista retornó 28 registros | Duración: 32.024s
+2026-11-25 14:07:20 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:34 | INFO | ✓ Vista retornó 28 registros | Duración: 65.358s
+2026-11-25 14:07:34 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:37 | INFO | ✓ Vista retornó 28 registros | Duración: 38.796s
+2026-11-25 14:07:37 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:38 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:07:38 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:40 | INFO | ✓ Vista retornó 28 registros | Duración: 31.466s
+2026-11-25 14:07:40 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:50 | INFO | ✓ Vista retornó 28 registros | Duración: 32.044s
+2026-11-25 14:07:50 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:59 | INFO | ✓ Vista retornó 28 registros | Duración: 30.527s
+2026-11-25 14:07:59 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:18 | INFO | ✓ Vista retornó 28 registros | Duración: 29.667s
+2026-11-25 14:08:18 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:18 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:08:18 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:28 | INFO | ✓ Vista retornó 28 registros | Duración: 30.097s
+2026-11-25 14:08:28 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:39 | INFO | ✓ Vista retornó 28 registros | Duración: 30.419s
+2026-11-25 14:08:39 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:03 | INFO | ✓ Vista retornó 28 registros | Duración: 34.700s
+2026-11-25 14:09:03 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:13 | INFO | ✓ Vista retornó 28 registros | Duración: 34.624s
+2026-11-25 14:09:13 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:24 | INFO | ✓ Vista retornó 28 registros | Duración: 35.977s
+2026-11-25 14:09:24 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:40 | INFO | ✓ Vista retornó 28 registros | Duración: 42.155s
+2026-11-25 14:09:40 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:44 | INFO | ✓ Vista retornó 28 registros | Duración: 35.515s
+2026-11-25 14:09:44 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:52 | INFO | ✓ Vista retornó 28 registros | Duración: 33.735s
+2026-11-25 14:09:52 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:09 | INFO | ✓ Vista retornó 28 registros | Duración: 40.626s
+2026-11-25 14:10:09 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:35 | INFO | ✓ Vista retornó 28 registros | Duración: 46.640s
+2026-11-25 14:10:35 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:43 | INFO | ✓ Vista retornó 28 registros | Duración: 64.474s
+2026-11-25 14:10:43 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:48 | INFO | ✓ Vista retornó 28 registros | Duración: 49.603s
+2026-11-25 14:10:48 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:48 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:10:48 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:11 | INFO | ✓ Vista retornó 28 registros | Duración: 62.972s
+2026-11-25 14:11:11 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:12 | INFO | ✓ Vista retornó 28 registros | Duración: 53.630s
+2026-11-25 14:11:12 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:27 | INFO | ✓ Vista retornó 28 registros | Duración: 58.352s
+2026-11-25 14:11:27 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:28 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:11:28 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:33 | INFO | ✓ Vista retornó 28 registros | Duración: 55.070s
+2026-11-25 14:11:33 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:44 | INFO | ✓ Vista retornó 28 registros | Duración: 46.129s
+2026-11-25 14:11:44 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:55 | INFO | ✓ Vista retornó 28 registros | Duración: 46.508s
+2026-11-25 14:11:55 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:05 | INFO | ✓ Vista retornó 28 registros | Duración: 47.093s
+2026-11-25 14:12:05 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:08 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:12:08 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:23 | INFO | ✓ Vista retornó 28 registros | Duración: 44.505s
+2026-11-25 14:12:23 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:28 | INFO | ✓ Vista retornó 28 registros | Duración: 39.311s
+2026-11-25 14:12:28 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:28 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:12:28 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:38 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:48 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:49 | INFO | ✓ Vista retornó 28 registros | Duración: 50.798s
+2026-11-25 14:12:49 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:54 | INFO | ✓ Vista retornó 28 registros | Duración: 36.069s
+2026-11-25 14:12:54 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:58 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:08 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:15 | INFO | ✓ Vista retornó 28 registros | Duración: 37.112s
+2026-11-25 14:13:15 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:18 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:18 | INFO | ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:13:18 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:28 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:28 | INFO | ✓ Vista retornó 28 registros | Duración: 40.111s
+2026-11-25 14:13:28 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:34 | INFO | ✓ Vista retornó 28 registros | Duración: 35.574s
+2026-11-25 14:13:34 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:45 | INFO | ✓ Vista retornó 28 registros | Duración: 36.587s
+2026-11-25 14:13:45 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:14:12 | INFO | ✓ Vista retornó 28 registros | Duración: 44.025s
+2026-11-25 14:14:12 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:15:26 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:15:26 | INFO | === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:16:26 | INFO | ✓ Vista retornó 8 registros | Duración: 60.662s
+2026-11-25 14:16:26 | INFO | === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:16:28 | INFO | ✓ Vista retornó 8 registros | Duración: 62.514s
+2026-11-25 14:16:28 | INFO | === FIN: GET /api/pedidos_picking ===
+

@@ -225,7 +225,7 @@
     
         let summaryData = [];
         let filteredData = [];
-        let autoRefreshInterval;
+        let sequencedRefreshInFlight = false;
         // isResizing debe estar declarada aquí antes de cualquier función o uso
         window.isResizing = false;
 
@@ -424,7 +424,7 @@
 
         // Función batch para consultar múltiples pedidos de una vez
         async function checkFaltantesBatch(pedidos) {
-            const pedidosToCheck = pedidos.filter(p => !faltantesCache.has(p) && !faltantesPendingRequests.has(p));
+            const pedidosToCheck = [...new Set(pedidos.filter(p => !faltantesCache.has(p) && !faltantesPendingRequests.has(p)))];
             
             if (pedidosToCheck.length === 0) return;
 
@@ -1121,11 +1121,6 @@
         // --- Auto-refresh pause/resume helpers ---
         // isResizing debe ser global y única (solo window.isResizing)
         function pauseAutoRefresh() {
-            // Pausar ambos intervalos: el local y el global
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-            }
             if (window.autoRefreshInterval) {
                 clearInterval(window.autoRefreshInterval);
                 window.autoRefreshInterval = null;
@@ -1373,6 +1368,9 @@
         }
         
         async function autoUpdateSequencedPedidos(isAutoRefresh = false) {
+            if (sequencedRefreshInFlight) return;
+
+            sequencedRefreshInFlight = true;
             const loadingArea = document.getElementById('loadingArea');
             const summaryTable = document.querySelector('.summary-table');
             if (!isAutoRefresh) {
@@ -1425,6 +1423,8 @@
                 // MODIFICADO: Usa la clave de traducción
                 loadingArea.innerHTML = `<div class="error-message">${getTranslation('text_error_loading_data')} ${error.message}</div>`;
                 loadingArea.style.display = 'block';
+            } finally {
+                sequencedRefreshInFlight = false;
             }
         }
         
@@ -1485,11 +1485,6 @@
             let seqIdx = columnConfig.findIndex(c => c.key === 'Sequence');
             currentSort = { column: seqIdx !== -1 ? seqIdx : 11, asc: true };
             autoUpdateSequencedPedidos();
-            // Refresco automático cada 5 segundos que PRESERVA las agrupaciones activas
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(() => {
-                if (!window.isResizing) autoUpdateSequencedPedidos(true);
-            }, 5000);
         }
     </script>
 
@@ -1954,6 +1949,7 @@
                     // No ejecutar auto-refresh durante drag & drop o resize
                     if (typeof window.isResizing !== 'undefined' && window.isResizing) return;
                     if (typeof isDragging !== 'undefined' && isDragging) return;
+                    if (document.hidden) return;
                     if (typeof autoUpdateSequencedPedidos === 'function') autoUpdateSequencedPedidos(true);
                 }, 5000);
             });
