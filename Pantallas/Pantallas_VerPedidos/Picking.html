@@ -76,7 +76,9 @@
     
     let pedidosCache = [];
     let lastRenderedPedidosSignature = '';
-    const VIEW_REFRESH_INTERVAL_MS = 10000;
+    const VIEW_REFRESH_INTERVAL_MS = 15000;
+    let pickingRequestInFlight = false;
+    let pickingRefreshTimer = null;
 
     async function getPedidosPicking() {
       try {
@@ -162,7 +164,6 @@ function renderCards(pedidos, options = {}) {
         </div>
         <div class="picking-card-rows">
           ${pedidosGrupo.map(pedido => {
-            console.log('DeliveryDate:', pedido.DeliveryDate, 'Format:', formatDate(pedido.DeliveryDate));
             const wcType = String(pedido.WCType || '').trim().toUpperCase() === 'W' ? 'W' : 'C';
             const rowClass = `picking-order-row picking-order-row--${wcType.toLowerCase()}`;
             const labelQty = pedido.LabelQty === null || pedido.LabelQty === undefined || pedido.LabelQty === ''
@@ -188,24 +189,33 @@ function renderCards(pedidos, options = {}) {
 
     function setupPageLogic() {
         async function cargarPicking() {
+            if (document.hidden || pickingRequestInFlight) {
+                return;
+            }
+
+            pickingRequestInFlight = true;
+            clearTimeout(pickingRefreshTimer);
             try {
-          if (document.hidden) {
-            return;
-          }
                 const pedidos = await getPedidosPicking();
                 renderCards(pedidos);
             } catch (err) {
                 const grid = document.getElementById('cardsGrid');
                 grid.innerHTML = `<div style="text-align:center;color:#c00;font-size:1.3rem;">${getTranslation('text_error_loading_data')}</div>`;
+            } finally {
+                pickingRequestInFlight = false;
+                if (!document.hidden) {
+                    pickingRefreshTimer = setTimeout(cargarPicking, VIEW_REFRESH_INTERVAL_MS);
+                }
             }
         }
         cargarPicking();
-      setInterval(cargarPicking, VIEW_REFRESH_INTERVAL_MS);
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          cargarPicking();
-        }
-      });
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                clearTimeout(pickingRefreshTimer);
+                return;
+            }
+            cargarPicking();
+        });
     }
   </script>
   

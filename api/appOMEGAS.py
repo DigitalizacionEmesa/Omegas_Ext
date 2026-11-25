@@ -2784,7 +2784,7 @@ def get_pedidos_picking():
     VIEW_LOGGER.info("=== INICIO: GET /api/pedidos_picking ===")
     cache_key = 'pedidos_picking'
 
-    cached_result = get_cached_endpoint_response(cache_key, max_age_seconds=3)
+    cached_result = get_cached_endpoint_response(cache_key, max_age_seconds=15)
     if cached_result is not None:
         VIEW_LOGGER.info(f"✓ Cache hit: {cache_key} | Registros: {len(cached_result)}")
         VIEW_LOGGER.info("=== FIN: GET /api/pedidos_picking ===\n")

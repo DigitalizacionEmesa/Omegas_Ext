@@ -1,0 +1,685 @@
+2026-11-25 14:04:35 - root - INFO - [CONFIG] BASE_DIR: C:\Proyectos\Desarrollo_Omegas - copia
+2026-11-25 14:04:35 - root - INFO - [CONFIG] APP_DIR: C:\Proyectos\Desarrollo_Omegas - copia
+2026-11-25 14:04:35 - root - INFO - [CONFIG] DB_CONNECTION_CONFIG_FILE: C:\Proyectos\Desarrollo_Omegas - copia\db_connection_config.json
+2026-11-25 14:04:35 - root - INFO - [CONFIG] RUTA_ASSETS: C:\Proyectos\Desarrollo_Omegas - copia\assets -> Existe: True
+2026-11-25 14:04:35 - root - INFO - [CONFIG] RUTA_IMAGENES: C:\Proyectos\Desarrollo_Omegas - copia\IMAGENES -> Existe: True
+2026-11-25 14:04:35 - root - INFO - [CONFIG] RUTA_TRADUCCIONES: C:\Proyectos\Desarrollo_Omegas - copia\translations -> Existe: True
+2026-11-25 14:04:35 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - root - INFO - [SMTP] Config cargada — servidor: smtp.gmail.com, origen: digitalizacionemesa@gmail.com, destinatarios: 3
+2026-11-25 14:04:36 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - root - INFO - [CLEANUP] Sequenced-order cleanup worker started.
+2026-11-25 14:04:36 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:04:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:04:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:04:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:04:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:04:37 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=1.18s
+2026-11-25 14:04:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:04:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:05:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:05:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:05:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:05:07 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:23 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:24 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 27 registros | Duración: 35.515s
+2026-11-25 14:05:24 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:05:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:36 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:05:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:05:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:05:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:05:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:37 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:38 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.58s
+2026-11-25 14:05:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:53 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:05:53 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 27 registros | Duración: 45.178s
+2026-11-25 14:05:53 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:05:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:05:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:03 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:04 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 27 registros | Duración: 45.598s
+2026-11-25 14:06:04 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:06:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:06:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:06:06 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:06:08 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:08 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 27 registros | Duración: 39.767s
+2026-11-25 14:06:08 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:08 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 27
+2026-11-25 14:06:08 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:11 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:11 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 27 registros | Duración: 64.621s
+2026-11-25 14:06:11 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:19 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:19 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 40.518s
+2026-11-25 14:06:19 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:34 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:34 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 35.829s
+2026-11-25 14:06:34 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:36 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:06:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:06:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:06:36 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:06:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:38 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:38 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.27s
+2026-11-25 14:06:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:49 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:50 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 31.243s
+2026-11-25 14:06:50 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:51 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:06:51 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 62.929s
+2026-11-25 14:06:51 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:06:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:06:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:06 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:07:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:07:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:07:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:07:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:13 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:13 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 34.789s
+2026-11-25 14:07:13 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:20 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:20 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 32.024s
+2026-11-25 14:07:20 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:33 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:34 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 65.358s
+2026-11-25 14:07:34 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:07:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:07:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:07:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:07:37 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:37 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 38.796s
+2026-11-25 14:07:37 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:38 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:38 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.30s
+2026-11-25 14:07:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:38 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:07:38 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:40 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 31.466s
+2026-11-25 14:07:40 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:50 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:50 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 32.044s
+2026-11-25 14:07:50 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:07:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:07:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:59 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:07:59 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 30.527s
+2026-11-25 14:07:59 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:08:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:08:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:08:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:08:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:18 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:18 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 29.667s
+2026-11-25 14:08:18 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:18 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:08:18 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:28 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:28 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 30.097s
+2026-11-25 14:08:28 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:08:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:08:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:08:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:08:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:38 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:38 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:39 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.46s
+2026-11-25 14:08:39 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 30.419s
+2026-11-25 14:08:39 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:08:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:08:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:08:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:03 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:03 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 34.700s
+2026-11-25 14:09:03 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:09:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:09:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:09:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:09:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:13 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:13 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 34.624s
+2026-11-25 14:09:13 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:24 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:24 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 35.977s
+2026-11-25 14:09:24 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:09:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:09:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:09:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:09:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:39 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:39 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:39 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.53s
+2026-11-25 14:09:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:40 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 42.155s
+2026-11-25 14:09:40 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:43 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:44 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 35.515s
+2026-11-25 14:09:44 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:52 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:09:52 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 33.735s
+2026-11-25 14:09:52 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:09:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:09:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:10:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:10:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:10:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:10:08 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:09 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 40.626s
+2026-11-25 14:10:09 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:34 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:35 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 46.640s
+2026-11-25 14:10:35 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:10:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:10:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:10:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:10:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:39 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:39 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:40 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.65s
+2026-11-25 14:10:42 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:43 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 64.474s
+2026-11-25 14:10:43 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:48 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:10:48 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 49.603s
+2026-11-25 14:10:48 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:48 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:10:48 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:10:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:10:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:07 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:11:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:11:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:11:07 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:11:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:11 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:11 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 62.972s
+2026-11-25 14:11:11 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:11 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:12 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 53.630s
+2026-11-25 14:11:12 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:26 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:27 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 58.352s
+2026-11-25 14:11:27 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:28 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:11:28 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:33 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:33 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 55.070s
+2026-11-25 14:11:33 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:37 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:37 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:11:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:11:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:11:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:11:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:40 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:40 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.25s
+2026-11-25 14:11:44 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:44 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 46.129s
+2026-11-25 14:11:44 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:54 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:11:55 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 46.508s
+2026-11-25 14:11:55 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:11:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:11:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:05 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:05 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 47.093s
+2026-11-25 14:12:05 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:12:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:12:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:12:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:12:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:08 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:12:08 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:18 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:23 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:23 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 44.505s
+2026-11-25 14:12:23 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:27 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:28 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 39.311s
+2026-11-25 14:12:28 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:28 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:12:28 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:12:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:12:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:12:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:12:38 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:40 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:40 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.26s
+2026-11-25 14:12:48 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:48 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:49 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:49 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 50.798s
+2026-11-25 14:12:49 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:54 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:12:54 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 36.069s
+2026-11-25 14:12:54 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:12:58 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:12:58 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:13:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:13:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:13:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:13:08 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:15 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:15 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 37.112s
+2026-11-25 14:13:15 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:18 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:18 - VIEW_DIAGNOSTICS - INFO - ✓ Cache hit: pedidos_picking | Registros: 28
+2026-11-25 14:13:18 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:28 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:28 - VIEW_DIAGNOSTICS - INFO - === INICIO: GET /api/pedidos_picking ===
+2026-11-25 14:13:28 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:28 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 40.111s
+2026-11-25 14:13:28 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:34 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:34 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 35.574s
+2026-11-25 14:13:34 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:13:38 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:13:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:13:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:13:38 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:13:40 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:40 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:41 - root - INFO - [CLEANUP] Cycle complete: checked=731 terminal=0 deleted=0 missing_in_mapex=0 duration=0.30s
+2026-11-25 14:13:45 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:13:45 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 36.587s
+2026-11-25 14:13:45 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
+2026-11-25 14:14:08 - root - INFO - [DB CZ] Conectado a DataLakeSCCZ con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:14:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (BEAM): 'S01SAA970795' tiene stock -15 (Entradas: 134 | Salidas: 149).
+    Últimas producciones: [('Clinching', datetime.datetime(2026, 11, 25, 8, 48, 35), datetime.datetime(2026, 11, 25, 9, 55, 59), 30), ('Clinching', datetime.datetime(2026, 11, 24, 6, 16, 51), datetime.datetime(2026, 11, 24, 10, 8, 43), 63), ('Clinching', datetime.datetime(2026, 11, 23, 15, 30, 29), datetime.datetime(2026, 11, 23, 16, 27, 34), 20)]
+    Últimos consumos:     [('S0PF56225873', datetime.datetime(2026, 11, 25, 11, 15, 30), datetime.datetime(2026, 11, 25, 13, 51, 21), 28), ('S0PF56225864', datetime.datetime(2026, 11, 24, 20, 54, 38), datetime.datetime(2026, 11, 24, 21, 58, 28), 7), ('S0PF56225864', datetime.datetime(2026, 11, 24, 21, 38, 12), datetime.datetime(2026, 11, 24, 21, 39, 8), 3)]
+    Marcas Last_Sync:     [('CONS', datetime.datetime(2026, 11, 25, 13, 51, 21)), ('PROD', datetime.datetime(2026, 11, 25, 9, 55, 59))]
+2026-11-25 14:14:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225973' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 11, 41, 33, 473000), '1283'), (datetime.datetime(2026, 11, 23, 11, 41, 2, 523000), '1282'), (datetime.datetime(2026, 11, 23, 11, 40, 29, 337000), '1281')]
+    Últimas producciones: [('AJUSTE_MANUAL', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), datetime.datetime(2026, 11, 23, 11, 4, 32, 317000), 9)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 11, 41, 33, 473000)), ('PROD', datetime.datetime(2026, 11, 23, 11, 4, 32, 317000))] (LECTURA 2026-11-23 11:41:33.473000 POSTERIOR a PRODUCCIÓN 2026-11-23 11:04:32.317000 — posible consumo antes de reportar producción)
+2026-11-25 14:14:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225975' tiene stock -1.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 23, 21, 9, 9, 550000), '0807'), (datetime.datetime(2026, 11, 23, 21, 9, 8, 973000), '0808'), (datetime.datetime(2026, 11, 23, 21, 8, 54, 933000), '0797')]
+    Últimas producciones: [('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 16, 59, 27), datetime.datetime(2026, 11, 23, 17, 27, 35), 4), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 16, 59, 55), datetime.datetime(2026, 11, 23, 17, 26, 56), 3)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 23, 21, 9, 9, 550000)), ('PROD', datetime.datetime(2026, 11, 23, 17, 27, 35))] (LECTURA 2026-11-23 21:09:09.550000 POSTERIOR a PRODUCCIÓN 2026-11-23 17:27:35 — posible consumo antes de reportar producción)
+2026-11-25 14:14:08 - StockWatchdog - ERROR - ANOMALÍA DETECTADA (OMEGA): 'S0PFA6225979' tiene stock -5.
+    Últimas lecturas:   [(datetime.datetime(2026, 11, 24, 16, 27, 9, 653000), '2897'), (datetime.datetime(2026, 11, 24, 16, 27, 9, 140000), '2896'), (datetime.datetime(2026, 11, 24, 16, 27, 8, 713000), '2895')]
+    Últimas producciones: [('CTM_Assembly_13', datetime.datetime(2026, 11, 25, 12, 31, 35), datetime.datetime(2026, 11, 25, 12, 55, 52), 2), ('CTM_Assembly_13', datetime.datetime(2026, 11, 23, 17, 26, 56), datetime.datetime(2026, 11, 23, 19, 37, 33), 7), ('CTM_Assembly_12', datetime.datetime(2026, 11, 23, 17, 27, 35), datetime.datetime(2026, 11, 23, 19, 36, 52), 6)]
+    Marcas Last_Sync:    [('LEC', datetime.datetime(2026, 11, 24, 16, 27, 9, 653000)), ('PROD', datetime.datetime(2026, 11, 25, 12, 55, 52))]
+2026-11-25 14:14:12 - root - INFO - [DB CZ] Conectado a mapexbp con server=172.16.10.10, driver=ODBC Driver 18 for SQL Server
+2026-11-25 14:14:12 - VIEW_DIAGNOSTICS - INFO - ✓ Vista retornó 28 registros | Duración: 44.025s
+2026-11-25 14:14:12 - VIEW_DIAGNOSTICS - INFO - === FIN: GET /api/pedidos_picking ===
+
